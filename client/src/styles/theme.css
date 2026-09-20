@@ -1,0 +1,420 @@
+@import 'tailwindcss';
+
+/*
+ * Khata design tokens.
+ *
+ * Every colour, radius, shadow and easing in the application is defined once, here.
+ * No component hardcodes a hex value — which is what makes a full light/dark pass
+ * a matter of redefining ~30 variables rather than auditing 200 files.
+ *
+ * The palette is deliberately narrow:
+ *   • A near-black ink and a warm ivory paper carry almost the whole interface.
+ *   • Champagne gold is an *accent*, not a theme. It marks the primary action, the
+ *     active nav item, a highlighted figure — and nothing else. Gold everywhere
+ *     reads as cheap; gold on one element per screen reads as expensive.
+ *   • Positive/negative are muted jewel tones, not traffic-light red and green,
+ *     because a ledger shows them on every row and saturated colour becomes noise.
+ */
+
+@layer base {
+  :root {
+    /* ── Surfaces (light) ───────────────────────────────────────── */
+    --k-canvas: #f7f5f0; /* page background — warm ivory, never pure white */
+    --k-surface: #fffefb; /* cards */
+    --k-surface-raised: #ffffff; /* modals, popovers, sheets */
+    --k-surface-sunken: #f1eee7; /* table headers, wells, inputs at rest */
+    --k-overlay: rgb(22 21 15 / 0.42);
+
+    /* ── Ink ────────────────────────────────────────────────────── */
+    --k-ink: #16150f; /* primary text */
+    --k-ink-secondary: #4a463c; /* labels, secondary values */
+    --k-ink-muted: #7b7568; /* captions, meta, placeholders */
+    --k-ink-faint: #a8a294; /* disabled, dividerish text */
+    --k-ink-inverse: #faf8f3;
+
+    /* ── Lines ──────────────────────────────────────────────────── */
+    --k-line: #e4dfd4; /* default hairline */
+    --k-line-strong: #d2ccbd; /* emphasised separators */
+    --k-line-faint: #eeeae1; /* inner table rules */
+
+    /* ── Accent: champagne gold ─────────────────────────────────── */
+    --k-gold: #a8813c;
+    --k-gold-strong: #8c6a2c;
+    --k-gold-soft: #f0e6d2;
+    --k-gold-ring: rgb(168 129 60 / 0.32);
+
+    /* ── Semantic ───────────────────────────────────────────────── */
+    --k-positive: #2f7a5c; /* money in */
+    --k-positive-soft: #e3f0ea;
+    --k-negative: #a8443c; /* money out */
+    --k-negative-soft: #f6e4e2;
+    --k-warning: #9a7420;
+    --k-warning-soft: #f7ecd4;
+    --k-info: #3f6383;
+    --k-info-soft: #e4ecf3;
+    /* Transfers and contra entries: deliberately colourless, because they are
+       neither income nor expense and must never read as either (invariant I5). */
+    --k-neutral: #6a6559;
+    --k-neutral-soft: #ece9e2;
+
+    /*
+     * ── Chart series ────────────────────────────────────────────
+     *
+     * Deliberately NOT the positive/negative tones above. Green-vs-red fails
+     * colour-vision separation badly (ΔE 5.3 under deuteranopia — well below the
+     * 8.0 target), so a chart drawn in those two colours is unreadable for a
+     * meaningful share of people. These steps were validated instead:
+     *
+     *   light  #1268a8 / #c07a2e  →  ΔE 22.5 (protan), 28.6 (normal)
+     *   dark   #3486bd / #bd843c  →  ΔE 19.4 (protan), 23.5 (normal)
+     *
+     * Both pass the lightness band, chroma floor, CVD separation, normal-vision
+     * floor and 3:1 contrast against their own surface. The +/- sign and the tone
+     * of the *numbers* still carry the money-in/money-out convention; the chart
+     * marks carry identity that everyone can see.
+     */
+    --k-chart-income: #1268a8;
+    --k-chart-expense: #c07a2e;
+    --k-chart-grid: #e9e5db;
+    --k-chart-axis: #a8a294;
+
+    /* ── Elevation ──────────────────────────────────────────────── */
+    --k-shadow-xs: 0 1px 2px rgb(22 21 15 / 0.04);
+    --k-shadow-sm: 0 1px 2px rgb(22 21 15 / 0.04), 0 2px 6px rgb(22 21 15 / 0.04);
+    --k-shadow-md: 0 2px 4px rgb(22 21 15 / 0.03), 0 8px 20px rgb(22 21 15 / 0.07);
+    --k-shadow-lg: 0 4px 8px rgb(22 21 15 / 0.04), 0 20px 48px rgb(22 21 15 / 0.12);
+    --k-shadow-gold: 0 2px 10px rgb(168 129 60 / 0.22);
+
+    color-scheme: light;
+  }
+
+  /*
+   * Dark mode.
+   *
+   * Not an inversion: the dark palette is its own design. Backgrounds are warm
+   * charcoal rather than blue-black, gold is lifted so it stays legible against
+   * dark surfaces, and the semantic tones are desaturated further because bright
+   * colour on a dark ground is far more aggressive than on a light one.
+   */
+  :root.dark {
+    --k-canvas: #0e0e0c;
+    --k-surface: #161613;
+    --k-surface-raised: #1c1b18;
+    --k-surface-sunken: #111110;
+    --k-overlay: rgb(0 0 0 / 0.66);
+
+    --k-ink: #f2efe7;
+    --k-ink-secondary: #c4bfb3;
+    --k-ink-muted: #918b7e;
+    --k-ink-faint: #67625a;
+    --k-ink-inverse: #16150f;
+
+    --k-line: #282621;
+    --k-line-strong: #3a3730;
+    --k-line-faint: #201f1b;
+
+    --k-gold: #c9a461;
+    --k-gold-strong: #ddbb79;
+    --k-gold-soft: #2a2317;
+    --k-gold-ring: rgb(201 164 97 / 0.36);
+
+    --k-positive: #5fae8b;
+    --k-positive-soft: #16241e;
+    --k-negative: #d0766c;
+    --k-negative-soft: #291a18;
+    --k-warning: #cfa94f;
+    --k-warning-soft: #26200f;
+    --k-info: #7ba3c8;
+    --k-info-soft: #16202a;
+    --k-neutral: #8e887b;
+    --k-neutral-soft: #201f1b;
+
+    /* Re-stepped for the dark surface, not lightened from the light values. */
+    --k-chart-income: #3486bd;
+    --k-chart-expense: #bd843c;
+    --k-chart-grid: #232220;
+    --k-chart-axis: #67625a;
+
+    --k-shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+    --k-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 6px rgb(0 0 0 / 0.3);
+    --k-shadow-md: 0 2px 4px rgb(0 0 0 / 0.35), 0 8px 20px rgb(0 0 0 / 0.45);
+    --k-shadow-lg: 0 4px 8px rgb(0 0 0 / 0.4), 0 20px 48px rgb(0 0 0 / 0.6);
+    --k-shadow-gold: 0 2px 12px rgb(201 164 97 / 0.2);
+
+    color-scheme: dark;
+  }
+}
+
+/*
+ * `@theme inline` maps the tokens above onto Tailwind's utility namespace without
+ * copying their values, so `bg-surface` resolves through `var(--k-surface)` at
+ * runtime and follows the theme switch with no class-name gymnastics.
+ */
+@theme inline {
+  --color-canvas: var(--k-canvas);
+  --color-surface: var(--k-surface);
+  --color-raised: var(--k-surface-raised);
+  --color-sunken: var(--k-surface-sunken);
+  --color-overlay: var(--k-overlay);
+
+  --color-ink: var(--k-ink);
+  --color-ink-secondary: var(--k-ink-secondary);
+  --color-ink-muted: var(--k-ink-muted);
+  --color-ink-faint: var(--k-ink-faint);
+  --color-ink-inverse: var(--k-ink-inverse);
+
+  --color-line: var(--k-line);
+  --color-line-strong: var(--k-line-strong);
+  --color-line-faint: var(--k-line-faint);
+
+  --color-gold: var(--k-gold);
+  --color-gold-strong: var(--k-gold-strong);
+  --color-gold-soft: var(--k-gold-soft);
+
+  --color-positive: var(--k-positive);
+  --color-positive-soft: var(--k-positive-soft);
+  --color-negative: var(--k-negative);
+  --color-negative-soft: var(--k-negative-soft);
+  --color-warning: var(--k-warning);
+  --color-warning-soft: var(--k-warning-soft);
+  --color-info: var(--k-info);
+  --color-info-soft: var(--k-info-soft);
+  --color-neutral: var(--k-neutral);
+  --color-neutral-soft: var(--k-neutral-soft);
+
+  --color-chart-income: var(--k-chart-income);
+  --color-chart-expense: var(--k-chart-expense);
+  --color-chart-grid: var(--k-chart-grid);
+  --color-chart-axis: var(--k-chart-axis);
+
+  --shadow-xs: var(--k-shadow-xs);
+  --shadow-sm: var(--k-shadow-sm);
+  --shadow-md: var(--k-shadow-md);
+  --shadow-lg: var(--k-shadow-lg);
+  --shadow-gold: var(--k-shadow-gold);
+
+  /* Sophisticated rather than bubbly: 10–14px on cards, never a pill on a panel. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+
+  --font-sans: 'Inter var', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* One easing for everything, so motion feels like one system. */
+  --ease-out-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.45, 0, 0.15, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--k-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Stops the layout shifting sideways when a modal opens. */
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--k-canvas);
+    color: var(--k-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  /*
+   * Focus.
+   *
+   * Visible, gold, and never removed (§59). `:focus-visible` rather than `:focus`
+   * so a mouse click on a card does not leave a ring behind, while every keyboard
+   * path stays obvious.
+   */
+  :focus-visible {
+    outline: 2px solid var(--k-gold);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--k-gold-soft);
+    color: var(--k-ink);
+  }
+
+  /* Money and any other figure that sits in a column must not jitter as it changes. */
+  .tabular,
+  table td,
+  table th {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /* §59 — honour the OS setting rather than animating regardless. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Native scrollbars are the single loudest "unfinished web app" tell. */
+  @supports selector(::-webkit-scrollbar) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--k-line-strong);
+      border-radius: 999px;
+      border: 3px solid transparent;
+      background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--k-ink-faint);
+      background-clip: content-box;
+    }
+  }
+}
+
+@layer components {
+  /*
+   * Privacy mode (§38).
+   *
+   * One class on <html> blurs every figure in the application at once. Doing it in
+   * CSS rather than by re-rendering means masking cannot miss a component, is
+   * instant, and survives a screenshot — and `user-select: none` stops the real
+   * value being copied out of a blurred element.
+   */
+  :root.privacy .sensitive {
+    filter: blur(7px);
+    user-select: none;
+    pointer-events: none;
+    transition: filter 160ms var(--ease-out-soft);
+  }
+
+  /* The gold hairline that marks the active navigation item. */
+  .nav-active-rail {
+    position: relative;
+  }
+  .nav-active-rail::before {
+    content: '';
+    position: absolute;
+    inset-block: 20%;
+    inset-inline-start: 0;
+    width: 2px;
+    border-radius: 999px;
+    background: var(--k-gold);
+  }
+
+  /* Skeletons: a slow, low-contrast sweep. Anything faster reads as a glitch. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--k-surface-sunken) 0%,
+      color-mix(in oklab, var(--k-surface-sunken) 60%, var(--k-line)) 50%,
+      var(--k-surface-sunken) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s var(--ease-in-out-soft) infinite;
+    border-radius: var(--radius-sm);
+  }
+
+  @keyframes shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  /* A wrong PIN — a quick, small shake rather than a jarring shove. */
+  @keyframes shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    20%, 60% {
+      transform: translateX(-6px);
+    }
+    40%, 80% {
+      transform: translateX(6px);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 180ms var(--ease-out-soft);
+  }
+  .animate-rise-in {
+    animation: rise-in 220ms var(--ease-out-soft);
+  }
+  .animate-sheet-up {
+    animation: sheet-up 260ms var(--ease-out-soft);
+  }
+}
+
+@layer utilities {
+  /* Respect the notch and the home indicator on phones. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .h-safe-bottom {
+    height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Uppercase micro-labels above figures — the "statement" texture. */
+  .label-eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--k-ink-muted);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}

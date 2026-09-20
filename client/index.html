@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Repainted at runtime to match the active theme, so the mobile browser
+         chrome matches the app instead of flashing white. -->
+    <meta name="theme-color" content="#f7f5f0" />
+    <meta name="description" content="Khata — a premium cash book, personal ledger and personal finance system." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <title>Khata — Cash Book &amp; Personal Ledger</title>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+
+    <script>
+      /*
+       * Theme and privacy mode are applied before the first paint.
+       *
+       * If React did this, the page would render in light mode and then snap to
+       * dark — the "flash of wrong theme" that instantly makes an app feel cheap.
+       * Reading localStorage synchronously in <head> is the only way to avoid it.
+       */
+      (function () {
+        try {
+          var stored = localStorage.getItem('khata.theme') || 'system';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = stored === 'dark' || (stored === 'system' && prefersDark);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+
+          if (localStorage.getItem('khata.privacy') === '1') {
+            document.documentElement.classList.add('privacy');
+          }
+
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#0e0e0c' : '#f7f5f0');
+        } catch (e) {
+          /* Private browsing can throw on localStorage; the default theme is fine. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui, sans-serif">
+        <h1>JavaScript is required</h1>
+        <p>Khata needs JavaScript to keep your ledger working offline and in sync.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
