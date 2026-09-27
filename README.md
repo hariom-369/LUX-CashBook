@@ -20,6 +20,7 @@ businesses.
 ## Contents
 
 - [Features](#features)
+- [Device support](#device-support)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Getting started](#getting-started)
@@ -60,8 +61,33 @@ businesses.
 - **Security** — JWT access tokens + rotating refresh tokens, optional PIN
   lock, session timeout, rate limiting, and a full audit log
 - **Privacy mode** — mask every balance on screen with one tap
-- **Light and dark themes**, fully responsive (desktop sidebar, mobile
-  bottom nav)
+- **Light and dark themes**, and a responsive layout for phones, tablets,
+  laptops and large displays in portrait and landscape — see
+  [Device support](#device-support)
+
+## Device support
+
+One app adapts from a 320px phone to a 2560px display, in portrait and
+landscape, in both themes — no separate mobile site and no device detection:
+
+| Screen width | Layout |
+|---|---|
+| Phones (under 640px) | Top bar, bottom navigation with the full menu in a drawer, forms as bottom sheets, content in a single column (account cards in a swipeable row); wide tables scroll inside their card |
+| Tablets (640–1023px) | Same navigation; cards and summary tiles move into two or three columns, and forms open as centred dialogs |
+| Laptops and desktops (1024px and up) | Collapsible sidebar and a multi-column dashboard |
+
+- Keeps clear of the notch and home indicator, including when installed as an
+  app.
+- Where the browser supports it (Chrome on Android), the on-screen keyboard
+  resizes the page so a form's buttons stay visible, and the bottom bar steps
+  aside while you type.
+- No control depends on hover.
+- Long names, descriptions and email addresses wrap or truncate; amounts are
+  never truncated. (One known edge case with ₹10-crore-plus figures in narrow
+  summary tiles is listed in the notes below.)
+
+What was changed, the layout conventions to follow when adding screens, and
+how it was verified: [`docs/RESPONSIVE_NOTES.md`](docs/RESPONSIVE_NOTES.md).
 
 ## Tech stack
 
@@ -131,6 +157,12 @@ set, and JWT secrets are generated at startup. Data does **not** persist
 across restarts in this mode — see [Environment variables](#environment-variables)
 below to connect a real database.
 
+> **If you have a `server/.env` with `MONGODB_URI` set** (for example, one
+> filled in while preparing a deployment), `npm run dev` connects to *that*
+> database instead — the dev server loads the file. Comment the line out to
+> get the throwaway in-memory database back before registering test accounts
+> or experimenting.
+
 > The offline-first service worker only registers against a **production
 > build** — to test it, run `npm run build --workspace client` and then
 > `npm run preview --workspace client` instead of the dev server.
@@ -175,6 +207,11 @@ the transaction engine's correctness invariants (transfers never counted as
 income, balances always traceable to postings, workspace data isolation,
 attachment authorization, refresh-token rotation and reuse detection, and
 more) against a real in-process MongoDB replica set, not mocks.
+
+The test database is always that in-process replica set, but a local
+`server/.env` is still loaded into the test process. If it sets
+`COOKIE_CROSS_SITE` or `MONGODB_URI`, three tests that assert the defaults
+(in `tests/auth.test.ts` and `tests/env.test.ts`) fail for that reason alone.
 
 ## Building for production
 
@@ -252,6 +289,7 @@ public issue.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, the transaction engine, and every core invariant in detail |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment: every environment variable, per platform, and why |
 | [`docs/PHASE2_NOTES.md`](docs/PHASE2_NOTES.md) – [`PHASE5_NOTES.md`](docs/PHASE5_NOTES.md) | Development history and what was verified at each stage |
+| [`docs/RESPONSIVE_NOTES.md`](docs/RESPONSIVE_NOTES.md) | The responsive / device-compatibility pass: what changed, layout conventions for new screens, what was verified, and known follow-ups |
 
 ## License
 

@@ -58,7 +58,7 @@ export function AccountsPage() {
       </header>
 
       {accounts.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <TotalTile label="Assets" amountMinor={assets} tone="positive" />
           <TotalTile label="Liabilities" amountMinor={liabilities} tone="negative" />
           <TotalTile label="Net" amountMinor={assets - liabilities} tone="neutral" emphasise />
@@ -102,7 +102,7 @@ export function AccountsPage() {
                   <li key={account.id} className="flex items-stretch">
                     <Link
                       to={`/accounts/${account.id}`}
-                      className="flex min-w-0 flex-1 items-center gap-3.5 px-5 py-4 transition-colors hover:bg-sunken sm:px-6"
+                      className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4 transition-colors hover:bg-sunken sm:gap-3.5 sm:px-6"
                     >
                       <span
                         aria-hidden
@@ -112,35 +112,40 @@ export function AccountsPage() {
                         <Icon name={account.icon} className="size-[18px]" />
                       </span>
 
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="truncate text-[14px] font-medium text-ink">{account.name}</span>
-                          {!account.isActive && (
-                            <Badge tone="outline" eyebrow>
-                              Inactive
-                            </Badge>
-                          )}
-                          {account.excludeFromTotals && (
-                            <Badge tone="outline" eyebrow>
-                              Excluded
-                            </Badge>
+                      {/* The balance drops below the name only when both can't share a line. */}
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3.5 gap-y-1">
+                        <span className="min-w-0 flex-1 basis-24">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
+                            <span className="min-w-0 max-w-full truncate text-[14px] font-medium text-ink">
+                              {account.name}
+                            </span>
+                            {!account.isActive && (
+                              <Badge tone="outline" eyebrow>
+                                Inactive
+                              </Badge>
+                            )}
+                            {account.excludeFromTotals && (
+                              <Badge tone="outline" eyebrow>
+                                Excluded
+                              </Badge>
+                            )}
+                          </span>
+                          {(account.bankName || account.last4) && (
+                            <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
+                              {[account.bankName, account.last4 && `•••• ${account.last4}`]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
                           )}
                         </span>
-                        {(account.bankName || account.last4) && (
-                          <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
-                            {[account.bankName, account.last4 && `•••• ${account.last4}`]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        )}
-                      </span>
 
-                      <Money
-                        amountMinor={account.balanceMinor}
-                        size="md"
-                        tone={account.balanceMinor < 0 ? 'negative' : 'neutral'}
-                        compactDecimals
-                      />
+                        <Money
+                          amountMinor={account.balanceMinor}
+                          size="md"
+                          tone={account.balanceMinor < 0 ? 'negative' : 'neutral'}
+                          compactDecimals
+                        />
+                      </span>
 
                       <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-faint" />
                     </Link>
@@ -148,7 +153,7 @@ export function AccountsPage() {
                     <button
                       type="button"
                       onClick={() => setEditing(account)}
-                      className="shrink-0 border-l border-line-faint px-4 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+                      className="shrink-0 border-l border-line-faint px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink sm:px-4"
                     >
                       Edit
                     </button>

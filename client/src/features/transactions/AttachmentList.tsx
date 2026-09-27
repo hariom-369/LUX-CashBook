@@ -151,7 +151,8 @@ function AttachmentThumb({
         onClick={onRemove}
         disabled={removing}
         aria-label={`Remove ${attachment.fileName}`}
-        className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-ink/70 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-60"
+        // Hover reveals it for a mouse; touch screens (no hover) and keyboard focus always show it.
+        className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-ink/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-60 pointer-coarse:opacity-100"
       >
         <Trash2 aria-hidden className="size-3" />
       </button>

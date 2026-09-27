@@ -56,8 +56,8 @@ export function WorkspaceSettings() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-[13.5px] font-medium text-ink">Your workspaces</p>
           <p className="mt-1 text-[12px] text-ink-muted">
             Personal and business ledgers are kept completely separate.
@@ -73,7 +73,8 @@ export function WorkspaceSettings() {
           <li
             key={workspace.id}
             className={cn(
-              'flex items-center gap-3.5 rounded-lg border p-4',
+              // Buttons wrap below the name when the row is too narrow for both.
+              'flex flex-wrap items-center gap-x-3.5 gap-y-3 rounded-lg border p-4',
               workspace.id === activeId ? 'border-gold bg-gold-soft' : 'border-line bg-surface',
             )}
           >
@@ -86,9 +87,9 @@ export function WorkspaceSettings() {
               {workspace.mode === 'business' ? <Briefcase className="size-4" /> : <User className="size-4" />}
             </span>
 
-            <div className="min-w-0 flex-1">
-              <span className="flex items-center gap-2">
-                <span className="truncate text-[13.5px] font-semibold text-ink">{workspace.name}</span>
+            <div className="min-w-0 flex-1 basis-32">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="min-w-0 max-w-full truncate text-[13.5px] font-semibold text-ink">{workspace.name}</span>
                 {workspace.isDefault && <Badge tone="gold">Default</Badge>}
                 {workspace.id === activeId && <Badge tone="positive">Active</Badge>}
               </span>
@@ -97,7 +98,7 @@ export function WorkspaceSettings() {
               </span>
             </div>
 
-            <div className="flex shrink-0 gap-2">
+            <div className="ml-auto flex shrink-0 gap-2">
               {workspace.id !== activeId && (
                 <Button variant="secondary" size="sm" onClick={() => void open(workspace.id)}>
                   Switch to

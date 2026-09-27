@@ -142,8 +142,8 @@ export function SecuritySettings() {
       <PinSection />
 
       <section className="border-t border-line-faint pt-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-[13.5px] font-medium text-ink">Active sessions</p>
             <p className="mt-1 text-[12px] text-ink-muted">Devices currently signed in to your account.</p>
           </div>

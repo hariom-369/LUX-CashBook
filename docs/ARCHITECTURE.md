@@ -165,6 +165,13 @@ requirement (§4) without any duplicated logic.
 - **Money rendering** → one `formatMoney()` used everywhere, Indian grouping
   (`₹1,25,000`), and a single `<Money/>` component that respects privacy mode so
   masking (§38) works globally without touching call sites.
+- **Responsive layout** → one component tree for every screen size, adapted
+  with Tailwind breakpoints and a few container queries, never device
+  detection. Below `lg` (1024px) the bottom bar and a drawer replace the
+  sidebar; below `sm` (640px) `Sheet` renders as a bottom sheet instead of a
+  dialog. Layout conventions for new screens (grid base templates, name/amount
+  rows, safe areas, wide tables) are in
+  [`RESPONSIVE_NOTES.md`](RESPONSIVE_NOTES.md#conventions-for-new-ui).
 
 ---
 

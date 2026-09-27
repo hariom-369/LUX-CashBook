@@ -27,6 +27,8 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Primary"
+      // Hook for the stylesheet rule that steps this bar aside while the on-screen keyboard is up.
+      data-bottom-nav=""
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/90 backdrop-blur-xl pb-safe lg:hidden"
     >
       <div className="relative mx-auto flex h-16 max-w-lg items-stretch">
@@ -34,7 +36,7 @@ export function BottomNav() {
           <BottomNavLink key={item.to} to={item.to} icon={item.icon} label={item.label} />
         ))}
 
-        <div className="flex w-[84px] shrink-0 items-start justify-center">
+        <div className="flex w-[72px] shrink-0 items-start justify-center min-[360px]:w-[84px]">
           <button
             type="button"
             onClick={() => setQuickAddOpen(true)}
@@ -64,7 +66,8 @@ function BottomNavLink({ to, icon, label }: { to: string; icon: string; label: s
       end={to === '/'}
       className={({ isActive }) =>
         cn(
-          'flex flex-1 flex-col items-center justify-center gap-1 pt-1 text-[10.5px] font-medium',
+          // `min-w-0` lets the label truncate instead of pushing into its neighbour on narrow phones.
+          'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 pt-1 text-[10.5px] font-medium',
           'transition-colors duration-150',
           isActive ? 'text-ink' : 'text-ink-faint',
         )
@@ -78,7 +81,7 @@ function BottomNavLink({ to, icon, label }: { to: string; icon: string; label: s
             className={cn('size-[21px]', isActive && 'text-gold')}
             strokeWidth={isActive ? 2.1 : 1.8}
           />
-          <span className="truncate">{label}</span>
+          <span className="max-w-full truncate">{label}</span>
         </>
       )}
     </NavLink>

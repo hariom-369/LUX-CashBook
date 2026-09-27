@@ -122,7 +122,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 p-4 pb-safe sm:inset-x-auto sm:right-0 sm:items-end"
+        // Below `lg` the stack sits just above the bottom navigation bar rather than on top of it.
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] z-[70] flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end lg:bottom-0"
       >
         {toasts.map((item) => (
           <ToastItem key={item.id} toast={item} onDismiss={() => dismiss(item.id)} />

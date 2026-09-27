@@ -127,7 +127,7 @@ export function AccountLedgerPage() {
 
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-5">
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <span
               aria-hidden
               className="flex size-12 shrink-0 items-center justify-center rounded-lg"
@@ -136,9 +136,9 @@ export function AccountLedgerPage() {
               <Icon name={account.icon} className="size-5" />
             </span>
 
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold tracking-[-0.01em] text-ink">{account.name}</h1>
+                <h1 className="min-w-0 break-words text-lg font-semibold tracking-[-0.01em] text-ink">{account.name}</h1>
                 {!account.isActive && <Badge tone="outline" eyebrow>Inactive</Badge>}
               </div>
               <p className="mt-0.5 text-[12.5px] text-ink-muted">
@@ -151,6 +151,7 @@ export function AccountLedgerPage() {
                   size="xl"
                   tone={account.balanceMinor < 0 ? 'negative' : 'neutral'}
                   compactDecimals
+                  className="max-sm:text-[length:clamp(1.375rem,7.5vw,1.75rem)]"
                 />
               </div>
             </div>
@@ -187,7 +188,7 @@ export function AccountLedgerPage() {
         </div>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         <StatementTile label={accountingView ? 'Balance b/d' : 'Opening'} amountMinor={openingBalanceMinor} />
         <StatementTile label={accountingView ? 'Debit' : 'Money in'} amountMinor={totalIn} tone="positive" />
         <StatementTile label={accountingView ? 'Credit' : 'Money out'} amountMinor={totalOut} tone="negative" />
@@ -251,7 +252,9 @@ export function AccountLedgerPage() {
                     <td className="whitespace-nowrap px-5 py-3 text-[12.5px] text-ink-muted sm:px-6">
                       {formatDate(row.date, 'dd MMM')}
                     </td>
-                    <td className="px-3 py-3">
+                    {/* Below xl this column takes the leftover width (at least 10rem) and truncates,
+                        so the table keeps its designed width instead of growing with the longest text. */}
+                    <td className="px-3 py-3 max-xl:w-full max-xl:min-w-40 max-xl:max-w-0">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-[13px] font-medium text-ink">{row.description}</span>
                         {row.isContra && (

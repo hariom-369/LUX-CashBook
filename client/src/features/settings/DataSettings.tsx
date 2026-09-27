@@ -151,7 +151,7 @@ function ImportSection() {
 
   return (
     <section className="border-t border-line-faint pt-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <SectionHeader title="Import" description="Bring transactions in from a CSV — a bank statement export, or another app's data." />
         <button type="button" onClick={() => void downloadTemplate()} className="shrink-0 text-[12px] font-medium text-gold underline-offset-4 hover:underline">
           Download template
@@ -177,8 +177,8 @@ function ImportSection() {
 
       {preview && (
         <div className="mt-4 rounded-lg border border-line bg-surface p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] font-medium text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 flex-1 basis-48 text-[13px] font-medium text-ink">
               {preview.validCount} row{preview.validCount === 1 ? '' : 's'} ready to import
               {preview.errorCount > 0 && <span className="text-negative"> · {preview.errorCount} will be skipped</span>}
             </p>
@@ -206,8 +206,8 @@ function ImportSection() {
       )}
 
       {result && (
-        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-positive/25 bg-positive-soft p-4">
-          <p className="text-[13px] text-ink-secondary">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-positive/25 bg-positive-soft p-4">
+          <p className="min-w-0 flex-1 basis-48 text-[13px] text-ink-secondary">
             Imported {result.imported} transaction{result.imported === 1 ? '' : 's'}
             {result.skipped > 0 ? `, ${result.skipped} skipped` : ''}.
           </p>

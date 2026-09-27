@@ -60,7 +60,7 @@ export function PettyCashPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {records.map((record) => (
             <PettyCashCard key={record.id} record={record} />
           ))}

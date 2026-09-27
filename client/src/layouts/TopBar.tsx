@@ -36,7 +36,8 @@ export function TopBar() {
   const isDark = resolveTheme(theme) === 'dark';
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 border-b border-line bg-canvas/85 px-4 backdrop-blur-xl sm:px-6 pt-safe">
+    // The height includes the status-bar inset so an installed PWA keeps a full 4rem bar.
+    <header className="sticky top-0 z-40 flex h-[calc(4rem+env(safe-area-inset-top,0px))] shrink-0 items-center gap-1 border-b border-line bg-canvas/85 px-3 backdrop-blur-xl min-[360px]:gap-2 min-[360px]:px-4 sm:px-6 pt-safe">
       <button
         type="button"
         onClick={() => setMobileNavOpen(true)}

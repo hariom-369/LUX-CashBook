@@ -118,7 +118,7 @@ export function CashBookPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <BalanceTile label={accountingView ? 'Balance b/d' : 'Opening balance'} amountMinor={data.opening.totalMinor} />
             <TotalsTile totals={data.totals} accountingView={accountingView} />
             <BalanceTile label={accountingView ? 'Balance c/d' : 'Closing balance'} amountMinor={data.closing.totalMinor} emphasise />
@@ -175,7 +175,9 @@ export function CashBookPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-[12px] text-ink-muted">
                         {formatDate(row.date, 'dd MMM')}
                       </td>
-                      <td className="px-3 py-2.5">
+                      {/* Below xl this column takes the leftover width (at least 10rem) and truncates,
+                          so the table keeps its designed width instead of growing with the longest text. */}
+                      <td className="px-3 py-2.5 max-xl:w-full max-xl:min-w-40 max-xl:max-w-0">
                         <span className="flex items-center gap-2">
                           <span className="truncate text-[13px] text-ink">{row.particulars}</span>
                           {row.isContra && (

@@ -217,7 +217,7 @@ export function DashboardPage() {
         />
       )}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {(editing ? order.filter((id) => !hidden.includes(id)) : visible).map((id, index, arr) => {
           const meta = WIDGET_META[id];
           const content = renderWidget(id);
@@ -408,14 +408,23 @@ function BalanceHeader({
               onClick={togglePrivacy}
               aria-pressed={privacyMode}
               aria-label={privacyMode ? 'Show amounts' : 'Hide amounts'}
-              className="rounded-sm p-1 text-ink-faint transition-colors hover:text-gold"
+              // The pseudo-element widens the touch target without moving the layout.
+              className="relative rounded-sm p-1 text-ink-faint transition-colors after:absolute after:-inset-2.5 hover:text-gold"
             >
               {privacyMode ? <EyeOff aria-hidden className="size-3.5" /> : <Eye aria-hidden className="size-3.5" />}
             </button>
           </div>
 
           <div className="mt-2">
-            <Money amountMinor={totalMinor} size="display" tone="neutral" compactDecimals />
+            {/* Fluid below `sm` so a large balance never clips inside this card on a narrow phone. */}
+            <Money
+              amountMinor={totalMinor}
+              size="display"
+              tone="neutral"
+              compactDecimals
+              // Re-state the leading: tailwind-merge drops the size's own `leading-*` when a font size follows it.
+              className="text-[length:clamp(1.75rem,9vw,2.5rem)] leading-[1.05]"
+            />
           </div>
 
           <p className="mt-3 text-[12.5px] text-ink-muted">
@@ -451,12 +460,14 @@ function AccountStrip({
   if (accounts.length === 0) return null;
 
   return (
-    <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5">
+    <div className="no-scrollbar -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-3 xl:grid-cols-5">
       {accounts.map((account) => (
         <Link
           key={account.id}
           to={`/accounts/${account.id}`}
-          className="group flex min-w-[168px] flex-col justify-between gap-4 rounded-lg border border-line bg-surface p-4 shadow-xs transition-[border-color,transform] hover:-translate-y-px hover:border-line-strong sm:min-w-0"
+          // In the phone scroller a card widens to fit a large balance (up to a cap)
+          // rather than letting the figure spill out of it.
+          className="group flex min-w-[168px] max-w-[15rem] shrink-0 flex-col justify-between gap-4 rounded-lg border border-line bg-surface p-4 shadow-xs transition-[border-color,transform] hover:-translate-y-px hover:border-line-strong sm:min-w-0 sm:max-w-none"
         >
           <div className="flex items-center gap-2.5">
             <span
@@ -573,7 +584,8 @@ function SummaryRow({
   const deltaIsBad = delta ? (delta.invert ? delta.amountMinor > 0 : delta.amountMinor < 0) : false;
 
   return (
-    <div className="flex items-center justify-between gap-3">
+    // Wraps the figure onto its own line only when a narrow column can't hold both.
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <dt className="flex items-center gap-2.5 text-[13px] text-ink-secondary">
         <span
           aria-hidden
@@ -586,7 +598,7 @@ function SummaryRow({
         </span>
         {label}
       </dt>
-      <dd className="flex flex-col items-end gap-0.5">
+      <dd className="ml-auto flex max-w-full flex-col items-end gap-0.5 text-right">
         <Money
           amountMinor={amountMinor}
           size={emphasise ? 'lg' : 'md'}
@@ -625,9 +637,10 @@ function QuickActions() {
   ];
 
   return (
-    <Card>
+    <Card className="@container">
       <CardHeader eyebrow="Quick actions" title="Record something" />
-      <div className="mt-4 grid grid-cols-4 gap-2">
+      {/* Two-by-two only when this card itself is too narrow for four labels. */}
+      <div className="mt-4 grid grid-cols-2 gap-2 @min-[13.5rem]:grid-cols-4">
         {actions.map((action) => (
           <button
             key={action.label}
@@ -834,7 +847,7 @@ function DashboardSkeleton() {
         <Skeleton className="mt-4 h-3 w-48" />
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((index) => (
           <Card key={index}>
             <Skeleton className="h-8 w-8 rounded-md" />
@@ -843,7 +856,7 @@ function DashboardSkeleton() {
         ))}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card>
           <LoadingState rows={3} />
         </Card>

@@ -63,7 +63,7 @@ export function GoalsPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {goals.map((goal) => (
             <GoalCard
               key={goal.id}
@@ -114,7 +114,7 @@ function GoalCard({
     <>
       <Card className={cn('flex flex-col gap-4', goal.isAchieved && 'border-positive/30 bg-positive-soft/30')}>
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span
               className="flex size-10 shrink-0 items-center justify-center rounded-md"
               style={{ backgroundColor: `${goal.color}1F`, color: goal.color }}

@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- `interactive-widget=resizes-content`: where supported (Android Chrome), the
+         on-screen keyboard shrinks the layout viewport, so bottom sheets and their
+         action buttons stay above the keyboard instead of behind it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
     <!-- Repainted at runtime to match the active theme, so the mobile browser
          chrome matches the app instead of flashing white. -->

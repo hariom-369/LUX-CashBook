@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { cn } from '../lib/cn';
@@ -21,6 +22,23 @@ export function MobileNavDrawer() {
   const mode = useAuthStore(
     (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.mode ?? 'personal',
   );
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Escape closes the drawer — but a layer above it gets that Escape first: the
+  // command palette (another dialog) or the workspace switcher's open dropdown.
+  // Sheets already stop Escape from propagating in their capture-phase handler.
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return;
+      const dialog = (event.target as Element | null)?.closest?.('[role="dialog"]');
+      if (dialog && dialog !== panelRef.current) return;
+      if (panelRef.current?.querySelector('[aria-expanded="true"]')) return;
+      setOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, setOpen]);
 
   if (!open) return null;
   const items = navItemsFor(mode);
@@ -34,10 +52,11 @@ export function MobileNavDrawer() {
       />
 
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Navigation"
-        className="animate-fade-in relative flex h-full w-[86%] max-w-xs flex-col border-r border-line bg-surface pt-safe"
+        className="animate-fade-in relative flex h-full w-[86%] max-w-xs flex-col border-r border-line bg-surface pl-[env(safe-area-inset-left,0px)] pt-safe"
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-5">
           <Logo />

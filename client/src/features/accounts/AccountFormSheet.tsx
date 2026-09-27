@@ -260,7 +260,7 @@ export function AccountFormSheet({
           </Field>
 
           {(type === 'bank' || type === 'credit_card' || type === 'savings') && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Bank name" hint="Optional">
                 {({ id }) => (
                   <Input

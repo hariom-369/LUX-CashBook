@@ -219,6 +219,15 @@
     -webkit-text-size-adjust: 100%;
     /* Stops the layout shifting sideways when a modal opens. */
     scrollbar-gutter: stable;
+    /* A field scrolled into view (focus, on-screen keyboard) lands below the sticky top bar… */
+    scroll-padding-top: calc(4.5rem + env(safe-area-inset-top, 0px));
+  }
+
+  /* …and above the bottom navigation bar, wherever that bar is shown. */
+  @media (width < 64rem) {
+    html {
+      scroll-padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+    }
   }
 
   body {
@@ -309,6 +318,23 @@
     transition: filter 160ms var(--ease-out-soft);
   }
 
+  /*
+   * While typing on a touch screen the on-screen keyboard owns the bottom of the
+   * viewport. With the viewport resizing for the keyboard, the fixed bottom bar
+   * would otherwise ride up on top of it and cover the field being edited.
+   */
+  @media (pointer: coarse) and (width < 64rem) {
+    body:has(
+        :is(
+            input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [type='button'], [type='submit'], [type='reset']),
+            textarea
+          ):focus
+      )
+      [data-bottom-nav] {
+      display: none;
+    }
+  }
+
   /* The gold hairline that marks the active navigation item. */
   .nav-active-rail {
     position: relative;
@@ -395,6 +421,11 @@
   }
   .h-safe-bottom {
     height: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* Landscape phones: keep content clear of the notch and rounded corners. */
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   /* Uppercase micro-labels above figures — the "statement" texture. */

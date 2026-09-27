@@ -131,7 +131,8 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
   }
 
   return (
-    <li className="flex items-center gap-3.5 px-5 py-4 sm:px-6">
+    // On phones the actions take their own line below; one row from `sm` up.
+    <li className="flex flex-wrap items-center gap-x-3.5 gap-y-2 px-5 py-4 sm:flex-nowrap sm:px-6">
       <button
         type="button"
         onClick={onEdit}
@@ -168,7 +169,7 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
         compactDecimals
       />
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto">
         <button
           type="button"
           onClick={() => void skip()}

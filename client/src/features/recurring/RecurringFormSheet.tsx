@@ -166,7 +166,7 @@ export function RecurringFormSheet({
           {({ id }) => <MoneyInput id={id} size="hero" value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
-        <div className={cn('grid gap-4', type === 'transfer' && 'sm:grid-cols-2')}>
+        <div className={cn('grid grid-cols-1 gap-4', type === 'transfer' && 'sm:grid-cols-2')}>
           <Field label={type === 'transfer' ? 'From account' : 'Account'} required>
             {({ id }) => (
               <Select id={id} value={accountId} onChange={(event) => setAccountId(event.target.value)}>
@@ -244,7 +244,7 @@ export function RecurringFormSheet({
           </Field>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Start date">
             {({ id }) => <Input id={id} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />}
           </Field>

@@ -60,8 +60,12 @@ export function PinLockScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-canvas pb-safe pt-safe">
-      <LogoMark className="size-10" />
+    // Scrolls when the keypad is taller than the screen (a phone in landscape). The
+    // auto margins on the first and last child centre the content when it fits and
+    // let it start at the top when it doesn't — `justify-center` would push the top
+    // off-screen where it could never be scrolled back to.
+    <div className="fixed inset-0 z-[100] flex flex-col items-center overflow-y-auto bg-canvas pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] pt-[max(1.5rem,env(safe-area-inset-top,0px))]">
+      <LogoMark className="mt-auto size-10 shrink-0" />
 
       <div className="mt-6 flex items-center gap-2 text-ink-secondary">
         <Lock aria-hidden className="size-4" />
@@ -108,7 +112,7 @@ export function PinLockScreen() {
       <button
         type="button"
         onClick={() => void signOut()}
-        className="mt-10 flex items-center gap-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
+        className="mb-auto mt-10 flex items-center gap-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         <LogOut aria-hidden className="size-3.5" />
         Sign in with password instead

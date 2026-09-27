@@ -151,7 +151,7 @@ export function CommandPalette() {
   let lastGroup = '';
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 pt-[12vh]">
+    <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 pt-[12dvh]">
       <div
         aria-hidden
         onClick={() => setOpen(false)}
@@ -163,7 +163,7 @@ export function CommandPalette() {
         aria-modal="true"
         aria-label="Command palette"
         onKeyDown={onKeyDown}
-        className="animate-rise-in relative flex max-h-[62vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-lg"
+        className="animate-rise-in relative flex max-h-[62dvh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-lg"
       >
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4">
           <Search aria-hidden className="size-4 shrink-0 text-ink-faint" />

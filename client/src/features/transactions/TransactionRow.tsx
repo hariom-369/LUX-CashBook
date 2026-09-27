@@ -56,6 +56,8 @@ export function TransactionRow({
     showDate ? formatTime(transaction.date) : null,
   ].filter(Boolean);
 
+  const hasBadge = isTransfer || Boolean(transaction.deletedAt) || Boolean(transaction.isRecurringInstance);
+
   const Element = onClick ? 'button' : 'div';
 
   return (
@@ -96,62 +98,71 @@ export function TransactionRow({
           {accent && <Icon name={icon} className={dense ? 'size-3.5' : 'size-[18px]'} />}
         </span>
 
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-[13.5px] font-medium text-ink">{title}</span>
-            {isTransfer && (
-              <Badge tone="neutral" eyebrow className="shrink-0">
-                Internal transfer
-              </Badge>
-            )}
-            {transaction.deletedAt && (
-              <Badge tone="negative" eyebrow className="shrink-0">
-                Deleted
-              </Badge>
-            )}
-            {transaction.isRecurringInstance && (
-              <Badge tone="outline" eyebrow className="shrink-0">
-                Recurring
-              </Badge>
+        {/*
+          The amount drops below the text only when the text would otherwise be
+          squeezed under ~6rem — i.e. a large figure on a narrow phone. Wider rows
+          are unchanged.
+        */}
+        <span className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          {/* A row with a badge needs room for it (the widest, "Internal transfer", is ~8.5rem). */}
+          <span className={cn('min-w-0 flex-1', hasBadge ? 'basis-36' : 'basis-24')}>
+            {/* Badges drop under the title on phones instead of eating its width. */}
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
+              <span className="min-w-0 max-w-full truncate text-[13.5px] font-medium text-ink">{title}</span>
+              {isTransfer && (
+                <Badge tone="neutral" eyebrow className="shrink-0">
+                  Internal transfer
+                </Badge>
+              )}
+              {transaction.deletedAt && (
+                <Badge tone="negative" eyebrow className="shrink-0">
+                  Deleted
+                </Badge>
+              )}
+              {transaction.isRecurringInstance && (
+                <Badge tone="outline" eyebrow className="shrink-0">
+                  Recurring
+                </Badge>
+              )}
+            </span>
+
+            {subtitleParts.length > 0 && (
+              <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
+                {subtitleParts.join(' · ')}
+              </span>
             )}
           </span>
 
-          {subtitleParts.length > 0 && (
-            <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
-              {subtitleParts.join(' · ')}
-            </span>
-          )}
-        </span>
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            <Money
+              amountMinor={signedAmount}
+              size={dense ? 'sm' : 'md'}
+              // A transfer or a loan gets no colour: it is movement, not earning or spending.
+              tone={isTransfer || meta.isPersonal ? 'neutral' : 'auto'}
+              signed={!isTransfer && !meta.isPersonal}
+              compactDecimals
+            />
 
-        <span className="flex shrink-0 flex-col items-end gap-0.5">
-          <Money
-            amountMinor={signedAmount}
-            size={dense ? 'sm' : 'md'}
-            // A transfer or a loan gets no colour: it is movement, not earning or spending.
-            tone={isTransfer || meta.isPersonal ? 'neutral' : 'auto'}
-            signed={!isTransfer && !meta.isPersonal}
-            compactDecimals
-          />
+            {(transaction.type === 'lend' || transaction.type === 'borrow') &&
+              transaction.outstandingMinor !== undefined &&
+              transaction.outstandingMinor > 0 && (
+                <span className="sensitive text-[10.5px] text-ink-muted">
+                  <Money
+                    amountMinor={transaction.outstandingMinor}
+                    size="xs"
+                    tone="inherit"
+                    weight="normal"
+                    compactDecimals
+                  />{' '}
+                  outstanding
+                </span>
+              )}
 
-          {(transaction.type === 'lend' || transaction.type === 'borrow') &&
-            transaction.outstandingMinor !== undefined &&
-            transaction.outstandingMinor > 0 && (
-              <span className="sensitive text-[10.5px] text-ink-muted">
-                <Money
-                  amountMinor={transaction.outstandingMinor}
-                  size="xs"
-                  tone="inherit"
-                  weight="normal"
-                  compactDecimals
-                />{' '}
-                outstanding
-              </span>
-            )}
-
-          {(transaction.type === 'lend' || transaction.type === 'borrow') &&
-            transaction.isSettled && (
-              <span className="text-[10.5px] font-medium text-positive">Settled</span>
-            )}
+            {(transaction.type === 'lend' || transaction.type === 'borrow') &&
+              transaction.isSettled && (
+                <span className="text-[10.5px] font-medium text-positive">Settled</span>
+              )}
+          </span>
         </span>
       </Element>
     </li>

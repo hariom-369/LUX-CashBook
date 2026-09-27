@@ -171,6 +171,9 @@ groundwork was already solid, not neglected.
   the shared primitives are confirmed solid and a skip link was added, but a
   systematic per-screen pass (keyboard-only walkthroughs, screen-reader
   testing beyond spot checks) hasn't been done.
+  *Update:* the responsive half has since been done — see
+  [`RESPONSIVE_NOTES.md`](RESPONSIVE_NOTES.md). The accessibility half
+  (keyboard-only and screen-reader passes) is still outstanding.
 - A few of the 14 named reports in §27 still don't have a fully separate view
   from the general Reports/Insights pages (the Annual Summary now covers the
   yearly case; some narrower named reports remain folded into existing tabs).

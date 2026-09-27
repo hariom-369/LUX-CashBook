@@ -19,7 +19,7 @@ export interface AuthLayoutProps {
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
   return (
-    <div className="flex min-h-dvh bg-canvas">
+    <div className="flex min-h-dvh bg-canvas px-safe">
       <div className="flex w-full flex-col px-5 pb-10 pt-safe sm:px-8 lg:w-[54%] lg:px-16">
         <header className="flex h-20 shrink-0 items-center">
           <Link to="/login" aria-label="Khata home">

@@ -482,7 +482,7 @@ function TransactionForm({
         </Field>
       )}
 
-      <div className={cn('grid gap-4', isTransfer && 'sm:grid-cols-2')}>
+      <div className={cn('grid grid-cols-1 gap-4', isTransfer && 'sm:grid-cols-2')}>
         <Field label={isTransfer ? 'From account' : 'Account'} error={fieldErrors.accountId} required>
           {({ id }) => (
             <Select
@@ -546,7 +546,7 @@ function TransactionForm({
         </Field>
       )}
 
-      <div className={cn('grid gap-4', (type === 'lend' || type === 'borrow') && 'sm:grid-cols-2')}>
+      <div className={cn('grid grid-cols-1 gap-4', (type === 'lend' || type === 'borrow') && 'sm:grid-cols-2')}>
         <Field label="Date">
           {({ id }) => (
             <Input
@@ -605,7 +605,14 @@ function TransactionForm({
         </div>
       </details>
 
-      <div className="sticky bottom-0 -mx-5 mt-2 border-t border-line-faint bg-raised px-5 pb-2 pt-4 sm:-mx-6 sm:px-6">
+      {/*
+        Sticky offsets are measured inside the sheet body's 1.25rem bottom padding,
+        so `-bottom-5` pins the bar to the real edge — otherwise, when the form
+        scrolls (short or landscape phones, keyboard open), fields show through
+        beneath it. The matching `-mb-5` and larger padding keep the resting
+        spacing identical, and clear the home indicator where there is one.
+      */}
+      <div className="sticky -bottom-5 -mx-5 -mb-5 mt-2 border-t border-line-faint bg-raised px-5 pb-[max(1.75rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] pt-4 sm:-mx-6 sm:px-6">
         <Button
           type="submit"
           size="lg"

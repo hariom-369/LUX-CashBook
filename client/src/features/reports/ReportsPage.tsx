@@ -156,7 +156,7 @@ function AnnualSummaryTab() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label={`${yearLabel} income`} amountMinor={totalIncomeMinor} tone="positive" />
             <StatCard label={`${yearLabel} expenses`} amountMinor={totalExpenseMinor} tone="negative" />
             <StatCard label="Net savings" amountMinor={netSavingsMinor} tone={netSavingsMinor >= 0 ? 'positive' : 'negative'} />
@@ -177,7 +177,7 @@ function AnnualSummaryTab() {
               />
             </Card>
           ) : (
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <AnnualCategoryList title="Top income sources" rows={incomeRows} />
               <AnnualCategoryList title="Top expense categories" rows={expenseRows} />
             </div>
@@ -228,7 +228,7 @@ function OverviewTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Net worth" amountMinor={netWorth?.netWorthMinor ?? 0} loading={nwLoading} />
         <StatCard label="This month's income" amountMinor={latestMonth?.incomeMinor ?? 0} tone="positive" loading={cmpLoading} />
         <StatCard label="This month's expenses" amountMinor={latestMonth?.expenseMinor ?? 0} tone="negative" loading={cmpLoading} />
@@ -250,7 +250,7 @@ function OverviewTab() {
       {latestMonth && previousMonth && (
         <Card>
           <CardHeader eyebrow="Comparison" title={`${latestMonth.label} vs ${previousMonth.label}`} />
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <ComparisonRow label="Income" current={latestMonth.incomeMinor} previous={previousMonth.incomeMinor} currency={currency} goodIsUp />
             <ComparisonRow label="Expenses" current={latestMonth.expenseMinor} previous={previousMonth.expenseMinor} currency={currency} goodIsUp={false} />
           </div>
@@ -280,7 +280,7 @@ function ComparisonRow({
   return (
     <div className="rounded-lg border border-line bg-surface p-4">
       <p className="label-eyebrow">{label}</p>
-      <div className="mt-1.5 flex items-baseline gap-2">
+      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="sensitive tabular text-[18px] font-semibold text-ink">
           {formatMoney(current, { currency, compactDecimals: true })}
         </span>
@@ -327,7 +327,7 @@ function CategoryTab() {
 
   return (
     <Card bare>
-      <div className="flex items-center justify-between gap-3 p-5 pb-3 sm:p-6 sm:pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-5 pb-3 sm:p-6 sm:pb-3">
         <CardHeader eyebrow="This month" title="Spending by category" />
         <div className="flex rounded-md border border-line bg-surface p-0.5">
           {(['expense', 'income'] as const).map((option) => (
@@ -396,7 +396,7 @@ function NetWorthTab() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Assets" amountMinor={data.assetsMinor} tone="positive" />
         <StatCard label="Liabilities" amountMinor={data.liabilitiesMinor} tone="negative" />
         <StatCard label="Net worth" amountMinor={data.netWorthMinor} />

@@ -81,7 +81,7 @@ export function DailyClosingPage() {
       <Card>
         <CardHeader eyebrow="Close a day" title="Cash count" />
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
             <span className="label-eyebrow">Date</span>
             <Input type="date" value={date} max={toDateKey(new Date())} onChange={(event) => { setDate(event.target.value); setActualClosing(null); }} />
@@ -124,7 +124,7 @@ export function DailyClosingPage() {
           </p>
         ) : (
           <>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <StatTile label="Opening cash" amountMinor={preview?.openingCashMinor ?? 0} loading={previewLoading} />
               <StatTile label="Received" amountMinor={preview?.cashReceivedMinor ?? 0} tone="positive" loading={previewLoading} />
               <StatTile label="Paid" amountMinor={preview?.cashPaidMinor ?? 0} tone="negative" loading={previewLoading} />
@@ -137,7 +137,7 @@ export function DailyClosingPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="label-eyebrow">Actual closing cash</span>
                 <MoneyInput value={actualClosing} onChange={setActualClosing} size="hero" />

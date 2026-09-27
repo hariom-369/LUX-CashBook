@@ -156,8 +156,9 @@ function Row({
   className?: string;
 }) {
   return (
-    <div className={`flex items-start justify-between gap-6 ${className ?? ''}`}>
-      <div className="min-w-0">
+    // The control drops below the label only when both can't share the row (narrow phones).
+    <div className={`flex flex-wrap items-start justify-between gap-x-6 gap-y-3 ${className ?? ''}`}>
+      <div className="min-w-0 flex-1 basis-40">
         <p className="text-[13.5px] font-medium text-ink">{label}</p>
         {hint && <p className="mt-1 max-w-md text-[12px] leading-relaxed text-ink-muted">{hint}</p>}
       </div>
@@ -176,7 +177,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boo
       className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-gold' : 'bg-line-strong'}`}
     >
       <span
-        className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
+        className={`absolute left-0 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
           checked ? 'translate-x-[22px]' : 'translate-x-0.5'
         }`}
       />

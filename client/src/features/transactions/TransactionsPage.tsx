@@ -127,7 +127,8 @@ export function TransactionsPage() {
       {/* Filters: one row, applied together (§24). */}
       <Card bare className="p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="min-w-0 flex-1 sm:max-w-xs">
+          {/* Full row on phones so the other controls can't squeeze it to nothing. */}
+          <div className="min-w-0 grow basis-full sm:basis-0 sm:max-w-xs">
             <Input
               type="search"
               value={search}
@@ -204,7 +205,7 @@ export function TransactionsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <label className="flex flex-col gap-1.5">
                 <span className="label-eyebrow">Account</span>
                 <Select
@@ -274,7 +275,7 @@ export function TransactionsPage() {
 
       {/* The summary reflects the active filters, not the whole ledger. */}
       {totals && totals.count > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
           <SummaryTile label="Income" amountMinor={totals.totalIncomeMinor} tone="positive" />
           <SummaryTile label="Expenses" amountMinor={totals.totalExpenseMinor} tone="negative" />
           <SummaryTile
@@ -326,7 +327,7 @@ export function TransactionsPage() {
           <>
             {grouped.map(([dateKey, dayTransactions]) => (
               <section key={dateKey}>
-                <h2 className="sticky top-16 z-10 flex items-center justify-between gap-3 border-y border-line-faint bg-sunken/90 px-5 py-2 backdrop-blur-sm sm:px-6">
+                <h2 className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-10 flex items-center justify-between gap-3 border-y border-line-faint bg-sunken/90 px-5 py-2 backdrop-blur-sm sm:px-6">
                   <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-muted">
                     {relativeDay(dateKey)}
                   </span>
@@ -397,9 +398,10 @@ function SummaryTile({
   tone: 'positive' | 'negative';
 }) {
   return (
-    <div className="rounded-lg border border-line bg-surface px-4 py-3 shadow-xs">
+    // A compact label-and-figure row on phones; the original stacked tile from `sm`.
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs sm:block">
       <p className="label-eyebrow">{label}</p>
-      <div className="mt-1.5">
+      <div className="sm:mt-1.5">
         <Money amountMinor={amountMinor} size="md" tone={amountMinor === 0 ? 'neutral' : tone} compactDecimals />
       </div>
     </div>

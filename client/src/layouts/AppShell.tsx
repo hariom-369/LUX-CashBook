@@ -19,7 +19,7 @@ import { CommandPalette } from '../components/CommandPalette';
  */
 export function AppShell() {
   return (
-    <div className="flex min-h-dvh bg-canvas">
+    <div className="flex min-h-dvh bg-canvas px-safe">
       {/* Visually hidden until focused — the first tab stop for a keyboard user,
           letting them skip the nav and land straight in the page content. */}
       <a

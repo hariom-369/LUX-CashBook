@@ -112,7 +112,7 @@ function ChannelRow({
         }`}
       >
         <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
+          className={`absolute left-0 top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
             checked ? 'translate-x-[22px]' : 'translate-x-0.5'
           }`}
         />

@@ -65,14 +65,15 @@ export function PeoplePage() {
         </Button>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SummaryCard label="You will receive" amountMinor={receivable} tone="positive" />
         <SummaryCard label="You need to pay" amountMinor={payable} tone="negative" />
       </div>
 
       <Card bare className="p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="min-w-0 flex-1 sm:max-w-xs">
+          {/* Full row on phones so the filter chips can't squeeze it to nothing. */}
+          <div className="min-w-0 grow basis-full sm:basis-0 sm:max-w-xs">
             <Input
               type="search"
               value={search}
@@ -143,28 +144,33 @@ export function PeoplePage() {
                 >
                   <Avatar name={person.name} avatarUrl={person.avatarUrl} />
 
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2">
-                      <span className="truncate text-[14px] font-medium text-ink">{person.name}</span>
-                      {person.relationship !== 'friend' && (
-                        <Badge tone="outline" eyebrow>
-                          {PERSON_RELATIONSHIP_LABELS[person.relationship]}
-                        </Badge>
-                      )}
+                  {/* The balance drops below the name only when both can't share a line. */}
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3.5 gap-y-1">
+                    <span className="min-w-0 flex-1 basis-24">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
+                        <span className="min-w-0 max-w-full truncate text-[14px] font-medium text-ink">
+                          {person.name}
+                        </span>
+                        {person.relationship !== 'friend' && (
+                          <Badge tone="outline" eyebrow>
+                            {PERSON_RELATIONSHIP_LABELS[person.relationship]}
+                          </Badge>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
+                        {balanceLabel(person)}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
-                      {balanceLabel(person)}
-                    </span>
-                  </span>
 
-                  <Money
-                    amountMinor={Math.abs(person.balanceMinor)}
-                    size="md"
-                    tone={
-                      person.balanceMinor > 0 ? 'positive' : person.balanceMinor < 0 ? 'negative' : 'neutral'
-                    }
-                    compactDecimals
-                  />
+                    <Money
+                      amountMinor={Math.abs(person.balanceMinor)}
+                      size="md"
+                      tone={
+                        person.balanceMinor > 0 ? 'positive' : person.balanceMinor < 0 ? 'negative' : 'neutral'
+                      }
+                      compactDecimals
+                    />
+                  </span>
 
                   <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-faint" />
                 </Link>

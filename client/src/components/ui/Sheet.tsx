@@ -183,8 +183,10 @@ export function Sheet({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6">{children}</div>
 
+          {/* `max()` keeps the normal 1rem and grows it for a home indicator —
+              a bare `pb-safe` here would override the padding to zero. */}
           {footer && (
-            <footer className="shrink-0 border-t border-line-faint bg-surface px-5 py-4 pb-safe sm:rounded-b-2xl sm:px-6">
+            <footer className="shrink-0 border-t border-line-faint bg-surface px-5 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-4 sm:rounded-b-2xl sm:px-6">
               {footer}
             </footer>
           )}

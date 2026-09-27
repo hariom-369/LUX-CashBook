@@ -62,9 +62,9 @@ export function ProfileSettings() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-4">
         <Avatar name={user.name} avatarUrl={user.avatarUrl} size="lg" />
-        <div>
-          <p className="text-[14px] font-semibold text-ink">{user.name}</p>
-          <p className="text-[12.5px] text-ink-muted">{user.email}</p>
+        <div className="min-w-0">
+          <p className="break-words text-[14px] font-semibold text-ink">{user.name}</p>
+          <p className="text-[12.5px] text-ink-muted wrap-anywhere">{user.email}</p>
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export function ProfileSettings() {
         ) : (
           <ShieldAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
         )}
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">
             {user.emailVerified ? 'Email confirmed' : 'Confirm your email address'}
           </p>
@@ -92,7 +92,8 @@ export function ProfileSettings() {
             <Button
               size="sm"
               variant="secondary"
-              className="mt-3"
+              // Allowed to wrap onto two lines rather than overflow the notice on a narrow phone.
+              className="mt-3 h-auto min-h-9 max-w-full whitespace-normal py-1.5 text-left"
               loading={resending}
               leftIcon={<Mail className="size-3.5" />}
               onClick={() => void resendVerification()}
@@ -103,7 +104,7 @@ export function ProfileSettings() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Name" error={fieldErrors.name} required>
           {({ id }) => <Input id={id} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />}
         </Field>

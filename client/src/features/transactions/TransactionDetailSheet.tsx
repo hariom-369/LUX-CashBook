@@ -148,8 +148,10 @@ export function TransactionDetailSheet({
                 size="xl"
                 tone={isTransfer || meta.isPersonal ? 'neutral' : 'auto'}
                 signed={!isTransfer && !meta.isPersonal}
+                className="max-sm:text-[length:clamp(1.375rem,7.5vw,1.75rem)]"
               />
-              <p className="mt-1 truncate text-[13px] text-ink-muted">
+              {/* This is the one place the full description is shown, so on a phone it wraps rather than truncating. */}
+              <p className="mt-1 truncate text-[13px] text-ink-muted max-sm:whitespace-normal max-sm:break-words">
                 {transaction.description || transaction.categoryName || meta.label}
               </p>
             </div>

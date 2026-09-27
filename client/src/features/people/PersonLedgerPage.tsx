@@ -179,7 +179,7 @@ export function PersonLedgerPage() {
         </div>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile label="Opening balance" amountMinor={summary.openingBalanceMinor} />
         <StatTile label="Total given" amountMinor={summary.totalGivenMinor} tone="positive" />
         <StatTile label="Total received" amountMinor={summary.totalReceivedMinor} tone="negative" />
@@ -231,7 +231,9 @@ export function PersonLedgerPage() {
                     <td className="whitespace-nowrap px-5 py-3 text-[12.5px] text-ink-muted sm:px-6">
                       {formatDate(row.date, 'dd MMM yyyy')}
                     </td>
-                    <td className="px-3 py-3">
+                    {/* Below xl this column takes the leftover width (at least 10rem) and truncates,
+                        so the table keeps its designed width instead of growing with the longest text. */}
+                    <td className="px-3 py-3 max-xl:w-full max-xl:min-w-40 max-xl:max-w-0">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-[13px] font-medium text-ink">{row.description}</span>
                         {row.isSettlement && (

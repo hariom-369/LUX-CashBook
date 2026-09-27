@@ -91,8 +91,8 @@ export function PinSection() {
 
   return (
     <section className="border-t border-line-faint pt-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1 basis-48">
           <p className="text-[13.5px] font-medium text-ink">App-lock PIN</p>
           <p className="mt-1 max-w-md text-[12px] leading-relaxed text-ink-muted">
             A 4–8 digit code to unlock Khata quickly on this device without your full password.
@@ -110,8 +110,8 @@ export function PinSection() {
       </div>
 
       {pinEnabled && (
-        <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-line bg-sunken p-3.5">
-          <div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-line bg-sunken p-3.5">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-[12.5px] font-medium text-ink">Lock after inactivity</p>
             <p className="mt-0.5 text-[11px] text-ink-muted">Khata asks for your PIN again after this much idle time.</p>
           </div>
