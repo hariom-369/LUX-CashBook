@@ -34,12 +34,19 @@ export default defineConfig({
         background_color: '#f7f5f0',
         display: 'standalone',
         start_url: '/',
-        icons: [],
+        // Chromium only offers installation when 192px and 512px icons exist.
+        // Generated from the LogoMark (see client/public/); the maskable one is
+        // full-bleed with the mark inside the platform's safe zone.
+        icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
       },
       injectManifest: {
         // The API and any cross-origin request are handled by the app's own
         // network/offline logic, not precached — only the built app shell is.
-        globPatterns: ['**/*.{js,css,html}'],
+        globPatterns: ['**/*.{js,css,html,svg,png}'],
       },
     }),
   ],

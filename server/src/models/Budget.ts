@@ -28,6 +28,8 @@ export interface IBudget {
   lastAlertedThreshold?: number | null;
   lastAlertedPeriod?: string | null;
   isActive: boolean;
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +55,8 @@ const budgetSchema = new Schema<IBudget>(
     lastAlertedThreshold: { type: Number, default: null },
     lastAlertedPeriod: { type: String, default: null },
     isActive: { type: Boolean, default: true },
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
   },
   baseOptions,
 );

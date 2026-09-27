@@ -33,6 +33,8 @@ export interface IPerson {
   lastTransactionAt?: Date | null;
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +57,8 @@ const personSchema = new Schema<IPerson>(
     isArchived: { type: Boolean, default: false },
     lastTransactionAt: { type: Date, default: null },
     ...softDeleteFields,
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
   },
   baseOptions,
 );

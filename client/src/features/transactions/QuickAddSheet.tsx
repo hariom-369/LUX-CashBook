@@ -13,7 +13,7 @@ import { useCurrency } from '../../hooks/useCurrency';
 import { useAccounts, useCategories, useLedgerMutation, usePeople } from '../../lib/queries';
 import { api, ApiRequestError } from '../../lib/api';
 import { formatMoney, toDateKey } from '@khata/shared';
-import { enqueueOutboxItem, outboxCount } from '../../lib/offlineDb';
+import { enqueueOutboxItem, outboxCount, outboxCountFor } from '../../lib/offlineDb';
 import { useOfflineStore } from '../../stores/offline.store';
 import { useAuthStore } from '../../stores/auth.store';
 import { parseQuickEntry, type ParsedQuickEntry } from '../../lib/naturalLanguageEntry';
@@ -218,6 +218,7 @@ function TransactionForm({
   const toast = useToast();
   const currency = useCurrency();
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const money = (amountMinor: number) => formatMoney(amountMinor, { currency, compactDecimals: true });
   const meta = TRANSACTION_META[type];
   const isTransfer = meta.isTransfer;
@@ -337,8 +338,16 @@ function TransactionForm({
       if (err instanceof ApiRequestError && err.isOffline) {
         try {
           const { path, body } = buildRequest();
-          await enqueueOutboxItem({ method: 'POST', path, body, workspaceId: activeWorkspaceId ?? '' });
-          useOfflineStore.getState().setPendingCount((await outboxCount()));
+          await enqueueOutboxItem({
+            method: 'POST',
+            path,
+            body,
+            workspaceId: activeWorkspaceId ?? '',
+            userId: currentUserId ?? undefined,
+          });
+          useOfflineStore.getState().setPendingCount(
+            currentUserId ? await outboxCountFor(currentUserId) : await outboxCount(),
+          );
           toast.success(`${meta.label} saved offline`, "It'll sync automatically once you're back online.");
           onDone();
         } catch (queueErr) {
@@ -538,7 +547,7 @@ function TransactionForm({
               <option value="">Uncategorised</option>
               {flatCategories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.depth ? `   ${category.name}` : category.name}
+                  {category.depth ? `\u00A0\u00A0\u00A0${category.name}` : category.name}
                 </option>
               ))}
             </Select>

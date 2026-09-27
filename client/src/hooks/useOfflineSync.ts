@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiRequestError, api } from '../lib/api';
-import { listOutbox, outboxCount, removeOutboxItem, updateOutboxItem, type OutboxItem } from '../lib/offlineDb';
+import { listOutboxFor, outboxCountFor, removeOutboxItem, updateOutboxItem, type OutboxItem } from '../lib/offlineDb';
 import { useOfflineStore } from '../stores/offline.store';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useToast } from '../components/ui/Toast';
@@ -24,19 +24,22 @@ export function useOfflineSync(): { syncNow: () => Promise<void> } {
   const queryClient = useQueryClient();
   const toast = useToast();
   const status = useAuthStore((s) => s.status);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const syncingRef = useRef(false);
 
   const refreshPendingCount = useCallback(async () => {
-    useOfflineStore.getState().setPendingCount(await outboxCount());
-  }, []);
+    useOfflineStore.getState().setPendingCount(userId ? await outboxCountFor(userId) : 0);
+  }, [userId]);
 
   const syncNow = useCallback(async () => {
-    if (syncingRef.current || status !== 'authenticated') return;
+    if (syncingRef.current || status !== 'authenticated' || !userId) return;
     syncingRef.current = true;
     useOfflineStore.getState().setSyncing(true);
 
     try {
-      const items = await listOutbox();
+      // Only this user's entries — another account's queue on a shared device is
+      // left untouched for that account's next session.
+      const items = await listOutboxFor(userId);
       if (items.length === 0) return;
 
       let succeeded = 0;
@@ -80,7 +83,7 @@ export function useOfflineSync(): { syncNow: () => Promise<void> } {
       syncingRef.current = false;
       useOfflineStore.getState().setSyncing(false);
     }
-  }, [status, queryClient, toast, refreshPendingCount]);
+  }, [status, userId, queryClient, toast, refreshPendingCount]);
 
   // Count what's already queued as soon as we know who's signed in.
   useEffect(() => {
@@ -108,13 +111,21 @@ type SyncResult = 'ok' | 'permanent' | Error;
 
 async function syncOne(item: OutboxItem): Promise<SyncResult> {
   try {
-    await api.post(item.path, item.body);
+    // Replay into the workspace the entry was recorded in, not the active one —
+    // otherwise switching workspace before a sync sent it to the wrong ledger,
+    // where it was rejected and discarded.
+    await api.post(item.path, item.body, {
+      headers: item.workspaceId ? { 'X-Workspace-Id': item.workspaceId } : undefined,
+    });
     return 'ok';
   } catch (err) {
     if (err instanceof ApiRequestError) {
-      // A 4xx other than a rate limit means the request itself is invalid and
-      // will never succeed unchanged — don't retry it forever.
-      if (err.status >= 400 && err.status < 500 && err.status !== 429) {
+      // A 4xx means the request itself is invalid and will never succeed
+      // unchanged — don't retry it forever. Except: 401/403 say the *session*
+      // isn't valid right now (it expired while offline), and 408/429 are
+      // timing. None of those is a problem with the entry, so it stays queued
+      // for the next signed-in sync instead of being thrown away.
+      if (err.status >= 400 && err.status < 500 && ![401, 403, 408, 429].includes(err.status)) {
         return 'permanent';
       }
       return new Error(err.message);

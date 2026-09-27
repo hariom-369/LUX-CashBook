@@ -70,7 +70,7 @@ export function GoalFormSheet({
         linkedAccountId: linkedAccountId || null,
       };
       if (goal) {
-        await api.patch(`/goals/${goal.id}`, payload);
+        await api.patch(`/goals/${goal.id}`, { ...payload, rev: goal.rev });
         toast.success('Goal updated');
       } else {
         await api.post('/goals', payload);

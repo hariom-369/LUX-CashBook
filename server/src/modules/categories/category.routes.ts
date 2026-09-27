@@ -5,7 +5,7 @@ import { Category, Transaction, type ICategory } from '../../models/index.js';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { idParamSchema, objectIdSchema, text, validate } from '../../middleware/validate.js';
+import { idParamSchema, objectIdSchema, text, validate, queryBoolean } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import { recordAudit } from '../../services/audit.service.js';
@@ -54,8 +54,8 @@ categoryRouter.get(
   validate({
     query: z.object({
       kind: z.enum(CATEGORY_KINDS).optional(),
-      includeArchived: z.coerce.boolean().default(false),
-      flat: z.coerce.boolean().default(false),
+      includeArchived: queryBoolean(false),
+      flat: queryBoolean(false),
     }),
   }),
   asyncHandler(async (req: Request, res: Response) => {

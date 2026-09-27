@@ -4,6 +4,7 @@ import { Account, SavingsGoal, type ISavingsGoal } from '../../models/index.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type GoalDoc = HydratedDocument<ISavingsGoal>;
 
@@ -15,6 +16,7 @@ export function toGoalDto(goal: ISavingsGoal, linkedAccountBalanceMinor?: number
   const currentMinor = goal.linkedAccountId ? (linkedAccountBalanceMinor ?? 0) : contributedOf(goal);
   return {
     id: String(goal._id),
+    rev: goal.rev,
     workspaceId: String(goal.workspaceId),
     name: goal.name,
     targetMinor: goal.targetMinor,
@@ -115,6 +117,8 @@ export async function updateGoal(
   goalId: string,
   input: Partial<CreateGoalInput> & { isArchived?: boolean },
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<GoalDoc> {
   const goal = await getGoalDoc(scope, goalId);
 
@@ -125,6 +129,7 @@ export async function updateGoal(
     goal.linkedAccountId = input.linkedAccountId ? new Types.ObjectId(input.linkedAccountId) : null;
   }
 
+  await claimRevision(SavingsGoal, goal, expectedRev);
   await goal.save();
 
   await recordAudit(audit, {
@@ -184,7 +189,8 @@ export async function addContribution(
 
   await goal.save();
 
-  if (justAchieved) {
+  const { isNotificationAllowed } = await import('../../services/notificationPolicy.js');
+  if (justAchieved && (await isNotificationAllowed(scope.userId, 'always'))) {
     const { Notification } = await import('../../models/index.js');
     await Notification.create({
       userId: scope.userId,

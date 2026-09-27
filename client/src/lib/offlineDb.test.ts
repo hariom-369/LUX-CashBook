@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
 import {
   __resetOfflineDbForTests,
@@ -6,10 +6,14 @@ import {
   cacheSet,
   enqueueOutboxItem,
   listOutbox,
+  listOutboxFor,
   outboxCount,
+  outboxCountFor,
   removeOutboxItem,
   updateOutboxItem,
+  wipeCachedReads,
 } from './offlineDb';
+import { API_CACHE } from './cacheNames';
 
 /**
  * The offline outbox is the one piece of client state where a bug means real
@@ -105,5 +109,55 @@ describe('offline read cache', () => {
 
   it('returns null for a key that was never cached', async () => {
     expect(await cacheGet('nothing-here')).toBeNull();
+  });
+});
+
+describe('per-user outbox (shared devices)', () => {
+  beforeEach(async () => {
+    await __resetOfflineDbForTests();
+  });
+
+  it("lists and counts only the given user's entries, plus untagged legacy ones", async () => {
+    const mine = await enqueueOutboxItem({ method: 'POST', path: '/transactions', body: {}, workspaceId: 'ws1', userId: 'u1' });
+    await enqueueOutboxItem({ method: 'POST', path: '/transactions', body: {}, workspaceId: 'ws9', userId: 'u2' });
+    const legacy = await enqueueOutboxItem({ method: 'POST', path: '/transactions', body: {}, workspaceId: 'ws1' });
+
+    expect((await listOutboxFor('u1')).map((i) => i.id).sort()).toEqual([mine.id, legacy.id].sort());
+    expect(await outboxCountFor('u1')).toBe(2);
+    expect(await outboxCountFor('u2')).toBe(2);
+    expect(await outboxCount()).toBe(3);
+  });
+
+  it('keeps the workspace each entry was recorded in', async () => {
+    await enqueueOutboxItem({ method: 'POST', path: '/transactions', body: {}, workspaceId: 'ws-a', userId: 'u1' });
+    const [item] = await listOutboxFor('u1');
+    expect(item!.workspaceId).toBe('ws-a');
+  });
+});
+
+describe('wiping cached reads on sign-out', () => {
+  const deleted: string[] = [];
+
+  beforeEach(async () => {
+    await __resetOfflineDbForTests();
+    deleted.length = 0;
+    vi.stubGlobal('caches', { delete: async (name: string) => (deleted.push(name), true) });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("empties the read cache and the service worker's API cache", async () => {
+    await cacheSet('last-known-session', { user: { id: 'u1' } });
+    await wipeCachedReads();
+    expect(await cacheGet('last-known-session')).toBeNull();
+    expect(deleted).toEqual([API_CACHE]);
+  });
+
+  it('never touches queued writes — unsynced entries survive sign-out', async () => {
+    await enqueueOutboxItem({ method: 'POST', path: '/transactions', body: { amountMinor: 500 }, workspaceId: 'ws1', userId: 'u1' });
+    await wipeCachedReads();
+    expect(await outboxCount()).toBe(1);
   });
 });

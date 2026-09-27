@@ -31,6 +31,7 @@ import {
   type BalanceDelta,
 } from '../../services/balance.service.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type TransactionDoc = HydratedDocument<ITransaction>;
 
@@ -654,6 +655,8 @@ export async function updateTransaction(
   transactionId: string,
   input: UpdateTransactionInput,
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<TransactionDoc> {
   return withTransaction(async (uow) => {
     const transaction = await Transaction.findOne({
@@ -745,6 +748,7 @@ export async function updateTransaction(
     const newDeltas = postings.map((p) => ({ accountId: p.accountId, amountMinor: p.amountMinor }));
     await assertSufficientBalance(scope.workspaceId, [...oldDeltas, ...newDeltas], uow);
 
+    await claimRevision(Transaction, transaction, expectedRev, uow.session);
     await transaction.save({ session: uow.session });
 
     // Reverse the old effect, then apply the new one.

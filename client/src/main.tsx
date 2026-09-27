@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { ToastProvider } from './components/ui/Toast';
 import { ApiRequestError } from './lib/api';
-import { installSessionLostHandler } from './stores/auth.store';
+import { installSessionLostHandler, useAuthStore } from './stores/auth.store';
 import { watchSystemTheme } from './stores/ui.store';
 import { registerServiceWorker } from './lib/registerServiceWorker';
 import './styles/theme.css';
@@ -43,6 +43,14 @@ const queryClient = new QueryClient({
 });
 
 installSessionLostHandler();
+
+// Signing out (or a session ending) also drops every query result held in memory,
+// so another account signing in on this tab starts from nothing.
+useAuthStore.subscribe((state, previous) => {
+  if (state.status === 'unauthenticated' && previous.status !== 'unauthenticated') {
+    queryClient.clear();
+  }
+});
 watchSystemTheme();
 registerServiceWorker();
 

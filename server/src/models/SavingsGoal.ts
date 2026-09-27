@@ -35,6 +35,8 @@ export interface ISavingsGoal {
   achievedAt?: Date | null;
   isArchived: boolean;
   sortOrder: number;
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +62,8 @@ const savingsGoalSchema = new Schema<ISavingsGoal>(
     isAchieved: { type: Boolean, default: false },
     achievedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
     sortOrder: { type: Number, default: 0 },
   },
   baseOptions,

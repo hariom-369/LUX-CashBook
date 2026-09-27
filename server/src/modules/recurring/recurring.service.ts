@@ -15,6 +15,7 @@ import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import { logger } from '../../lib/logger.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type RecurringDoc = HydratedDocument<IRecurringTransaction>;
 
@@ -25,6 +26,7 @@ export function toRecurringDto(
 ): RecurringTransactionDto {
   return {
     id: String(recurring._id),
+    rev: recurring.rev,
     workspaceId: String(recurring.workspaceId),
     name: recurring.name,
     type: recurring.type,
@@ -186,6 +188,8 @@ export async function updateRecurring(
   id: string,
   input: Partial<CreateRecurringInput> & { isPaused?: boolean },
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<RecurringDoc> {
   const recurring = await getRecurringDoc(scope, id);
 
@@ -197,6 +201,7 @@ export async function updateRecurring(
     if (input[key] !== undefined) (recurring as unknown as Record<string, unknown>)[key] = input[key];
   }
 
+  await claimRevision(RecurringTransaction, recurring, expectedRev);
   await recurring.save();
 
   await recordAudit(audit, {
@@ -384,4 +389,84 @@ export async function processDueRecurring(now: Date = new Date()): Promise<{ pos
   }
 
   return { posted, failed };
+}
+
+/**
+ * Notifications ahead of recurring occurrences — what the "Recurring reminders"
+ * switch controls, and what the recurring form promises for remind-only items.
+ *
+ * - Auto-posting items: once per occurrence, `reminderDaysBefore` days ahead
+ *   ("Rent posts in 2 days"). A lead of 0 means no advance notice.
+ * - Remind-only items (`autoPost: false`) are never posted by the scheduler, so
+ *   they get an advance notice and then a "confirm" notice once due, pointing at
+ *   the Recurring page where the user runs or skips that occurrence.
+ *
+ * De-duplicated per occurrence date and stage, so a sweep that runs every five
+ * minutes never repeats itself. Called by the scheduler.
+ */
+export async function raiseRecurringNotifications(now: Date = new Date()): Promise<number> {
+  const { Notification } = await import('../../models/index.js');
+  const { formatMoney, toDateKey } = await import('@khata/shared');
+  const { isNotificationAllowed } = await import('../../services/notificationPolicy.js');
+  const prefsCache = new Map();
+
+  // `reminderDaysBefore` is at most 30 (see recurring.routes.ts).
+  const cursor = RecurringTransaction.find({
+    isActive: true,
+    isPaused: false,
+    nextRunDate: { $lte: addDays(now, 30) },
+  })
+    .lean()
+    .cursor();
+
+  let raised = 0;
+  for await (const item of cursor) {
+    const daysUntil = Math.round((item.nextRunDate.getTime() - now.getTime()) / 86_400_000);
+    const isDue = daysUntil <= 0;
+
+    let stage: 'upcoming' | 'due';
+    if (item.autoPost) {
+      if (item.reminderDaysBefore <= 0 || isDue || daysUntil > item.reminderDaysBefore) continue;
+      stage = 'upcoming';
+    } else {
+      if (!isDue && daysUntil > item.reminderDaysBefore) continue;
+      stage = isDue ? 'due' : 'upcoming';
+    }
+
+    if (!(await isNotificationAllowed(item.userId, 'recurringReminders', prefsCache))) continue;
+
+    const amount = formatMoney(item.amountMinor, { compactDecimals: true });
+    const when = daysUntil === 1 ? 'tomorrow' : `in ${daysUntil} days`;
+    const dedupeKey = `recurring:${item._id}:${toDateKey(item.nextRunDate)}:${stage}`;
+
+    const content =
+      stage === 'due'
+        ? {
+            title: `Confirm: ${item.name}`,
+            body: `${amount} was due ${daysUntil === 0 ? 'today' : 'on ' + toDateKey(item.nextRunDate)}. Open Recurring to record it or skip it.`,
+          }
+        : item.autoPost
+          ? { title: `${item.name} posts ${when}`, body: `${amount} will be recorded automatically.` }
+          : { title: `${item.name} is due ${when}`, body: `${amount} — you'll confirm it yourself when it's due.` };
+
+    const result = await Notification.updateOne(
+      { userId: item.userId, dedupeKey },
+      {
+        $setOnInsert: {
+          userId: item.userId,
+          workspaceId: item.workspaceId,
+          type: 'recurring_upcoming',
+          ...content,
+          icon: 'Repeat',
+          link: '/recurring',
+          amountMinor: item.amountMinor,
+          dedupeKey,
+        },
+      },
+      { upsert: true },
+    );
+    if (result.upsertedCount > 0) raised++;
+  }
+
+  return raised;
 }

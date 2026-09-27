@@ -62,6 +62,8 @@ export interface IRecurringTransaction {
   maxOccurrences?: number | null;
   lastError?: string | null;
 
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -97,6 +99,8 @@ const recurringSchema = new Schema<IRecurringTransaction>(
     reminderDaysBefore: { type: Number, min: 0, max: 30, default: 1 },
 
     isActive: { type: Boolean, default: true },
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
     isPaused: { type: Boolean, default: false },
     occurrencesCreated: { type: Number, default: 0 },
     maxOccurrences: { type: Number, min: 1, default: null },

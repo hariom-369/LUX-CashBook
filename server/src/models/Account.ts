@@ -38,6 +38,8 @@ export interface IAccount {
   isPettyCash: boolean;
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +75,8 @@ const accountSchema = new Schema<IAccount>(
     sortOrder: { type: Number, default: 0 },
     isPettyCash: { type: Boolean, default: false },
     ...softDeleteFields,
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
   },
   baseOptions,
 );

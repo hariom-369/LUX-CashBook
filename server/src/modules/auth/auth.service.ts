@@ -2,7 +2,7 @@ import { Types, type HydratedDocument } from 'mongoose';
 import type { AuthSessionDto, UserDto, UserPreferences } from '@khata/shared';
 import { User, RefreshToken, Workspace, type IUser } from '../../models/index.js';
 import { DEFAULT_PREFERENCES } from '../../models/User.js';
-import { conflict, forbidden, notFound, unauthorized } from '../../lib/errors.js';
+import { conflict, forbidden, notFound, tooManyRequests, unauthorized } from '../../lib/errors.js';
 import { hashPassword, needsRehash, verifyPassword } from '../../lib/password.js';
 import {
   accessTokenTtlSeconds,
@@ -356,7 +356,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await sendMail({ to: user.email, ...passwordResetEmail(user.name, url) });
 }
 
-export async function resetPassword(token: string, newPassword: string): Promise<void> {
+/** Returns whose password was reset, so the caller can record it in the audit log. */
+export async function resetPassword(token: string, newPassword: string): Promise<Types.ObjectId> {
   const user = await User.findOne({ passwordResetTokenHash: hashToken(token) }).select(
     '+passwordResetTokenHash +passwordResetExpiresAt +passwordHash',
   );
@@ -381,6 +382,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
   );
 
   await sendMail({ to: user.email, ...passwordChangedEmail(user.name) }).catch(() => undefined);
+  return user._id;
 }
 
 export async function changePassword(
@@ -421,6 +423,11 @@ export async function setPin(userId: Types.ObjectId, pin: string, password: stri
 
   user.pinHash = await hashPassword(pin);
   user.set('preferences.security.pinEnabled', true);
+  // The lock screen needs the length to know when entry is complete (it isn't
+  // a secret from the person who chose it, and it only ever goes to them).
+  user.set('preferences.security.pinLength', pin.length);
+  user.pinFailedAttempts = 0;
+  user.pinLockedUntil = null;
   await user.save();
 }
 
@@ -434,6 +441,9 @@ export async function removePin(userId: Types.ObjectId, password: string): Promi
 
   user.pinHash = null;
   user.set('preferences.security.pinEnabled', false);
+  user.set('preferences.security.pinLength', null);
+  user.pinFailedAttempts = 0;
+  user.pinLockedUntil = null;
   user.set('preferences.security.biometricEnabled', false);
   await user.save();
 }
@@ -445,7 +455,42 @@ export async function removePin(userId: Types.ObjectId, password: string): Promi
  * authentication factor on its own, and it deliberately grants no new API access.
  */
 export async function verifyPin(userId: Types.ObjectId, pin: string): Promise<boolean> {
-  const user = await User.findById(userId).select('+pinHash');
+  const user = await User.findById(userId).select('+pinHash +pinFailedAttempts +pinLockedUntil');
   if (!user?.pinHash) return false;
-  return verifyPassword(pin, user.pinHash);
+
+  // A 4-digit PIN has only 10,000 values, so the route's rate limit alone isn't
+  // enough: after PIN_MAX_ATTEMPTS misses, PIN unlock is refused for a while.
+  // The password still works throughout ("Sign in with password instead").
+  if (user.pinLockedUntil && user.pinLockedUntil.getTime() > Date.now()) {
+    throw pinLocked(user.pinLockedUntil);
+  }
+
+  if (await verifyPassword(pin, user.pinHash)) {
+    if (user.pinFailedAttempts || user.pinLockedUntil) {
+      user.pinFailedAttempts = 0;
+      user.pinLockedUntil = null;
+      await user.save();
+    }
+    return true;
+  }
+
+  user.pinFailedAttempts = (user.pinFailedAttempts ?? 0) + 1;
+  if (user.pinFailedAttempts >= PIN_MAX_ATTEMPTS) {
+    user.pinFailedAttempts = 0;
+    user.pinLockedUntil = new Date(Date.now() + PIN_LOCKOUT_MINUTES * 60 * 1000);
+    await user.save();
+    throw pinLocked(user.pinLockedUntil);
+  }
+  await user.save();
+  return false;
+}
+
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCKOUT_MINUTES = 15;
+
+function pinLocked(until: Date) {
+  const minutes = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60_000));
+  return tooManyRequests(
+    `Too many wrong PINs. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or sign in with your password.`,
+  );
 }

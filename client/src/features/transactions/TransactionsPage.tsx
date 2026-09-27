@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Filter, Plus, Search, Trash2, X } from 'lucide-react';
+import { Filter, HandCoins, Paperclip, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import {
   RANGE_PRESET_LABELS,
   TRANSACTION_META,
@@ -16,6 +16,8 @@ import { cn } from '../../lib/cn';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
+import { MoneyInput } from '../../components/ui/MoneyInput';
+import { useT } from '../../i18n';
 import { Money } from '../../components/ui/Money';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
@@ -46,11 +48,19 @@ export function TransactionsPage() {
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [showDeleted, setShowDeleted] = useState(false);
+  // Filters the API always supported but the screen never offered (audit P-2).
+  const [tag, setTag] = useState('');
+  const [minAmountMinor, setMinAmountMinor] = useState<number | null>(null);
+  const [maxAmountMinor, setMaxAmountMinor] = useState<number | null>(null);
+  const [withReceipts, setWithReceipts] = useState(false);
+  const [outstandingOnly, setOutstandingOnly] = useState(false);
+  const t = useT();
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<TransactionDto | null>(null);
 
   const debouncedSearch = useDebounced(search, 300);
+  const debouncedTag = useDebounced(tag.trim().replace(/^#/, ''), 300);
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
 
@@ -68,24 +78,36 @@ export function TransactionsPage() {
       ...(categoryId ? { categoryIds: [categoryId] } : {}),
       ...(debouncedSearch ? { search: debouncedSearch } : {}),
       ...(showDeleted ? { onlyDeleted: true } : {}),
+      ...(debouncedTag ? { tags: [debouncedTag] } : {}),
+      ...(minAmountMinor !== null ? { minAmountMinor } : {}),
+      ...(maxAmountMinor !== null ? { maxAmountMinor } : {}),
+      ...(withReceipts ? { hasAttachment: true } : {}),
+      ...(outstandingOnly ? { outstandingOnly: true } : {}),
     }),
-    [page, range, dateRange, types, accountId, categoryId, debouncedSearch, showDeleted],
+    [page, range, dateRange, types, accountId, categoryId, debouncedSearch, showDeleted, debouncedTag, minAmountMinor, maxAmountMinor, withReceipts, outstandingOnly],
   );
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useTransactions(params);
 
   const activeFilterCount =
-    types.length + (accountId ? 1 : 0) + (categoryId ? 1 : 0) + (showDeleted ? 1 : 0);
+    types.length + (accountId ? 1 : 0) + (categoryId ? 1 : 0) + (showDeleted ? 1 : 0) +
+    (debouncedTag ? 1 : 0) + (minAmountMinor !== null ? 1 : 0) + (maxAmountMinor !== null ? 1 : 0) +
+    (withReceipts ? 1 : 0) + (outstandingOnly ? 1 : 0);
 
   function resetFilters() {
     setTypes([]);
     setAccountId('');
     setCategoryId('');
     setShowDeleted(false);
+    setTag('');
+    setMinAmountMinor(null);
+    setMaxAmountMinor(null);
+    setWithReceipts(false);
+    setOutstandingOnly(false);
     setPage(1);
   }
 
-  const items = data?.page.items ?? [];
+  const items = useMemo(() => data?.page.items ?? [], [data]);
   const totals = data?.totals;
 
   // Group by day so the list reads as a diary rather than an undifferentiated feed.
@@ -236,7 +258,7 @@ export function TransactionsPage() {
                   <option value="">All categories</option>
                   {flatCategories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.depth ? `   ${category.name}` : category.name}
+                      {category.depth ? `\u00A0\u00A0\u00A0${category.name}` : category.name}
                     </option>
                   ))}
                 </Select>
@@ -255,6 +277,76 @@ export function TransactionsPage() {
                 <span className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
                   <Trash2 aria-hidden className="size-3.5" />
                   Show deleted only
+                </span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="label-eyebrow">{t('transactions.filter.tag')}</span>
+                <Input
+                  value={tag}
+                  onChange={(event) => {
+                    setTag(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder={t('transactions.filter.tagPlaceholder')}
+                  leftSlot={<Tag aria-hidden className="size-4" />}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="label-eyebrow">{t('transactions.filter.amountFrom')}</span>
+                <MoneyInput
+                  value={minAmountMinor}
+                  onChange={(value) => {
+                    setMinAmountMinor(value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="label-eyebrow">{t('transactions.filter.amountTo')}</span>
+                <MoneyInput
+                  value={maxAmountMinor}
+                  onChange={(value) => {
+                    setMaxAmountMinor(value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap gap-x-6 gap-y-3">
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={withReceipts}
+                  onChange={(event) => {
+                    setWithReceipts(event.target.checked);
+                    setPage(1);
+                  }}
+                  className="size-4 rounded-sm border-line text-gold focus:ring-gold"
+                />
+                <span className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
+                  <Paperclip aria-hidden className="size-3.5" />
+                  {t('transactions.filter.withReceipts')}
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={outstandingOnly}
+                  onChange={(event) => {
+                    setOutstandingOnly(event.target.checked);
+                    setPage(1);
+                  }}
+                  className="size-4 rounded-sm border-line text-gold focus:ring-gold"
+                />
+                <span className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
+                  <HandCoins aria-hidden className="size-3.5" />
+                  {t('transactions.filter.outstanding')}
                 </span>
               </label>
             </div>

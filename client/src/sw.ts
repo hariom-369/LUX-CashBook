@@ -3,6 +3,7 @@ import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { API_CACHE } from './lib/cacheNames';
 
 declare let self: ServiceWorkerGlobalScope;
 
@@ -42,8 +43,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
 });
-
-const API_CACHE = 'khata-api-cache-v1';
 
 registerRoute(
   ({ url, request }) => request.method === 'GET' && url.pathname.startsWith('/api/v1/') && isCacheableRead(url.pathname),

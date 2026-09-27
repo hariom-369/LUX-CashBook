@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bell, Eye, EyeOff, LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react';
+import { Bell, Download, Eye, EyeOff, LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { useUiStore, resolveTheme } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
+import { usePwaStore } from '../stores/pwa.store';
+import { useT } from '../i18n';
 import { navItemsFor } from '../config/navigation';
 import { Logo } from '../components/brand/Logo';
 import { useNotifications } from '../lib/queries3';
@@ -134,6 +136,17 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const signOut = useAuthStore((s) => s.signOut);
+  const installPrompt = usePwaStore((s) => s.installPrompt);
+  const t = useT();
+
+  async function install() {
+    if (!installPrompt) return;
+    setOpen(false);
+    await installPrompt.prompt();
+    // A prompt can only be shown once; the browser offers a fresh one later if needed.
+    await installPrompt.userChoice.catch(() => undefined);
+    usePwaStore.getState().setInstallPrompt(null);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -196,6 +209,19 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
             <Settings aria-hidden className="size-4" />
             Settings
           </Link>
+
+          {/* Only while the browser can actually install Khata (never a dead item). */}
+          {installPrompt && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void install()}
+              className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13px] text-ink-secondary transition-colors hover:bg-sunken hover:text-ink"
+            >
+              <Download aria-hidden className="size-4" />
+              {t('install.action')}
+            </button>
+          )}
 
           <button
             type="button"

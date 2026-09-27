@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { API_CACHE } from './cacheNames';
 
 /**
  * The offline outbox (§39).
@@ -25,6 +26,13 @@ export interface OutboxItem {
   path: string;
   body: Record<string, unknown>;
   workspaceId: string;
+  /**
+   * Who queued it. Only that user's session ever replays it, so a queued entry
+   * can't be sent — or reported on — under someone else's sign-in on a shared
+   * device. Items queued before this field existed have none and are treated as
+   * the current user's, which is what the app always did.
+   */
+  userId?: string;
   /** Set once a sync attempt fails, so the UI can show what went wrong. */
   lastError?: string;
   attempts: number;
@@ -90,6 +98,15 @@ export async function outboxCount(): Promise<number> {
   return db.count('outbox');
 }
 
+/** Queued items that belong to `userId`, oldest first (see `OutboxItem.userId`). */
+export async function listOutboxFor(userId: string): Promise<OutboxItem[]> {
+  return (await listOutbox()).filter((item) => !item.userId || item.userId === userId);
+}
+
+export async function outboxCountFor(userId: string): Promise<number> {
+  return (await listOutboxFor(userId)).length;
+}
+
 /**
  * A small local cache for offline *reads* that the service worker's HTTP cache
  * doesn't cover — chiefly the currently-active workspace id and user profile,
@@ -105,6 +122,25 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   const db = await getDb();
   const row = await db.get('cache', key);
   return (row?.data as T) ?? null;
+}
+
+/**
+ * Forget every cached *read* on this device: the session snapshot and other
+ * entries in the `cache` store, and the service worker's cache of API responses
+ * (balances, transactions, people, reports…).
+ *
+ * Called on sign-out, when a session ends, and before a fresh sign-in, so the
+ * next person to use this browser — online or offline — is never shown the
+ * previous user's figures. Queued *writes* (the outbox) are deliberately kept:
+ * they are unsynced financial records, tagged with their owner, and replayed only
+ * by that user's next session.
+ */
+export async function wipeCachedReads(): Promise<void> {
+  const db = await getDb();
+  await db.clear('cache');
+  if (typeof caches !== 'undefined') {
+    await caches.delete(API_CACHE);
+  }
 }
 
 /**

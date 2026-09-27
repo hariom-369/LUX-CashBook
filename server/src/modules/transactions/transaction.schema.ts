@@ -8,8 +8,7 @@ import {
   objectIdSchema,
   positiveAmountSchema,
   tagsSchema,
-  text,
-} from '../../middleware/validate.js';
+  text, queryBoolean, revisionField } from '../../middleware/validate.js';
 
 export const createTransactionSchema = z
   .object({
@@ -78,6 +77,8 @@ export const createTransactionSchema = z
 
 /** The type is intentionally absent: a transaction's type is immutable. */
 export const updateTransactionSchema = z.object({
+  /** The revision the editor read (lib/revision.ts). */
+  rev: revisionField,
   amountMinor: positiveAmountSchema.optional(),
   date: dateSchema.optional(),
   accountId: objectIdSchema.optional(),
@@ -111,10 +112,10 @@ export const listTransactionsSchema = z.object({
   search: z.string().trim().max(120).optional(),
   sortBy: z.enum(['date', 'amount', 'created']).default('date'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
-  includeDeleted: z.coerce.boolean().default(false),
-  onlyDeleted: z.coerce.boolean().default(false),
-  hasAttachment: z.coerce.boolean().optional(),
-  outstandingOnly: z.coerce.boolean().optional(),
+  includeDeleted: queryBoolean(false),
+  onlyDeleted: queryBoolean(false),
+  hasAttachment: queryBoolean(),
+  outstandingOnly: queryBoolean(),
 });
 
 export const duplicateTransactionSchema = z.object({

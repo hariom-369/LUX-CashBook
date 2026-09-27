@@ -22,7 +22,7 @@ type FormValues = z.infer<typeof schema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const applySession = useAuthStore((s) => s.applySession);
+  const startSession = useAuthStore((s) => s.startSession);
 
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function LoginPage() {
     setFormError(null);
     try {
       const session = await api.post<AuthSessionDto>('/auth/login', values, { skipAuth: true });
-      applySession(session);
+      await startSession(session);
 
       // Return the user to wherever they were headed before the redirect.
       const target = (location.state as { from?: string } | null)?.from;

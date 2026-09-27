@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { WORKSPACE_MODES, type WorkspaceMode } from '@khata/shared';
+import { FEATURE_FLAG_NAMES, WORKSPACE_MODES, type FeatureFlag, type WorkspaceMode } from '@khata/shared';
 import { defineModel, baseOptions, currencyField } from './shared.js';
 
 /**
@@ -27,6 +27,15 @@ export interface IWorkspace {
   logoUrl?: string;
   /** Months closed via §33. Stored as `YYYY-MM` so a lookup is a plain array match. */
   closedMonths: string[];
+  /**
+   * Per-workspace feature-flag overrides (docs/FEATURE_ROADMAP.md, decision 5).
+   * Layered on top of the server's `FEATURE_*` env defaults by `GET /features`
+   * — lets one workspace (e.g. an internal or pilot one) see a module ahead of
+   * (or instead of) the global default, without a redeploy. Unset keys fall
+   * through to the env default. No UI writes this yet; it exists so a future
+   * admin/support tool has somewhere to put a rollout.
+   */
+  featureOverrides?: Partial<Record<FeatureFlag, boolean>>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +54,25 @@ const workspaceSchema = new Schema<IWorkspace>(
     gstin: { type: String, trim: true, uppercase: true, maxlength: 15 },
     logoUrl: { type: String, maxlength: 512 },
     closedMonths: { type: [String], default: [] },
+    // A plain object rather than a Mongoose `Map` — a `Map` doesn't survive
+    // `.lean()` consistently across Mongoose versions, and this only ever needs
+    // to round-trip as ordinary JSON.
+    featureOverrides: {
+      type: Schema.Types.Mixed,
+      default: undefined,
+      // Reject anything that isn't a known flag name — a typo here should fail
+      // loudly, not silently do nothing.
+      validate: {
+        validator: (v: unknown) =>
+          v === undefined ||
+          v === null ||
+          (typeof v === 'object' &&
+            !Array.isArray(v) &&
+            Object.keys(v as object).every((k) => (FEATURE_FLAG_NAMES as string[]).includes(k)) &&
+            Object.values(v as object).every((val) => typeof val === 'boolean')),
+        message: 'featureOverrides must map known flag names to booleans.',
+      },
+    },
   },
   baseOptions,
 );

@@ -71,7 +71,7 @@ export function BudgetFormSheet({
         rollover,
       };
       if (budget) {
-        await api.patch(`/budgets/${budget.id}`, payload);
+        await api.patch(`/budgets/${budget.id}`, { ...payload, rev: budget.rev });
         toast.success('Budget updated');
       } else {
         await api.post('/budgets', payload);

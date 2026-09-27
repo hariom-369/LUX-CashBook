@@ -69,7 +69,8 @@ transactionRouter.patch(
   validate({ params: idParamSchema, body: updateTransactionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const scope = scopeOf(req);
-    await service.updateTransaction(scope, param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    await service.updateTransaction(scope, param(req, 'id'), changes, auditContext(req), rev);
     ok(res, await query.getTransaction(scope, param(req, 'id')));
   }),
 );

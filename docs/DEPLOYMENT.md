@@ -50,7 +50,6 @@ so read those two sections even if you skim the rest.
 | `MAX_UPLOAD_MB` | No | Defaults to 10. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | No | Leave unset to have the app log emails to its own console instead of sending them — fine for an initial launch; add real SMTP credentials when you want verification/reset emails to actually arrive. |
 | `RATE_LIMIT_*`, `LOG_LEVEL`, `ENABLE_SCHEDULER` | No | Sensible defaults already in place; see `server/.env.example` for what each controls. |
-| `ENABLE_DEV_ROUTES` | No | Leave `false` (the default). This exists for local demo-data helpers and must never be `true` in production. |
 
 ### Frontend (Vercel → your project → Environment Variables)
 

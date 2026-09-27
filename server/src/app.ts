@@ -84,6 +84,14 @@ export function createApp(): Express {
   }
 
   app.use('/api', globalLimiter);
+  // API responses are someone's financial data: keep them out of the browser's
+  // HTTP cache, where they would outlive sign-out on a shared device. Offline
+  // reads are served by the service worker's own cache, which the app empties on
+  // sign-out. Routes that need caching (attachment downloads) set their own header.
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.use('/api/v1', apiRouter);
 
   app.get('/', (_req, res) => {

@@ -6,6 +6,18 @@ import { actorOf } from '../../middleware/auth.js';
 import { userIdOf } from '../../middleware/context.js';
 import { passwordStrength } from '../../lib/password.js';
 import * as authService from './auth.service.js';
+import { recordAudit } from '../../services/audit.service.js';
+import type { AuditEntry } from '../../services/audit.service.js';
+import type { Types } from 'mongoose';
+
+/**
+ * Security events for the user's own activity history (Settings → Security).
+ * Recorded here, where the request's IP and device are known; never includes a
+ * password, PIN or token.
+ */
+function auditSecurity(req: Request, userId: Types.ObjectId, action: AuditEntry['action'], summary: string) {
+  return recordAudit({ userId, ...actorOf(req) }, { action, entityType: 'User', entityId: userId, summary });
+}
 
 const REFRESH_COOKIE = 'khata_rt';
 
@@ -84,6 +96,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
 export async function logoutAll(req: Request, res: Response): Promise<void> {
   await authService.logoutAllSessions(userIdOf(req));
+  await auditSecurity(req, userIdOf(req), 'logout', 'Signed out of every device');
   clearRefreshCookie(res);
   ok(res, { signedOut: true });
 }
@@ -102,7 +115,8 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
-  await authService.resetPassword(req.body.token, req.body.password);
+  const userId = await authService.resetPassword(req.body.token, req.body.password);
+  await auditSecurity(req, userId, 'password_changed', 'Password reset with an email link');
   ok(res, { message: 'Your password has been changed. Please sign in.' });
 }
 
@@ -123,17 +137,20 @@ export async function resendVerification(req: Request, res: Response): Promise<v
 
 export async function changePassword(req: Request, res: Response): Promise<void> {
   await authService.changePassword(userIdOf(req), req.body.currentPassword, req.body.newPassword);
+  await auditSecurity(req, userIdOf(req), 'password_changed', 'Password changed');
   clearRefreshCookie(res);
   ok(res, { message: 'Password changed. Please sign in again.' });
 }
 
 export async function setPin(req: Request, res: Response): Promise<void> {
   await authService.setPin(userIdOf(req), req.body.pin, req.body.password);
+  await auditSecurity(req, userIdOf(req), 'updated', 'App-lock PIN set');
   ok(res, { pinEnabled: true });
 }
 
 export async function removePin(req: Request, res: Response): Promise<void> {
   await authService.removePin(userIdOf(req), req.body.password);
+  await auditSecurity(req, userIdOf(req), 'updated', 'App-lock PIN removed');
   ok(res, { pinEnabled: false });
 }
 

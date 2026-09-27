@@ -8,6 +8,7 @@ import { useToast } from '../../components/ui/Toast';
 import { downloadFile } from '../../lib/download';
 import { api, errorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { DataHealthSection } from './DataHealthSection';
 
 interface ImportPreviewRow {
   row: number;
@@ -38,6 +39,7 @@ export function DataSettings() {
       <ExportSection />
       <ImportSection />
       <BackupSection />
+      <DataHealthSection />
     </div>
   );
 }

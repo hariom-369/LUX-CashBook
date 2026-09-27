@@ -164,7 +164,7 @@ export function parseMoney(input: string, currency?: string): number | null {
   if (!text) return null;
 
   // Strip currency symbols, spaces, grouping separators and non-breaking spaces.
-  text = text.replace(/[\s ,]/g, '').replace(/[^\d.\-+kKlLcCrRmMbB]/g, '');
+  text = text.replace(/[\s\u00A0,]/g, '').replace(/[^\d.\-+kKlLcCrRmMbB]/g, '');
   if (!text) return null;
 
   const shorthand = /^([+-]?\d*\.?\d+)\s*(k|l|cr|m|b)$/i.exec(text);

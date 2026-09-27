@@ -91,6 +91,34 @@ export const requireWorkspace: RequestHandler = async (req, _res, next) => {
   }
 };
 
+/**
+ * Like `requireWorkspace`, but for a route a signed-out caller may also reach
+ * (`GET /features`): resolves `req.scope`/`req.workspace` when a valid token and
+ * a valid, owned workspace are both present, and just moves on — never a 401/403
+ * — when they aren't. Must run after `optionalAuth`.
+ */
+export const optionalWorkspace: RequestHandler = async (req, _res, next) => {
+  if (!req.user) return next();
+
+  const requested = req.get('x-workspace-id') ?? (req.query.workspaceId as string | undefined);
+  const workspaceId = requested ?? (req.user.activeWorkspaceId ? String(req.user.activeWorkspaceId) : null);
+  if (!workspaceId || !Types.ObjectId.isValid(workspaceId)) return next();
+
+  const workspace = await Workspace.findOne({ _id: new Types.ObjectId(workspaceId), userId: req.user._id }).catch(
+    () => null,
+  );
+  if (!workspace) return next();
+
+  req.workspace = workspace as Request['workspace'];
+  req.scope = {
+    userId: req.user._id,
+    workspaceId: workspace._id,
+    currency: workspace.currency,
+    mode: workspace.mode,
+  };
+  next();
+};
+
 /** Gate business-only endpoints (petty cash, daily closing, customers, suppliers). */
 export const requireBusinessMode: RequestHandler = (req, _res, next) => {
   if (req.scope?.mode !== 'business') {

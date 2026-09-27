@@ -5,12 +5,14 @@ import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type PersonDoc = HydratedDocument<IPerson>;
 
 export function toPersonDto(person: IPerson): PersonDto {
   return {
     id: String(person._id),
+    rev: person.rev,
     workspaceId: String(person.workspaceId),
     name: person.name,
     phone: person.phone,
@@ -135,6 +137,8 @@ export async function updatePerson(
   personId: string,
   input: UpdatePersonInput,
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<PersonDoc> {
   const person = await getPerson(scope, personId);
   const before = { name: person.name, openingBalanceMinor: person.openingBalanceMinor };
@@ -162,6 +166,7 @@ export async function updatePerson(
     }
   }
 
+  await claimRevision(Person, person, expectedRev);
   await person.save();
 
   if (openingChanged) {

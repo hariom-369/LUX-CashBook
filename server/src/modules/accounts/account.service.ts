@@ -5,12 +5,14 @@ import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recomputeAccountBalance } from '../../services/balance.service.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type AccountDoc = HydratedDocument<IAccount>;
 
 export function toAccountDto(account: IAccount): AccountDto {
   return {
     id: String(account._id),
+    rev: account.rev,
     workspaceId: String(account.workspaceId),
     name: account.name,
     type: account.type,
@@ -149,6 +151,8 @@ export async function updateAccount(
   accountId: string,
   input: UpdateAccountInput,
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<AccountDoc> {
   const account = await getAccount(scope, accountId);
   const before = { name: account.name, openingBalanceMinor: account.openingBalanceMinor };
@@ -177,6 +181,7 @@ export async function updateAccount(
     }
   }
 
+  await claimRevision(Account, account, expectedRev);
   await account.save();
 
   // Changing the opening balance shifts every balance derived from it, so the

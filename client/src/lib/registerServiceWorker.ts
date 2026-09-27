@@ -1,5 +1,5 @@
 import { registerSW } from 'virtual:pwa-register';
-import { usePwaStore } from '../stores/pwa.store';
+import { usePwaStore, type InstallPromptEvent } from '../stores/pwa.store';
 
 /**
  * Register the offline app shell (§39).
@@ -12,6 +12,14 @@ import { usePwaStore } from '../stores/pwa.store';
  * when it suits them (`UpdateBanner`), never a forced reload.
  */
 export function registerServiceWorker(): void {
+  // Keep the browser's install prompt for the "Install Khata" menu item rather
+  // than letting it fire at an arbitrary moment; drop it once installed.
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    usePwaStore.getState().setInstallPrompt(event as InstallPromptEvent);
+  });
+  window.addEventListener('appinstalled', () => usePwaStore.getState().setInstallPrompt(null));
+
   if (!('serviceWorker' in navigator)) return;
 
   const updateSW = registerSW({

@@ -238,6 +238,21 @@ export async function purgeWorkspaceData(workspaceId: Types.ObjectId): Promise<v
     Reminder, Attachment, PettyCash, DayClosing, MonthClosing,
   } = await import('../../models/index.js');
 
+  // The attachment rows are about to go, so the files they point at must go too —
+  // otherwise receipts would outlive the account on disk or in S3, unreferenced.
+  // Best effort per file: one missing object must not block someone leaving.
+  const { getStorageDriver } = await import('../../lib/storage.js');
+  const storage = getStorageDriver();
+  const files = await Attachment.find({ workspaceId }).select('storageKey thumbnailKey').lean();
+  for (const file of files) {
+    for (const key of [file.storageKey, file.thumbnailKey]) {
+      if (!key) continue;
+      await storage.delete(key).catch((err: unknown) =>
+        logger.error({ err, key }, 'Could not delete a stored file while purging a workspace'),
+      );
+    }
+  }
+
   await Promise.all([
     Transaction.deleteMany({ workspaceId }),
     Account.deleteMany({ workspaceId }),

@@ -110,7 +110,9 @@ export function AccountFormSheet({
 
     try {
       if (account) {
-        await api.patch(`/accounts/${account.id}`, payload);
+        // `rev` lets the server refuse a stale edit (someone else changed this
+        // account after we loaded it) instead of silently overwriting it.
+        await api.patch(`/accounts/${account.id}`, { ...payload, rev: account.rev });
         toast.success('Account updated');
       } else {
         await api.post('/accounts', payload);

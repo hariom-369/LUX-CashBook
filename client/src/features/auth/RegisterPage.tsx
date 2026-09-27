@@ -35,7 +35,7 @@ function guessTimeZone(): string {
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const applySession = useAuthStore((s) => s.applySession);
+  const startSession = useAuthStore((s) => s.startSession);
 
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function RegisterPage() {
         { ...values, timeZone: guessTimeZone() },
         { skipAuth: true },
       );
-      applySession(session);
+      await startSession(session);
       navigate('/onboarding', { replace: true });
     } catch (err) {
       if (err instanceof ApiRequestError && applyServerFieldErrors(err, setError)) return;

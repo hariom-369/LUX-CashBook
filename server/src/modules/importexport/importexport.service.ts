@@ -2,12 +2,13 @@ import { stringify } from 'csv-stringify/sync';
 import { parse } from 'csv-parse/sync';
 import { Types } from 'mongoose';
 import { formatDate, toMinor, type TransactionType } from '@khata/shared';
-import { Account, Category, Person, Transaction } from '../../models/index.js';
+import { Account, Category, Transaction } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { hydrate, buildFilter, type TransactionFilters } from '../transactions/transaction.query.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import type { AuditContext } from '../../services/audit.service.js';
 import { badRequest } from '../../lib/errors.js';
+import { csvText, csvTextIn } from '../../lib/csv.js';
 
 /**
  * CSV export (§34).
@@ -27,16 +28,17 @@ export async function exportTransactionsCsv(scope: RequestScope, filters: Transa
     Type: dto.type,
     Amount: (dto.amountMinor / 100).toFixed(2),
     Currency: dto.currency,
-    Account: dto.accountName ?? '',
-    'To Account': dto.toAccountId ? (dto.postings.find((p) => p.accountId === dto.toAccountId)?.accountName ?? '') : '',
-    Category: dto.categoryName ?? '',
-    Subcategory: dto.subcategoryName ?? '',
-    Person: dto.personName ?? '',
-    Description: dto.description,
-    Notes: dto.notes ?? '',
+    // Free-text cells are formula-escaped (lib/csv.ts); numeric ones never are.
+    Account: csvText(dto.accountName),
+    'To Account': dto.toAccountId ? csvText(dto.postings.find((p) => p.accountId === dto.toAccountId)?.accountName) : '',
+    Category: csvText(dto.categoryName),
+    Subcategory: csvText(dto.subcategoryName),
+    Person: csvText(dto.personName),
+    Description: csvText(dto.description),
+    Notes: csvText(dto.notes),
     'Payment Method': dto.paymentMethod ?? '',
-    Reference: dto.referenceNo ?? '',
-    Tags: dto.tags.join(';'),
+    Reference: csvText(dto.referenceNo),
+    Tags: csvText(dto.tags.join(';')),
     'Due Date': dto.dueDate ? formatDate(dto.dueDate, 'yyyy-MM-dd') : '',
   }));
 
@@ -121,12 +123,12 @@ export async function previewImport(scope: RequestScope, csvText: string): Promi
       errors.push('Amount must be a positive number.');
     }
 
-    const accountName = (record.Account ?? '').trim();
+    const accountName = csvTextIn(record.Account).trim();
     const account = accountByName.get(accountName.toLowerCase());
     if (!accountName) errors.push('Account is required.');
     else if (!account) errors.push(`No account named "${accountName}".`);
 
-    const categoryName = (record.Category ?? '').trim();
+    const categoryName = csvTextIn(record.Category).trim();
     if (categoryName && VALID_TYPES.has(type)) {
       const category = categoryByName.get(`${type}:${categoryName.toLowerCase()}`);
       if (!category) errors.push(`No ${type} category named "${categoryName}".`);
@@ -139,7 +141,7 @@ export async function previewImport(scope: RequestScope, csvText: string): Promi
       amountMinor: Number.isFinite(amountMajor) ? toMinor(amountMajor) : 0,
       accountName,
       categoryName: categoryName || undefined,
-      description: (record.Description ?? '').trim(),
+      description: csvTextIn(record.Description).trim(),
       isValid: errors.length === 0,
       errors,
     };
@@ -185,8 +187,8 @@ export async function commitImport(
     }
 
     const record = records[i]!;
-    const account = accountByName.get((record.Account ?? '').trim().toLowerCase())!;
-    const categoryName = (record.Category ?? '').trim();
+    const account = accountByName.get(csvTextIn(record.Account).trim().toLowerCase())!;
+    const categoryName = csvTextIn(record.Category).trim();
     const category = categoryName ? categoryByName.get(`${previewRow.type}:${categoryName.toLowerCase()}`) : undefined;
 
     try {
@@ -199,8 +201,8 @@ export async function commitImport(
           accountId: String(account._id),
           categoryId: category ? String(category._id) : undefined,
           description: previewRow.description,
-          referenceNo: (record.Reference ?? '').trim() || undefined,
-          tags: (record.Tags ?? '').split(';').map((t) => t.trim()).filter(Boolean),
+          referenceNo: csvTextIn(record.Reference).trim() || undefined,
+          tags: csvTextIn(record.Tags).split(';').map((t) => t.trim()).filter(Boolean),
           importBatchId,
         },
         audit,
@@ -242,7 +244,7 @@ export async function exportPersonLedgerCsv(scope: RequestScope, personId: strin
 
   const records = ledger.rows.map((row) => ({
     Date: formatDate(row.date, 'yyyy-MM-dd'),
-    Description: row.description,
+    Description: csvText(row.description),
     'You Gave': row.gaveMinor ? (row.gaveMinor / 100).toFixed(2) : '',
     'You Received': row.receivedMinor ? (row.receivedMinor / 100).toFixed(2) : '',
     Balance: (row.balanceMinor / 100).toFixed(2),

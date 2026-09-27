@@ -64,7 +64,7 @@ export function PinSection() {
     setError(null);
     try {
       await api.post('/auth/pin', { pin, password });
-      if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: true } } });
+      if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: true, pinLength: pin.length } } });
       toast.success('PIN set', 'Khata will ask for it after a period of inactivity.');
       close();
     } catch (err) {
@@ -79,7 +79,7 @@ export function PinSection() {
     setError(null);
     try {
       await api.delete('/auth/pin', { password });
-      if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: false } } });
+      if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: false, pinLength: null } } });
       toast.success('PIN removed');
       close();
     } catch (err) {

@@ -65,6 +65,13 @@ userRouter.get(
   }),
 );
 
+userRouter.get(
+  '/me/security-activity',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await service.listSecurityActivity(userIdOf(req)));
+  }),
+);
+
 userRouter.delete(
   '/me/sessions/:familyId',
   validate({ params: z.object({ familyId: z.string().min(8).max(64) }) }),

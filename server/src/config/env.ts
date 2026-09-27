@@ -1,8 +1,13 @@
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { booleanWord } from '../lib/boolean.js';
+import { FEATURE_FLAGS, FEATURE_FLAG_NAMES, type FeatureFlags } from '@khata/shared';
 
-loadDotenv();
+// Tests must only ever see the environment they set up themselves. Under Vitest a
+// developer's local `server/.env` (often a deployment config) would otherwise fill
+// in whatever a test deliberately left unset — and point the app at a real database.
+if (!process.env.VITEST) loadDotenv();
 
 /**
  * Environment contract.
@@ -11,6 +16,18 @@ loadDotenv();
  * later in a request — a finance server booting with a missing JWT secret is worse
  * than a server that does not boot.
  */
+/**
+ * A boolean environment variable.
+ *
+ * Not `z.coerce.boolean()`: that is `Boolean(value)`, so any non-empty string —
+ * including `"false"` — becomes `true`, and `COOKIE_CROSS_SITE=false` (exactly as
+ * `.env.example` ships it) would silently switch on cross-site cookies. Accepts
+ * true/false, 1/0, yes/no, on/off (any case); anything else fails the boot check.
+ */
+function envBoolean(fallback: boolean) {
+  return z.preprocess((value) => (value === undefined || value === '' ? fallback : booleanWord(value)), z.boolean());
+}
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -51,14 +68,14 @@ const schema = z.object({
    * pairing. Defaults to false, which keeps today's `SameSite=Strict` behaviour
    * for anyone deploying the frontend and API under one domain.
    */
-  COOKIE_CROSS_SITE: z.coerce.boolean().default(false),
+  COOKIE_CROSS_SITE: envBoolean(false),
 
   /** SMTP — when absent, emails are logged to the console instead of sent. */
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().positive().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: envBoolean(false),
   MAIL_FROM: z.string().default('Khata <no-reply@khata.app>'),
 
   /** File storage: `local` writes under STORAGE_DIR; `s3` uses the S3 adapter. */
@@ -77,9 +94,13 @@ const schema = z.object({
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Run recurring-transaction and reminder processing inside this process. */
-  ENABLE_SCHEDULER: z.coerce.boolean().default(true),
-  /** Allow `POST /api/v1/dev/*` helpers. Never enable in production. */
-  ENABLE_DEV_ROUTES: z.coerce.boolean().default(false),
+  ENABLE_SCHEDULER: envBoolean(true),
+
+  /** Feature flags (`FEATURE_*`, all off by default) — see shared/src/features.ts. */
+  ...(Object.fromEntries(Object.values(FEATURE_FLAGS).map((name) => [name, envBoolean(false)])) as Record<
+    (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS],
+    ReturnType<typeof envBoolean>
+  >),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -149,6 +170,9 @@ export const env = {
     ...(raw.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
   ],
   maxUploadBytes: raw.MAX_UPLOAD_MB * 1024 * 1024,
+  features: Object.fromEntries(
+    FEATURE_FLAG_NAMES.map((flag) => [flag, raw[FEATURE_FLAGS[flag]] === true]),
+  ) as FeatureFlags,
   refreshTokenTtlMs: raw.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
 } as const;
 

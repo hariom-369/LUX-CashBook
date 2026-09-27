@@ -90,7 +90,7 @@ export function PersonFormSheet({
 
     try {
       if (person) {
-        await api.patch(`/people/${person.id}`, payload);
+        await api.patch(`/people/${person.id}`, { ...payload, rev: person.rev });
         toast.success('Person updated');
       } else {
         await api.post('/people', payload);

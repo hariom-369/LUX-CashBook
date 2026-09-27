@@ -170,6 +170,7 @@ export interface TransactionParams {
   sortOrder?: 'asc' | 'desc';
   onlyDeleted?: boolean;
   outstandingOnly?: boolean;
+  hasAttachment?: boolean;
 }
 
 /**

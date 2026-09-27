@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import type { UserDto } from '@khata/shared';
+import type { SecurityEventDto, UserDto } from '@khata/shared';
 import { RefreshToken, User, Workspace } from '../../models/index.js';
 import { forbidden, notFound, unauthorized } from '../../lib/errors.js';
 import { verifyPassword } from '../../lib/password.js';
@@ -120,6 +120,23 @@ export async function deleteAccount(userId: Types.ObjectId, password: string): P
   await user.deleteOne();
 
   logger.warn({ userId: String(userId) }, 'User account deleted');
+}
+
+/**
+ * The user's own security history, newest first — account-level events only
+ * (entityType `User`), never workspace data, and never anyone else's.
+ */
+export async function listSecurityActivity(userId: Types.ObjectId): Promise<SecurityEventDto[]> {
+  const { AuditLog } = await import('../../models/index.js');
+  const rows = await AuditLog.find({ userId, entityType: 'User' }).sort({ createdAt: -1 }).limit(30).lean();
+  return rows.map((row) => ({
+    id: String(row._id),
+    action: row.action,
+    summary: row.summary,
+    createdAt: row.createdAt.toISOString(),
+    ipAddress: row.ipAddress,
+    userAgent: row.userAgent,
+  }));
 }
 
 /** Sessions the user can review and revoke individually (§37). */

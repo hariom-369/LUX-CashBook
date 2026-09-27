@@ -31,6 +31,10 @@ export interface IUser {
 
   failedLoginAttempts: number;
   lockedUntil?: Date | null;
+  /** Wrong app-lock PIN attempts since the last correct one (S-3). */
+  pinFailedAttempts: number;
+  /** While set in the future, PIN unlock is refused — the password still works. */
+  pinLockedUntil?: Date | null;
   lastLoginAt?: Date | null;
 
   onboardingCompleted: boolean;
@@ -68,6 +72,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     pinEnabled: false,
     biometricEnabled: false,
     sessionTimeoutMinutes: 0,
+    pinLength: null,
   },
 };
 
@@ -97,6 +102,7 @@ const preferencesSchema = new Schema<UserPreferences>(
       pinEnabled: { type: Boolean, default: false },
       biometricEnabled: { type: Boolean, default: false },
       sessionTimeoutMinutes: { type: Number, min: 0, max: 1440, default: 0 },
+      pinLength: { type: Number, min: 4, max: 8, default: null },
     },
   },
   { _id: false },
@@ -132,6 +138,8 @@ const userSchema = new Schema<IUser>(
 
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockedUntil: { type: Date, default: null, select: false },
+    pinFailedAttempts: { type: Number, default: 0, select: false },
+    pinLockedUntil: { type: Date, default: null, select: false },
     lastLoginAt: { type: Date, default: null },
 
     onboardingCompleted: { type: Boolean, default: false },

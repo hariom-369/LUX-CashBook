@@ -4,7 +4,7 @@ import { PAYMENT_METHODS, RECURRENCE_FREQUENCIES, TRANSACTION_TYPES } from '@kha
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { dateSchema, idParamSchema, objectIdSchema, positiveAmountSchema, text, validate } from '../../middleware/validate.js';
+import { dateSchema, idParamSchema, objectIdSchema, positiveAmountSchema, text, validate, revisionField } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './recurring.service.js';
 
@@ -48,7 +48,7 @@ const createSchema = z
     }
   });
 
-const updateSchema = createSchema.innerType().partial().extend({ isPaused: z.boolean().optional() });
+const updateSchema = createSchema.innerType().partial().extend({ isPaused: z.boolean().optional(), rev: revisionField });
 
 recurringRouter.get(
   '/',
@@ -72,7 +72,8 @@ recurringRouter.patch(
   writeLimiter,
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const recurring = await service.updateRecurring(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    const recurring = await service.updateRecurring(scopeOf(req), param(req, 'id'), changes, auditContext(req), rev);
     ok(res, service.toRecurringDto(recurring));
   }),
 );

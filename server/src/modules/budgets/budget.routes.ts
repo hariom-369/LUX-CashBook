@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { amountMinorSchema, dateSchema, idParamSchema, objectIdSchema, validate } from '../../middleware/validate.js';
+import { amountMinorSchema, dateSchema, idParamSchema, objectIdSchema, validate, revisionField } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './budget.service.js';
 
@@ -26,7 +26,7 @@ const createSchema = z.object({
   alertThresholds: z.array(z.number().positive().max(500)).max(6).optional(),
 });
 
-const updateSchema = createSchema.partial().extend({ isActive: z.boolean().optional() });
+const updateSchema = createSchema.partial().extend({ isActive: z.boolean().optional(), rev: revisionField });
 
 budgetRouter.get(
   '/',
@@ -50,7 +50,8 @@ budgetRouter.patch(
   writeLimiter,
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const budget = await service.updateBudget(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    const budget = await service.updateBudget(scopeOf(req), param(req, 'id'), changes, auditContext(req), rev);
     ok(res, service.toBudgetDto(budget));
   }),
 );

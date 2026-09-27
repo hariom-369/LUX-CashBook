@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import mongoose from 'mongoose';
 import { ok } from './lib/http.js';
+import { env } from './config/env.js';
+import { optionalAuth, optionalWorkspace } from './middleware/auth.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { userRouter } from './modules/users/user.routes.js';
 import { workspaceRouter } from './modules/workspaces/workspace.routes.js';
@@ -49,6 +51,19 @@ apiRouter.get('/health', (_req: Request, res: Response) => {
     database: states[mongoose.connection.readyState] ?? 'unknown',
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * Which gradually-rolled-out modules are switched on (shared/src/features.ts).
+ * Starts from the server's `FEATURE_*` env defaults; a signed-in caller with a
+ * resolvable workspace (via `X-Workspace-Id` or their saved active one) also
+ * gets that workspace's overrides layered on top — a workspace can see a
+ * module ahead of, or instead of, the global default. Works unauthenticated
+ * too (defaults only), so the client can read it before sign-in.
+ */
+apiRouter.get('/features', optionalAuth, optionalWorkspace, (req: Request, res: Response) => {
+  const overrides = req.workspace?.featureOverrides ?? {};
+  ok(res, { ...env.features, ...overrides });
 });
 
 apiRouter.use('/auth', authRouter);

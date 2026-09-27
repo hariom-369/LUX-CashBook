@@ -10,6 +10,7 @@ import { useNotifications } from '../../lib/queries3';
 import { api, errorMessage } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { RemindersCard } from './RemindersCard';
 
 /** The full notification centre (§41), reached from the bell icon. */
 export function NotificationsPage() {
@@ -53,6 +54,8 @@ export function NotificationsPage() {
           </Button>
         )}
       </header>
+
+      <RemindersCard />
 
       <Card bare>
         {isLoading ? (

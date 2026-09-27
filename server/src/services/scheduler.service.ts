@@ -1,6 +1,6 @@
 import { Workspace } from '../models/index.js';
 import { logger } from '../lib/logger.js';
-import { processDueRecurring } from '../modules/recurring/recurring.service.js';
+import { processDueRecurring, raiseRecurringNotifications } from '../modules/recurring/recurring.service.js';
 import { syncLoanReminders, raiseDueReminderNotifications } from '../modules/reminders/reminder.service.js';
 import { checkBudgetAlerts } from '../modules/budgets/budget.service.js';
 import type { RequestScope } from '../middleware/context.js';
@@ -57,6 +57,9 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
 
     await raiseDueReminderNotifications(now).catch((err) =>
       logger.error({ err }, 'Reminder notification sweep failed'),
+    );
+    await raiseRecurringNotifications(now).catch((err) =>
+      logger.error({ err }, 'Recurring notification sweep failed'),
     );
   } finally {
     running = false;

@@ -2,6 +2,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { render, screen, cleanup, act } from '@testing-library/react';
 import { Money } from './Money';
 import { useAuthStore } from '../../stores/auth.store';
+import { useUiStore } from '../../stores/ui.store';
 
 /**
  * Every rupee figure in the app renders through `<Money>`, which is exactly why
@@ -63,5 +64,41 @@ describe('<Money>', () => {
     act(() => {
       useAuthStore.setState({ workspaces: [], activeWorkspaceId: null });
     });
+  });
+});
+
+describe('<Money> in privacy mode (S-2)', () => {
+  afterEach(() => {
+    act(() => useUiStore.setState({ privacyMode: false }));
+  });
+
+  it('removes the real figure from the text and the accessible name', () => {
+    act(() => useUiStore.setState({ privacyMode: true }));
+    const { container } = render(<Money amountMinor={1_25_000_00} />);
+    const el = screen.getByLabelText('Amount hidden');
+    expect(el.textContent).toBe('₹•,••,•••');
+    expect(container.textContent).not.toMatch(/d/);
+    expect(el).not.toHaveAttribute('title');
+  });
+
+  it('masks compact figures and their tooltip too', () => {
+    act(() => useUiStore.setState({ privacyMode: true }));
+    render(<Money amountMinor={1_84_520_00} compact />);
+    const el = screen.getByLabelText('Amount hidden');
+    expect(el.textContent).not.toMatch(/d/);
+    expect(el).not.toHaveAttribute('title');
+  });
+
+  it('leaves explicitly public figures alone', () => {
+    act(() => useUiStore.setState({ privacyMode: true }));
+    render(<Money amountMinor={5000} alwaysVisible />);
+    expect(screen.getByLabelText('₹50.00')).toHaveTextContent('₹50');
+  });
+
+  it('shows the real figure again the moment privacy mode is turned off', () => {
+    act(() => useUiStore.setState({ privacyMode: true }));
+    render(<Money amountMinor={5000} />);
+    act(() => useUiStore.setState({ privacyMode: false }));
+    expect(screen.getByLabelText('₹50.00')).toHaveTextContent('₹50');
   });
 });

@@ -217,11 +217,24 @@ export async function raiseDueReminderNotifications(now: Date = new Date()): Pro
 
   const { Notification } = await import('../../models/index.js');
   const { formatMoney } = await import('@khata/shared');
+  const { isNotificationAllowed } = await import('../../services/notificationPolicy.js');
+  const prefsCache = new Map();
 
   let raised = 0;
   for (const reminder of due) {
     const daysUntil = Math.round((reminder.dueDate.getTime() - now.getTime()) / 86_400_000);
     if (daysUntil > reminder.notifyDaysBefore) continue;
+
+    // Loan reminders follow the "Money due" switch; reminders the user created
+    // themselves (bills, rent, custom…) only the in-app master switch.
+    const topic = ['loan_due', 'receivable', 'payable'].includes(reminder.type) ? 'moneyDue' : 'always';
+    if (!(await isNotificationAllowed(reminder.userId, topic, prefsCache))) {
+      // Counted as handled for today so switched-off reminders can't crowd the
+      // 500-item sweep and starve everyone else's.
+      reminder.lastNotifiedAt = now;
+      await reminder.save();
+      continue;
+    }
 
     const overdue = daysUntil < 0;
     const dedupeKey = `reminder:${reminder._id}:${now.toISOString().slice(0, 10)}`;
@@ -240,7 +253,8 @@ export async function raiseDueReminderNotifications(now: Date = new Date()): Pro
               ? 'This is overdue.'
               : 'Coming up soon.',
           icon: 'Bell',
-          link: '/reports',
+          // Loans are managed from People; everything else lives with the reminders.
+          link: topic === 'moneyDue' ? '/people' : '/notifications',
           amountMinor: reminder.amountMinor,
           dedupeKey,
         },

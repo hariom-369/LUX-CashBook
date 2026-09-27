@@ -4,7 +4,7 @@ import { REMINDER_TYPES } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { amountMinorSchema, dateSchema, idParamSchema, objectIdSchema, text, validate } from '../../middleware/validate.js';
+import { amountMinorSchema, dateSchema, idParamSchema, objectIdSchema, text, validate, queryBoolean } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './reminder.service.js';
 
@@ -29,7 +29,7 @@ const createSchema = z.object({
 
 reminderRouter.get(
   '/',
-  validate({ query: z.object({ includeDone: z.coerce.boolean().default(false) }) }),
+  validate({ query: z.object({ includeDone: queryBoolean(false) }) }),
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await service.listReminders(scopeOf(req), req.query as { includeDone?: boolean }));
   }),

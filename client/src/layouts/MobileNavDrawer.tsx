@@ -16,6 +16,9 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
  * here, so a small screen still reaches every feature (§3) rather than getting a
  * cut-down version of the app.
  */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function MobileNavDrawer() {
   const open = useUiStore((s) => s.mobileNavOpen);
   const setOpen = useUiStore((s) => s.setMobileNavOpen);
@@ -24,20 +27,56 @@ export function MobileNavDrawer() {
   );
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Escape closes the drawer — but a layer above it gets that Escape first: the
-  // command palette (another dialog) or the workspace switcher's open dropdown.
-  // Sheets already stop Escape from propagating in their capture-phase handler.
+  // Keyboard behaviour, matching every Sheet: focus moves into the drawer, Tab
+  // stays inside it while it's open, and focus returns to whatever opened it (the
+  // menu button) when it closes. Escape closes it — but a layer above gets that
+  // Escape first: the command palette (another dialog) or the workspace
+  // switcher's open dropdown. Sheets already stop Escape in their capture phase.
   useEffect(() => {
     if (!open) return;
+
+    const restoreFocusTo = document.activeElement as HTMLElement | null;
+    const focusTimer = window.setTimeout(() => {
+      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    }, 0);
+
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return;
+      const panel = panelRef.current;
+      if (!panel) return;
       const dialog = (event.target as Element | null)?.closest?.('[role="dialog"]');
-      if (dialog && dialog !== panelRef.current) return;
-      if (panelRef.current?.querySelector('[aria-expanded="true"]')) return;
+      if (dialog && dialog !== panel) return;
+
+      if (event.key === 'Tab') {
+        const focusable = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+          (el) => el.offsetParent !== null,
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first || !last) return;
+        if (!panel.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+        } else if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+
+      if (event.key !== 'Escape') return;
+      if (panel.querySelector('[aria-expanded="true"]')) return;
       setOpen(false);
     }
+
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', onKeyDown);
+      restoreFocusTo?.focus?.();
+    };
   }, [open, setOpen]);
 
   if (!open) return null;

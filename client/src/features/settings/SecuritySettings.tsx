@@ -10,6 +10,9 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { PinSection } from './PinSection';
+import { SecurityActivitySection } from './SecurityActivitySection';
+import { DeleteAccountSection } from './DeleteAccountSection';
+import { isMobileUserAgent, shortUserAgent } from './userAgent';
 
 const passwordSchema = z
   .object({
@@ -163,7 +166,7 @@ export function SecuritySettings() {
         <ul className="mt-4 flex flex-col divide-y divide-line-faint rounded-lg border border-line">
           {(sessions ?? []).map((session) => (
             <li key={session.id} className="flex items-center gap-3 px-4 py-3">
-              {/Mobile|Android|iPhone/i.test(session.userAgent) ? (
+              {isMobileUserAgent(session.userAgent) ? (
                 <Smartphone aria-hidden className="size-4 shrink-0 text-ink-muted" />
               ) : (
                 <Laptop aria-hidden className="size-4 shrink-0 text-ink-muted" />
@@ -200,6 +203,10 @@ export function SecuritySettings() {
         </ul>
       </section>
 
+      <SecurityActivitySection />
+
+      <DeleteAccountSection />
+
       <ConfirmDialog
         open={confirmSignOutAll}
         onCancel={() => setConfirmSignOutAll(false)}
@@ -212,12 +219,4 @@ export function SecuritySettings() {
       />
     </div>
   );
-}
-
-function shortUserAgent(ua: string): string {
-  if (/iPhone/i.test(ua)) return 'iPhone';
-  if (/Android/i.test(ua)) return 'Android device';
-  if (/Macintosh/i.test(ua)) return 'Mac';
-  if (/Windows/i.test(ua)) return 'Windows PC';
-  return 'Unknown device';
 }

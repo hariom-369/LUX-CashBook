@@ -123,7 +123,9 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   if (!skipAuth && accessToken) {
     finalHeaders.set('Authorization', `Bearer ${accessToken}`);
   }
-  if (activeWorkspaceId) {
+  // A caller-supplied workspace wins: the offline outbox replays each entry into
+  // the workspace it was recorded in, not whichever one happens to be active now.
+  if (activeWorkspaceId && !finalHeaders.has('X-Workspace-Id')) {
     finalHeaders.set('X-Workspace-Id', activeWorkspaceId);
   }
   if (idempotencyKey) {

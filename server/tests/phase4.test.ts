@@ -158,7 +158,7 @@ describe('petty cash', () => {
 
     await as(user).post('/api/v1/transactions').set(bizHeaders).send({ type: 'expense', amountMinor: rupees(1_850), date: new Date().toISOString(), accountId: drawer.body.data.id, categoryId: expenseCat }).expect(201);
 
-    let list = await as(user).get('/api/v1/petty-cash').set(bizHeaders).expect(200);
+    const list = await as(user).get('/api/v1/petty-cash').set(bizHeaders).expect(200);
     expect(list.body.data[0].spentSinceReplenishMinor).toBe(rupees(1_850));
     expect(list.body.data[0].currentMinor).toBe(rupees(3_150));
 

@@ -8,7 +8,7 @@ import {
   setSessionLostHandler,
   setSessionRestoredHandler,
 } from '../lib/api';
-import { cacheGet, cacheSet } from '../lib/offlineDb';
+import { cacheGet, cacheSet, wipeCachedReads } from '../lib/offlineDb';
 
 const SESSION_CACHE_KEY = 'last-known-session';
 
@@ -46,6 +46,12 @@ interface AuthState {
   isOfflineSession: boolean;
 
   applySession: (session: AuthSessionDto) => void;
+  /**
+   * A fresh sign-in (login or registration): forget every cached read on this
+   * device first, then apply the session — so nothing a previous user left
+   * behind can be shown to this one.
+   */
+  startSession: (session: AuthSessionDto) => Promise<void>;
   /** Restore a session on page load using the httpOnly refresh cookie. */
   bootstrap: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -74,6 +80,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
     // The store subscription below persists this to the offline cache — see its
     // comment for why that happens in one place rather than at every call site.
+  },
+
+  async startSession(session) {
+    await wipeCachedReads().catch(() => undefined);
+    get().applySession(session);
   },
 
   async bootstrap() {
@@ -140,7 +151,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setAccessToken(null);
     setActiveWorkspaceId(null);
     set({ status: 'unauthenticated', user: null, workspaces: [], activeWorkspaceId: null, isOfflineSession: false });
-    void cacheSet(SESSION_CACHE_KEY, null);
+    // Sign-out or an ended session: drop the session snapshot and every cached
+    // API response, so this browser keeps none of the user's figures.
+    void wipeCachedReads().catch(() => undefined);
   },
 }));
 

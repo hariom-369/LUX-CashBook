@@ -80,6 +80,8 @@ export interface ITransaction {
 
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
+  /** Edit revision, bumped only by user edits — see lib/revision.ts. */
+  rev: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -137,6 +139,8 @@ const transactionSchema = new Schema<ITransaction>(
     idempotencyKey: { type: String, default: null },
 
     ...softDeleteFields,
+    /** Edit revision, bumped only by user edits (lib/revision.ts). */
+    rev: { type: Number, default: 0, min: 0 },
   },
   baseOptions,
 );

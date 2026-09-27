@@ -17,12 +17,14 @@ import { Budget, Category, Transaction, type IBudget } from '../../models/index.
 import { conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
+import { claimRevision } from '../../lib/revision.js';
 
 export type BudgetDoc = HydratedDocument<IBudget>;
 
 export function toBudgetDto(budget: IBudget, categoryName?: string): BudgetDto {
   return {
     id: String(budget._id),
+    rev: budget.rev,
     workspaceId: String(budget.workspaceId),
     categoryId: budget.categoryId ? String(budget.categoryId) : null,
     categoryName,
@@ -103,6 +105,8 @@ export async function updateBudget(
   budgetId: string,
   input: Partial<CreateBudgetInput> & { isActive?: boolean },
   audit: AuditContext,
+  /** The `rev` the editor read; see lib/revision.ts. */
+  expectedRev?: number,
 ): Promise<BudgetDoc> {
   if (!Types.ObjectId.isValid(budgetId)) throw notFound('Budget');
   const budget = await Budget.findOne({ _id: budgetId, workspaceId: scope.workspaceId });
@@ -113,6 +117,7 @@ export async function updateBudget(
   }
   if (input.startDate) budget.startDate = input.startDate;
 
+  await claimRevision(Budget, budget, expectedRev);
   await budget.save();
 
   await recordAudit(audit, {
@@ -239,6 +244,9 @@ function previousPeriodOf(budget: Pick<IBudget, 'period'>, current: { from: Date
  * the alert is never more than one request stale.
  */
 export async function checkBudgetAlerts(scope: RequestScope, now: Date = new Date()): Promise<void> {
+  const { isNotificationAllowed } = await import('../../services/notificationPolicy.js');
+  if (!(await isNotificationAllowed(scope.userId, 'budgetAlerts'))) return;
+
   const progress = await listBudgetsWithProgress(scope, now);
   const { Notification } = await import('../../models/index.js');
   const { formatMoney } = await import('@khata/shared');

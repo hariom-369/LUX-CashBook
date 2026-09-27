@@ -22,6 +22,7 @@ describe('cn', () => {
   });
 
   it('drops falsy values', () => {
+    // eslint-disable-next-line no-constant-binary-expression -- `cond && 'class'` is the idiom under test
     expect(cn('a', false && 'b', undefined, null, 'c')).toBe('a c');
   });
 });

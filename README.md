@@ -193,8 +193,7 @@ Run from the repository root unless noted:
 | `npm test` | Run the full test suite (server, then client) |
 | `npm run test:server` / `npm run test:client` | Run one workspace's tests only |
 | `npm run typecheck` | Type-check all three workspaces |
-| `npm run lint` | Run ESLint across the repository |
-| `npm run seed` | Seed demo data into the server's database |
+| `npm run lint` | Run ESLint across the repository (config: `eslint.config.mjs`) |
 
 ## Testing
 
@@ -290,6 +289,12 @@ public issue.
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment: every environment variable, per platform, and why |
 | [`docs/PHASE2_NOTES.md`](docs/PHASE2_NOTES.md) – [`PHASE5_NOTES.md`](docs/PHASE5_NOTES.md) | Development history and what was verified at each stage |
 | [`docs/RESPONSIVE_NOTES.md`](docs/RESPONSIVE_NOTES.md) | The responsive / device-compatibility pass: what changed, layout conventions for new screens, what was verified, and known follow-ups |
+| [`docs/PRODUCT_AUDIT.md`](docs/PRODUCT_AUDIT.md) | Product audit: feature inventory, user journeys, and findings (security, product integrity, data model, UX, accessibility) with evidence |
+| [`docs/FEATURE_ROADMAP.md`](docs/FEATURE_ROADMAP.md) | Roadmap: decisions, phase order and per-phase impact, every feature rated by priority, complexity and value |
+| [`docs/PHASE1_NOTES.md`](docs/PHASE1_NOTES.md) | What Phase 1 (truth, safety, foundations) shipped, the bugs it caught, and what was verified |
+| [`docs/FINANCIAL_MODEL.md`](docs/FINANCIAL_MODEL.md) | The financial invariants and how a new feature must move money |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Authentication, authorization, data protection, auditability and account lifecycle |
+| [`docs/OFFLINE_SYNC.md`](docs/OFFLINE_SYNC.md) | What works offline today, what changed in Phase 1, and what Phase 15 adds |
 
 ## License
 

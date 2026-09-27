@@ -4,7 +4,7 @@ import { ACCOUNT_TYPES } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { amountMinorSchema, dateSchema, idParamSchema, text, validate } from '../../middleware/validate.js';
+import { amountMinorSchema, dateSchema, idParamSchema, text, validate, queryBoolean, revisionField } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './account.service.js';
 import { recomputeAccountBalance } from '../../services/balance.service.js';
@@ -44,11 +44,11 @@ const createSchema = z.object({
 const updateSchema = createSchema
   .partial()
   .omit({ type: true, isPettyCash: true })
-  .extend({ isActive: z.boolean().optional(), sortOrder: z.number().int().optional() });
+  .extend({ isActive: z.boolean().optional(), sortOrder: z.number().int().optional(), rev: revisionField });
 
 accountRouter.get(
   '/',
-  validate({ query: z.object({ includeInactive: z.coerce.boolean().default(false) }) }),
+  validate({ query: z.object({ includeInactive: queryBoolean(false) }) }),
   asyncHandler(async (req: Request, res: Response) => {
     const accounts = await service.listAccounts(scopeOf(req), {
       includeInactive: (req.query as { includeInactive?: boolean }).includeInactive,
@@ -84,7 +84,8 @@ accountRouter.patch(
   writeLimiter,
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const account = await service.updateAccount(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    const account = await service.updateAccount(scopeOf(req), param(req, 'id'), changes, auditContext(req), rev);
     ok(res, service.toAccountDto(account));
   }),
 );

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { asyncHandler, created, ok } from '../../lib/http.js';
+import { asyncHandler, created } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { userIdOf, scopeOf } from '../../middleware/context.js';
 import { validate } from '../../middleware/validate.js';

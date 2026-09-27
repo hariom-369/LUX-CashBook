@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Delete, Lock, LogOut } from 'lucide-react';
+import { Check, Delete, Lock, LogOut } from 'lucide-react';
 import { LogoMark } from './brand/Logo';
 import { useUiStore } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
 import { api, ApiRequestError } from '../lib/api';
+import { useT } from '../i18n';
 
 /**
  * The app-lock PIN screen (§37).
@@ -18,11 +19,18 @@ export function PinLockScreen() {
   const setLocked = useUiStore((s) => s.setLocked);
   const signOut = useAuthStore((s) => s.signOut);
   const userName = useAuthStore((s) => s.user?.name?.split(' ')[0] ?? '');
+  // PINs are 4–8 digits. Knowing the length is what lets entry complete on its
+  // own — submitting at 4 digits, as this screen used to, made any longer PIN
+  // impossible to enter. A PIN saved before the length was recorded has none;
+  // for that one the user confirms with the ✓ key instead.
+  const pinLength = useAuthStore((s) => s.user?.preferences.security.pinLength ?? null);
 
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState(false);
+  const t = useT();
+  const dotCount = pinLength ?? Math.min(8, Math.max(6, pin.length));
 
   useEffect(() => {
     if (!locked) {
@@ -32,7 +40,7 @@ export function PinLockScreen() {
   }, [locked]);
 
   useEffect(() => {
-    if (pin.length >= 4) void verify();
+    if (pin.length === (pinLength ?? 8)) void verify();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin]);
 
@@ -79,7 +87,7 @@ export function PinLockScreen() {
         aria-live="assertive"
         className={`mt-6 flex gap-3 ${shake ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
       >
-        {Array.from({ length: 6 }).map((_, index) => (
+        {Array.from({ length: dotCount }).map((_, index) => (
           <span
             key={index}
             aria-hidden
@@ -96,7 +104,19 @@ export function PinLockScreen() {
         {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
           <NumberKey key={digit} label={digit} onClick={() => press(digit)} disabled={busy} />
         ))}
-        <span />
+        {pinLength ? (
+          <span />
+        ) : (
+          <button
+            type="button"
+            onClick={() => void verify()}
+            disabled={busy || pin.length < 4}
+            aria-label={t('pin.unlock')}
+            className="flex size-16 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-sunken disabled:opacity-30"
+          >
+            <Check aria-hidden className="size-5" />
+          </button>
+        )}
         <NumberKey label="0" onClick={() => press('0')} disabled={busy} />
         <button
           type="button"

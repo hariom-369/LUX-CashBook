@@ -72,3 +72,80 @@ describe('cross-site cookie configuration', () => {
     errorSpy.mockRestore();
   });
 });
+
+/**
+ * Regression: these were parsed with `z.coerce.boolean()`, which turns any
+ * non-empty string into `true` — so `COOKIE_CROSS_SITE=false`, exactly as
+ * `.env.example` ships it, silently enabled `SameSite=None` cookies.
+ */
+describe('boolean environment variables', () => {
+  it('reads COOKIE_CROSS_SITE=false as false', async () => {
+    process.env.COOKIE_CROSS_SITE = 'false';
+    const { env } = await freshEnv();
+    expect(env.cookieSameSite).toBe('strict');
+  });
+
+  it('reads ENABLE_SCHEDULER=false and SMTP_SECURE=false as false', async () => {
+    process.env.ENABLE_SCHEDULER = 'false';
+    process.env.SMTP_SECURE = 'false';
+    const { env } = await freshEnv();
+    expect(env.ENABLE_SCHEDULER).toBe(false);
+    expect(env.SMTP_SECURE).toBe(false);
+  });
+
+  it('accepts true/false, 1/0, yes/no and on/off in any case', async () => {
+    for (const [value, expected] of [
+      ['TRUE', true], ['1', true], ['yes', true], ['On', true],
+      ['False', false], ['0', false], ['no', false], ['OFF', false],
+    ] as const) {
+      process.env.ENABLE_SCHEDULER = value;
+      const { env } = await freshEnv();
+      expect(env.ENABLE_SCHEDULER, value).toBe(expected);
+    }
+  });
+
+  it('keeps the documented defaults when a variable is unset', async () => {
+    delete process.env.COOKIE_CROSS_SITE;
+    delete process.env.ENABLE_SCHEDULER;
+    delete process.env.SMTP_SECURE;
+    const { env } = await freshEnv();
+    expect(env.cookieSameSite).toBe('strict');
+    expect(env.ENABLE_SCHEDULER).toBe(true);
+    expect(env.SMTP_SECURE).toBe(false);
+  });
+
+  it('refuses to boot on a value that is not a boolean word', async () => {
+    process.env.ENABLE_SCHEDULER = 'maybe';
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((() => {
+      throw new Error('process.exit called');
+    }) as unknown) as (code?: string | number | null) => never);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(freshEnv()).rejects.toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    errorSpy.mockRestore();
+  });
+});
+
+describe('feature flags', () => {
+  it('turns a flag on only for an explicit true value', async () => {
+    process.env.FEATURE_AI_ASSISTANT = 'true';
+    process.env.FEATURE_INVOICING = 'false';
+    const { env } = await freshEnv();
+    expect(env.features.aiAssistant).toBe(true);
+    expect(env.features.invoicing).toBe(false);
+    expect(env.features.inventory).toBe(false);
+  });
+
+  it('refuses to boot on a flag value that is not a boolean word', async () => {
+    process.env.FEATURE_INVENTORY = 'enabled';
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((() => {
+      throw new Error('process.exit called');
+    }) as unknown) as (code?: string | number | null) => never);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(freshEnv()).rejects.toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    errorSpy.mockRestore();
+  });
+});

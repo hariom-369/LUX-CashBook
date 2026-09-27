@@ -9,8 +9,7 @@ import {
   objectIdSchema,
   positiveAmountSchema,
   text,
-  validate,
-} from '../../middleware/validate.js';
+  validate, revisionField } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './goal.service.js';
 
@@ -35,7 +34,7 @@ const createSchema = z.object({
   notes: text(1000),
 });
 
-const updateSchema = createSchema.partial().extend({ isArchived: z.boolean().optional() });
+const updateSchema = createSchema.partial().extend({ isArchived: z.boolean().optional(), rev: revisionField });
 
 goalRouter.get(
   '/',
@@ -59,7 +58,8 @@ goalRouter.patch(
   writeLimiter,
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const goal = await service.updateGoal(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    const goal = await service.updateGoal(scopeOf(req), param(req, 'id'), changes, auditContext(req), rev);
     ok(res, service.toGoalDto(goal));
   }),
 );

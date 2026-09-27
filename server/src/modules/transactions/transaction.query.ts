@@ -284,6 +284,7 @@ export function toTransactionDto(
 
   return {
     id: String(row._id),
+    rev: row.rev,
     workspaceId: String(row.workspaceId),
     type: row.type,
     amountMinor: row.amountMinor,

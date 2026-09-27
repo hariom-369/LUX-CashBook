@@ -80,6 +80,12 @@ export interface UserPreferences {
     biometricEnabled: boolean;
     /** Minutes of inactivity before the app re-locks. 0 = never. */
     sessionTimeoutMinutes: number;
+    /**
+     * How many digits the app-lock PIN has, so the lock screen knows when entry is
+     * complete. Set by the server when a PIN is saved; null for a PIN saved before
+     * this was recorded (the lock screen then asks the user to confirm entry).
+     */
+    pinLength?: number | null;
   };
 }
 
@@ -125,6 +131,8 @@ export interface WorkspaceDto {
 
 export interface AccountDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   name: string;
   type: AccountType;
@@ -171,6 +179,8 @@ export interface CategoryDto {
 
 export interface PersonDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   name: string;
   phone?: string;
@@ -241,6 +251,8 @@ export interface AttachmentDto {
 
 export interface TransactionDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   type: TransactionType;
   /** Always positive. Direction lives in `postings` and `type`. */
@@ -402,6 +414,8 @@ export interface InsightDto {
 
 export interface BudgetDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   categoryId: string | null;
   categoryName?: string;
@@ -427,6 +441,8 @@ export interface BudgetProgressDto extends BudgetDto {
 
 export interface SavingsGoalDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   name: string;
   targetMinor: number;
@@ -452,6 +468,8 @@ export interface GoalProgressDto extends SavingsGoalDto {
 
 export interface RecurringTransactionDto {
   id: string;
+  /** Edit revision — send back on update; a mismatch means someone else changed it first. */
+  rev: number;
   workspaceId: string;
   name: string;
   type: TransactionType;
@@ -604,4 +622,17 @@ export interface AuditLogDto {
   after?: Record<string, unknown>;
   ipAddress?: string;
   createdAt: string;
+}
+
+/**
+ * One entry in a user's own security history (Settings → Security): sign-ins,
+ * password changes, PIN changes, signing out everywhere. Never carries secrets.
+ */
+export interface SecurityEventDto {
+  id: string;
+  action: AuditAction;
+  summary: string;
+  createdAt: string;
+  ipAddress?: string;
+  userAgent?: string;
 }

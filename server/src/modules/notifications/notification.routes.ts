@@ -5,7 +5,7 @@ import { Notification } from '../../models/index.js';
 import { asyncHandler, ok } from '../../lib/http.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { param, userIdOf } from '../../middleware/context.js';
-import { idParamSchema, validate } from '../../middleware/validate.js';
+import { idParamSchema, validate, queryBoolean } from '../../middleware/validate.js';
 import { notFound } from '../../lib/errors.js';
 
 /**
@@ -45,7 +45,7 @@ notificationRouter.get(
   '/',
   validate({
     query: z.object({
-      unreadOnly: z.coerce.boolean().default(false),
+      unreadOnly: queryBoolean(false),
       limit: z.coerce.number().int().min(1).max(100).default(30),
     }),
   }),

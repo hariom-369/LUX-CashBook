@@ -5,7 +5,6 @@ import type { RequestScope } from '../../middleware/context.js';
 import { getAccountLedger } from '../accounts/account.service.js';
 import { getPersonLedger } from '../people/person.service.js';
 import { getCashBook, type CashBookView } from '../cashbook/cashbook.service.js';
-import { notFound } from '../../lib/errors.js';
 
 /**
  * PDF statements (§35).

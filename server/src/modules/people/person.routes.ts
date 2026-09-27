@@ -12,8 +12,7 @@ import {
   positiveAmountSchema,
   tagsSchema,
   text,
-  validate,
-} from '../../middleware/validate.js';
+  validate, queryBoolean, revisionField } from '../../middleware/validate.js';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './person.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
@@ -41,7 +40,7 @@ const createSchema = z.object({
   openingDate: dateSchema.optional(),
 });
 
-const updateSchema = createSchema.partial().extend({ isArchived: z.boolean().optional() });
+const updateSchema = createSchema.partial().extend({ isArchived: z.boolean().optional(), rev: revisionField });
 
 /** Shared shape for lend / borrow / repay. */
 const moneyMoveSchema = z.object({
@@ -63,7 +62,7 @@ personRouter.get(
       search: z.string().trim().max(120).optional(),
       relationship: z.enum(PERSON_RELATIONSHIPS).optional(),
       status: z.enum(['receivable', 'payable', 'settled', 'all']).default('all'),
-      includeArchived: z.coerce.boolean().default(false),
+      includeArchived: queryBoolean(false),
       sortBy: z.enum(['name', 'balance', 'recent']).default('name'),
     }),
   }),
@@ -109,7 +108,8 @@ personRouter.patch(
   writeLimiter,
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const person = await service.updatePerson(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    const { rev, ...changes } = req.body;
+    const person = await service.updatePerson(scopeOf(req), param(req, 'id'), changes, auditContext(req), rev);
     ok(res, service.toPersonDto(person));
   }),
 );

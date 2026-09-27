@@ -1,6 +1,7 @@
 import { formatMoney, formatMoneyCompact } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { useCurrency } from '../../hooks/useCurrency';
+import { useUiStore } from '../../stores/ui.store';
 
 export type MoneyTone = 'auto' | 'positive' | 'negative' | 'neutral' | 'inherit';
 export type MoneySize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'display';
@@ -39,8 +40,10 @@ export interface MoneyProps {
  *
  *  • **Privacy mode (§38)** — the `sensitive` class is blurred by a single CSS rule
  *    on `<html>`, so masking cannot miss a screen that forgot to thread a prop.
- *  • **Screen readers (§59)** — the visible text may be masked or abbreviated, so
- *    an `aria-label` always carries the exact, fully-written amount.
+ *  • **Screen readers (§59)** — the visible text may be abbreviated, so an
+ *    `aria-label` carries the exact, fully-written amount — except in privacy
+ *    mode, when it says "Amount hidden" and the digits are masked in the DOM too,
+ *    so the value can't be read, copied or announced while it's meant to be hidden.
  */
 export function Money({
   amountMinor,
@@ -56,13 +59,19 @@ export function Money({
 }: MoneyProps) {
   const fallbackCurrency = useCurrency();
   const code = currency ?? fallbackCurrency;
+  // Privacy mode must hide the figure itself, not just blur it: while it's on, the
+  // real value isn't in the page text, the accessible name or the tooltip.
+  const masked = useUiStore((s) => s.privacyMode) && !alwaysVisible;
 
-  const text = compact
+  const formatted = compact
     ? formatMoneyCompact(amountMinor, code)
     : formatMoney(amountMinor, { currency: code, signed, compactDecimals });
+  // Same shape (sign, symbol, grouping) so the blurred figure looks unchanged,
+  // but every digit replaced — even unblurred it reads as masked, never as a value.
+  const text = masked ? formatted.replace(/\d/g, '•') : formatted;
 
   // Always exact and always unabbreviated, whatever the visible text says.
-  const exact = formatMoney(amountMinor, { currency: code, signed });
+  const exact = masked ? 'Amount hidden' : formatMoney(amountMinor, { currency: code, signed });
 
   const resolvedTone =
     tone === 'auto' ? (amountMinor > 0 ? 'positive' : amountMinor < 0 ? 'negative' : 'neutral') : tone;
@@ -82,7 +91,7 @@ export function Money({
         className,
       )}
       aria-label={exact}
-      title={compact ? exact : undefined}
+      title={compact && !masked ? exact : undefined}
     >
       {text}
     </span>

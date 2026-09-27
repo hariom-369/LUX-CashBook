@@ -1,5 +1,6 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { ZodError, type ZodTypeAny, z } from 'zod';
+import { booleanWord } from '../lib/boolean.js';
 
 /**
  * Validate and *replace* the request parts with their parsed values.
@@ -64,6 +65,29 @@ export const positiveAmountSchema = amountMinorSchema.refine(
   (n) => n > 0,
   'Enter an amount greater than zero.',
 );
+
+/**
+ * A boolean query-string flag, e.g. `?includeDone=false`.
+ *
+ * Not `z.coerce.boolean()`, which is `Boolean(value)` — the client sends
+ * `includeDone=false` literally, and that parsed as `true` (see lib/boolean.ts).
+ * With a fallback the flag is always a boolean; without one it may be absent.
+ */
+export function queryBoolean(): z.ZodType<boolean | undefined>;
+export function queryBoolean(fallback: boolean): z.ZodType<boolean>;
+export function queryBoolean(fallback?: boolean): z.ZodTypeAny {
+  return z.preprocess(
+    (value) => (value === undefined || value === '' ? fallback : booleanWord(value)),
+    fallback === undefined ? z.boolean().optional() : z.boolean(),
+  );
+}
+
+/**
+ * The revision an editor read, sent back with an update so a concurrent change
+ * is detected rather than overwritten (lib/revision.ts). Optional: older clients
+ * omit it and keep last-write-wins.
+ */
+export const revisionField = z.number().int().min(0).optional();
 
 /** ISO date string or timestamp → Date. */
 export const dateSchema = z

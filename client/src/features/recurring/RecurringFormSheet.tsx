@@ -96,7 +96,7 @@ export function RecurringFormSheet({
         autoPost,
       };
       if (recurring) {
-        await api.patch(`/recurring/${recurring.id}`, payload);
+        await api.patch(`/recurring/${recurring.id}`, { ...payload, rev: recurring.rev });
         toast.success('Recurring entry updated');
       } else {
         await api.post('/recurring', payload);

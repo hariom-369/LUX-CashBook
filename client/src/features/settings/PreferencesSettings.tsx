@@ -47,6 +47,7 @@ export function PreferencesSettings() {
         busy={saving === 'theme'}
       >
         <Select
+          aria-label="Theme"
           value={theme}
           className="w-auto min-w-[160px]"
           onChange={(event) => {
@@ -65,6 +66,7 @@ export function PreferencesSettings() {
 
       <Row label="Currency" hint="The default for new workspaces. Existing workspaces keep their own currency." busy={saving === 'currency'}>
         <Select
+          aria-label="Currency"
           value={prefs.currency}
           className="w-auto min-w-[200px]"
           onChange={(event) => void patch('currency', { currency: event.target.value })}
@@ -79,6 +81,7 @@ export function PreferencesSettings() {
 
       <Row label="Number format" busy={saving === 'numberFormat'}>
         <Select
+          aria-label="Number format"
           value={prefs.numberFormat}
           className="w-auto min-w-[200px]"
           onChange={(event) => void patch('numberFormat', { numberFormat: event.target.value })}
@@ -90,6 +93,7 @@ export function PreferencesSettings() {
 
       <Row label="Date format" busy={saving === 'dateFormat'}>
         <Select
+          aria-label="Date format"
           value={prefs.dateFormat}
           className="w-auto min-w-[180px]"
           onChange={(event) => void patch('dateFormat', { dateFormat: event.target.value })}
@@ -104,6 +108,7 @@ export function PreferencesSettings() {
 
       <Row label="First day of week" busy={saving === 'firstDayOfWeek'}>
         <Select
+          aria-label="First day of week"
           value={String(prefs.firstDayOfWeek)}
           className="w-auto min-w-[140px]"
           onChange={(event) => void patch('firstDayOfWeek', { firstDayOfWeek: Number(event.target.value) })}
@@ -121,6 +126,7 @@ export function PreferencesSettings() {
           busy={saving === 'accountingView'}
         >
           <Toggle
+            label="Accounting view"
             checked={prefs.accountingView}
             onChange={(value) => void patch('accountingView', { accountingView: value })}
           />
@@ -133,6 +139,7 @@ export function PreferencesSettings() {
           className="mt-4"
         >
           <Toggle
+            label="Start with amounts hidden"
             checked={prefs.privacyModeDefault}
             onChange={(value) => void patch('privacyModeDefault', { privacyModeDefault: value })}
           />
@@ -167,12 +174,13 @@ function Row({
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-gold' : 'bg-line-strong'}`}
     >
