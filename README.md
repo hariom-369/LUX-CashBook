@@ -256,8 +256,12 @@ supported target architecture is:
 Serve the frontend and the API from one parent domain (`app.example.com` +
 `api.example.com`) and leave `COOKIE_CROSS_SITE=false` — that is the supported
 setup (see "Recommended: one parent domain" in the guide). A Vercel-domain +
-Render-domain split needs `COOKIE_CROSS_SITE=true` and depends on third-party
-cookies, which some browsers block; read "Cross-domain authentication" first.
+Render-domain split needs `COOKIE_CROSS_SITE=true`, which makes the refresh cookie
+`SameSite=None; Secure; Partitioned` so Chrome, Edge and Firefox keep the session
+even when the user blocks third-party cookies (Safari and iOS browsers can still
+refuse it, and the Render service must be redeployed for the `Partitioned`
+attribute to take effect). If users are signed out on every reload, read
+"Signed out on every reload" and "Cross-domain authentication" in the guide.
 The guide also lists the manual steps that cannot be done from this repository
 (real S3, an optional SMTP provider, Atlas user/network/backups).
 
@@ -288,7 +292,9 @@ Full detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - Passwords hashed with `scrypt` (Node's built-in implementation, no native
   dependencies).
 - Short-lived JWT access tokens held only in memory on the client (never
-  `localStorage`), paired with an opaque, rotating, httpOnly refresh token.
+  `localStorage`), paired with an opaque, rotating, httpOnly refresh token
+  (`SameSite=Strict`, or `SameSite=None; Secure; Partitioned` for a cross-site
+  deployment).
   Refresh-token reuse revokes the entire session family.
 - Every workspace-scoped request re-verifies ownership against the database.
 - Rate limiting, keyed by the verified user where authenticated (people behind
