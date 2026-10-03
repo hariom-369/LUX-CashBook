@@ -41,7 +41,7 @@ so read those two sections even if you skim the rest.
 | `APP_URL` | **Yes** | The exact production URL of your Vercel frontend, e.g. `https://lux-cashbook.vercel.app`. This is the primary allowed CORS origin and the base URL used inside password-reset/verification emails. Get this wrong and the browser will block every API call from the frontend with a CORS error. |
 | `CORS_ORIGINS` | No | Comma-separated extra allowed origins — useful if you also serve a custom domain (`https://app.luxcashbook.com`) alongside the default Vercel URL. |
 | `API_URL` | No | Your Render service's own public URL, e.g. `https://lux-cashbook-api.onrender.com`. Used to build absolute links in emails/attachments. |
-| `COOKIE_CROSS_SITE` | **Recommended: leave `false`** (same parent domain, see "Recommended: one parent domain" below). Set `true` only for a Vercel-domain + Render-domain split. | `true` makes the cookie `SameSite=None; Secure`, which depends on third-party cookies that Safari and some Chrome settings block. The server prints a warning at boot when it is `true`. |
+| `COOKIE_CROSS_SITE` | **Recommended: leave `false`** (same parent domain, see "Recommended: one parent domain" below). Set `true` only for a Vercel-domain + Render-domain split. | `true` makes the cookie `SameSite=None; Secure; Partitioned`. `Partitioned` (CHIPS) keeps it in Chrome/Edge/Firefox even when the user blocks third-party cookies; Safari and iOS browsers can still refuse it. The server prints a warning at boot when it is `true`. |
 | `COOKIE_SECURE` | No | Leave as `auto` (the default) — it resolves to `true` automatically in production, and `COOKIE_CROSS_SITE=true` forces it to `true` regardless. |
 | `COOKIE_DOMAIN` | No | **Leave unset**, even on one parent domain: the refresh cookie is host-only on the API host and `SameSite=Strict` already sends it to same-site requests (verified, below). |
 | `STORAGE_DRIVER` | **Yes — set to `s3`** | Switches attachment storage from local disk (which Render wipes on every deploy) to S3. **A production boot refuses `local`** unless `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` (only for a host with a persistent disk mounted at `STORAGE_DIR`). |
@@ -217,6 +217,35 @@ configuration error and exit — confirmed working as of this phase. It will
 not silently start with an in-memory database or generated secrets the way
 development mode does.
 
+### Signed out on every reload (Vercel + Render on different sites)
+
+**Symptom:** the login page accepts the password, the app opens, and a reload
+(or the next `/auth/refresh`) lands on the login page again.
+
+**Cause (reproduced on the production deployment):** `POST /auth/login` answers 200
+and sends the refresh cookie, but the browser refuses to *store* it because the
+cookie comes from `onrender.com` while the page is on `vercel.app` — a third-party
+cookie. Browsers that block those (Chrome or Edge with "Block third-party cookies",
+incognito/InPrivate windows, Brave, strict tracking prevention) never keep it, so
+`/auth/refresh` has nothing to send and returns 401. The same account works in a
+browser that allows third-party cookies, which is why it can look random.
+
+**Fix in the server:** with `COOKIE_CROSS_SITE=true` the refresh cookie is now
+`HttpOnly; Secure; SameSite=None; Partitioned`. A partitioned cookie is stored
+per top-level site and is accepted even when third-party cookies are blocked. It
+is cleared with the same attributes on sign-out, sign-out-everywhere and account
+deletion (a partitioned cookie is only removed by a matching clear). Verified in
+Chromium with its real "block third-party cookies" setting and the app and API on
+different sites: before the change the cookie is not stored and a reload signs the
+user out; after it the cookie is stored (partitioned) and the session survives a
+reload; with third-party cookies allowed it still works. **The Render service must
+be redeployed with this change** — until then production still sends the old cookie.
+
+**Not covered:** Safari and every iOS browser (WebKit blocks third-party cookies
+and may not honour `Partitioned`; not tested here), and any browser that blocks all
+cookies. The only fix that works everywhere is to make the cookie first-party:
+serve the app and the API from one parent domain (next section).
+
 ### Recommended: one parent domain (`app.` + `api.`)
 
 Put the frontend on `app.example.com` and the API on `api.example.com` (a Render
@@ -244,6 +273,19 @@ The fonts appear twice on purpose: `style-src`/`font-src` for the page, and
 cache them for offline use. Verified in Chromium under the production headers:
 without the `connect-src` entries the worker silently caches no fonts; with them it
 caches both the stylesheet and the font files and the app renders offline.
+
+**Use the production domain, not a per-deployment URL.** Every Vercel deployment
+also gets its own permanent URL (`lux-cash-book-client-<hash>-<team>.vercel.app`).
+That URL is an immutable snapshot of that one build, so opening an old one always
+shows that build's old CSP — whatever has been deployed since. It is also
+protected by Vercel Deployment Protection (it redirects to `vercel.com/sso-api`,
+which is also what produces the manifest warning below), and the API's CORS list
+does not include it (`403` on the preflight), so login can never work from it.
+Open the production domain — currently `https://lux-cash-book-client.vercel.app`
+(checked 2026-10-04: it serves the current CSP, `npm run check:live` passes, the
+API's CORS accepts that origin, and a fresh browser shows no CSP violation, a
+service worker that caches the fonts, and `POST /auth/login` reaching the API) —
+or the "Visit" link on the Production deployment in the Vercel dashboard.
 
 **If the live site still sends an old CSP** (for example `connect-src 'self'
 https://api.example.com`). The repository has exactly one CSP definition —

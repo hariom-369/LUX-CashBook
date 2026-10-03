@@ -44,6 +44,7 @@ function refreshCookieOptions(expires: Date): CookieOptions {
     httpOnly: true,
     secure: env.cookieSecure,
     sameSite: env.cookieSameSite,
+    ...(env.cookiePartitioned ? { partitioned: true } : {}),
     path: '/api/v1/auth',
     expires,
     ...(env.COOKIE_DOMAIN ? { domain: env.COOKIE_DOMAIN } : {}),
@@ -54,7 +55,7 @@ function setRefreshCookie(res: Response, token: string, expiresAt: Date): void {
   res.cookie(REFRESH_COOKIE, token, refreshCookieOptions(expiresAt));
 }
 
-function clearRefreshCookie(res: Response): void {
+export function clearRefreshCookie(res: Response): void {
   res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions(new Date(0)), expires: undefined });
 }
 

@@ -42,6 +42,7 @@ describe('cross-site cookie configuration', () => {
   it('defaults to SameSite=Strict when COOKIE_CROSS_SITE is unset, unchanged from before this phase', async () => {
     const { env } = await freshEnv();
     expect(env.cookieSameSite).toBe('strict');
+    expect(env.cookiePartitioned).toBe(false);
   });
 
   it('switches to SameSite=None and forces Secure when COOKIE_CROSS_SITE=true', async () => {
@@ -49,6 +50,8 @@ describe('cross-site cookie configuration', () => {
     const { env } = await freshEnv();
     expect(env.cookieSameSite).toBe('none');
     expect(env.cookieSecure).toBe(true);
+    // Kept in blocked-third-party-cookie browsers (CHIPS); without it every reload signs the user out there.
+    expect(env.cookiePartitioned).toBe(true);
   });
 
   it('forces Secure=true even if COOKIE_SECURE=auto would otherwise differ', async () => {

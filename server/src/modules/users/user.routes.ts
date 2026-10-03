@@ -6,6 +6,7 @@ import { param, userIdOf } from '../../middleware/context.js';
 import { validate } from '../../middleware/validate.js';
 import { authLimiter } from '../../middleware/rateLimit.js';
 import * as service from './user.service.js';
+import { clearRefreshCookie } from '../auth/auth.controller.js';
 import {
   completeOnboardingSchema,
   deleteAccountSchema,
@@ -87,7 +88,8 @@ userRouter.post(
   validate({ body: deleteAccountSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     await service.deleteAccount(userIdOf(req), req.body.password);
-    res.clearCookie('khata_rt', { path: '/api/v1/auth' });
+    // The same attributes it was set with (SameSite/Secure/Partitioned), or a cross-site browser keeps the cookie.
+    clearRefreshCookie(res);
     ok(res, { deleted: true });
   }),
 );

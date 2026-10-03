@@ -211,6 +211,12 @@ export const env = {
   // there is no real-world case where a cross-site cookie should be insecure.
   cookieSecure: raw.COOKIE_CROSS_SITE ? true : raw.COOKIE_SECURE === 'auto' ? isProduction : raw.COOKIE_SECURE === 'true',
   cookieSameSite: (raw.COOKIE_CROSS_SITE ? 'none' : 'strict') as 'none' | 'strict',
+  /**
+   * Cross-site mode also marks the refresh cookie `Partitioned` (CHIPS): it is then stored per top-level site, which
+   * Chrome, Edge and Firefox still accept when the user has blocked third-party cookies. Without it a blocked-cookie
+   * browser signs the user out on every reload. Browsers that do not know the attribute ignore it.
+   */
+  cookiePartitioned: raw.COOKIE_CROSS_SITE,
   corsOrigins: [
     raw.APP_URL,
     ...(raw.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),

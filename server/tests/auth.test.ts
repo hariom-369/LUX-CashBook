@@ -31,6 +31,8 @@ describe('registration', () => {
     expect(refresh).toBeDefined();
     expect(refresh).toContain('HttpOnly');
     expect(refresh).toContain('SameSite=Strict');
+    // Partitioned is for the cross-site deployment only (tests/refreshCookieCrossSite.test.ts).
+    expect(refresh).not.toContain('Partitioned');
     expect(refresh).toContain('Path=/api/v1/auth');
   });
 

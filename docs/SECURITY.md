@@ -80,6 +80,10 @@ one-page summary; this is the detail, plus what changed in Phase 1
 - *(Phase 13)* GSTIN/state/HSN fields are ordinary optional fields on
   already-scoped models — no new authorization surface. No filing or
   return claims are made anywhere in the app.
+- The refresh cookie is `HttpOnly`, `Secure` outside development, `SameSite=Strict`
+  (one parent domain) or `SameSite=None; Secure; Partitioned` (cross-site mode, so
+  browsers that block third-party cookies still keep the session), scoped to
+  `/api/v1/auth`, and cleared with the same attributes everywhere it is cleared.
 - Rate limiting is keyed by the *verified* bearer token's user id where there
   is one, and by IP otherwise, so people behind one NAT do not share a bucket
   and rotating IPs does not dodge a per-user limit (`rateLimitKey`). A
