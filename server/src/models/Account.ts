@@ -1,5 +1,5 @@
 import { Schema, type HydratedDocument, type Types } from 'mongoose';
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_META, type AccountType } from '@khata/shared';
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_META, ACCOUNT_VISIBILITIES, type AccountType, type AccountVisibility } from '@khata/shared';
 import { defineModel, baseOptions, colorField, currencyField, iconField, moneyField, scopeFields, softDeleteFields } from './shared.js';
 
 /**
@@ -29,8 +29,14 @@ export interface IAccount {
   icon: string;
   isActive: boolean;
   isLiability: boolean;
+  /** Household workspaces (§Phase 9): `private` hides this account, and its transactions, from every other member. */
+  visibility: AccountVisibility;
   blockNegativeBalance: boolean;
   creditLimitMinor?: number;
+  /** Credit cards only — day of the month the statement closes / payment is due (§Phase 7). */
+  statementDay?: number;
+  dueDay?: number;
+  minimumDueMinor?: number;
   excludeFromTotals: boolean;
   notes?: string;
   sortOrder: number;
@@ -68,8 +74,12 @@ const accountSchema = new Schema<IAccount>(
     icon: iconField,
     isActive: { type: Boolean, default: true },
     isLiability: { type: Boolean, default: false },
+    visibility: { type: String, enum: ACCOUNT_VISIBILITIES, default: 'shared' },
     blockNegativeBalance: { type: Boolean, default: false },
     creditLimitMinor: moneyField({ signed: false }),
+    statementDay: { type: Number, min: 1, max: 31, default: null },
+    dueDay: { type: Number, min: 1, max: 31, default: null },
+    minimumDueMinor: moneyField({ signed: false }),
     excludeFromTotals: { type: Boolean, default: false },
     notes: { type: String, trim: true, maxlength: 500 },
     sortOrder: { type: Number, default: 0 },

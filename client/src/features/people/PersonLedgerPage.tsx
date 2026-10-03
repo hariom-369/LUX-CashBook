@@ -19,7 +19,7 @@ import { Money } from '../../components/ui/Money';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { useToast } from '../../components/ui/Toast';
-import { usePerson, usePersonLedger } from '../../lib/queries';
+import { usePerson, usePersonLedger, useLoanTimeline } from '../../lib/queries';
 import { downloadFile } from '../../lib/download';
 import { errorMessage } from '../../lib/api';
 import { useCurrency } from '../../hooks/useCurrency';
@@ -29,6 +29,9 @@ import { PersonFormSheet } from './PersonFormSheet';
 import { LendBorrowSheet } from './LendBorrowSheet';
 import { RepaySheet } from './RepaySheet';
 import { SettleDialog } from './SettleDialog';
+import { LoanDetailSheet } from './LoanDetailSheet';
+import { useT } from '../../i18n';
+import { ScrollRegion } from '../../components/ui/ScrollRegion';
 
 /**
  * The person ledger (§13).
@@ -40,6 +43,7 @@ import { SettleDialog } from './SettleDialog';
  * the arithmetic underneath never changes.
  */
 export function PersonLedgerPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const { data: person } = usePerson(id);
   const { data: ledger, isLoading, isError, error, refetch } = usePersonLedger(id);
@@ -47,8 +51,11 @@ export function PersonLedgerPage() {
   const [editing, setEditing] = useState(false);
   const [action, setAction] = useState<'lend' | 'borrow' | 'repay' | 'settle' | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
   const toast = useToast();
   const currency = useCurrency();
+  const { data: timeline = [] } = useLoanTimeline(id);
+  const selectedLoanEntry = timeline.find((entry) => entry.loan.id === selectedLoanId) ?? null;
 
   async function exportPdf() {
     if (!id) return;
@@ -56,7 +63,7 @@ export function PersonLedgerPage() {
     try {
       await downloadFile(`/pdf/people/${id}`);
     } catch (err) {
-      toast.error('Could not generate the PDF', errorMessage(err));
+      toast.error(t('common.couldNotGenerateThePdf'), errorMessage(err));
     } finally {
       setPdfBusy(false);
     }
@@ -73,7 +80,7 @@ export function PersonLedgerPage() {
   if (isError) {
     return (
       <Card>
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        <ErrorState titleAs="h1" error={error} onRetry={() => void refetch()} />
       </Card>
     );
   }
@@ -89,7 +96,7 @@ export function PersonLedgerPage() {
         className="flex w-fit items-center gap-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft aria-hidden className="size-3.5" />
-        All people
+        {t('people.allPeople')}
       </Link>
 
       <Card>
@@ -102,7 +109,7 @@ export function PersonLedgerPage() {
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
-                  aria-label="Edit person"
+                  aria-label={t('people.editPerson')}
                   className="rounded-sm p-1 text-ink-faint transition-colors hover:bg-sunken hover:text-ink"
                 >
                   <Pencil aria-hidden className="size-3.5" />
@@ -118,10 +125,10 @@ export function PersonLedgerPage() {
               <div className="mt-2.5">
                 <p className="label-eyebrow">
                   {summary.status === 'receivable'
-                    ? 'You will receive'
+                    ? t('people.youWillReceive')
                     : summary.status === 'payable'
-                      ? 'You need to pay'
-                      : 'Settled'}
+                      ? t('people.youNeedToPay')
+                      : t('common.settled')}
                 </p>
                 <Money
                   amountMinor={Math.abs(summary.outstandingMinor)}
@@ -137,7 +144,7 @@ export function PersonLedgerPage() {
                 />
                 {summary.overdueMinor > 0 && (
                   <Badge tone="negative" className="ml-2 align-middle">
-                    <Money amountMinor={summary.overdueMinor} size="xs" tone="inherit" compactDecimals /> overdue
+                    <Money amountMinor={summary.overdueMinor} size="xs" tone="inherit" compactDecimals /> {t('people.overdue')}
                   </Badge>
                 )}
               </div>
@@ -146,13 +153,13 @@ export function PersonLedgerPage() {
 
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" leftIcon={<HandCoins className="size-4" />} onClick={() => setAction('lend')}>
-              Lend
+              {t('people.lend')}
             </Button>
             <Button variant="secondary" leftIcon={<CreditCard className="size-4" />} onClick={() => setAction('borrow')}>
-              Borrow
+              {t('people.borrow')}
             </Button>
             <Button variant="secondary" leftIcon={<Undo2 className="size-4" />} onClick={() => setAction('repay')}>
-              Repay
+              {t('people.repay')}
             </Button>
             <Button variant="ghost" leftIcon={<FileDown className="size-4" />} loading={pdfBusy} onClick={() => void exportPdf()}>
               PDF
@@ -160,19 +167,20 @@ export function PersonLedgerPage() {
             <ShareButton
               variant="ghost"
               content={{
-                title: `Khata — ${subject.name}`,
+                title: t('people.shareTitle', { name: subject.name }),
                 text:
                   summary.status === 'settled'
-                    ? `${subject.name} is settled up with you.`
-                    : `${subject.name} ${summary.status === 'receivable' ? 'owes you' : 'is owed'} ${formatMoney(
-                        Math.abs(summary.outstandingMinor),
-                        { currency, compactDecimals: true },
-                      )}${summary.overdueMinor > 0 ? ' (part of it overdue)' : ''}.`,
+                    ? t('people.settledUpWithYou', { name: subject.name })
+                    : t(summary.status === 'receivable' ? 'people.shareOwesYou' : 'people.shareIsOwed', {
+                        name: subject.name,
+                        amount: formatMoney(Math.abs(summary.outstandingMinor), { currency, compactDecimals: true }),
+                        overdue: summary.overdueMinor > 0 ? ` ${t('people.partOverdueSuffix')}` : '',
+                      }),
               }}
             />
             {summary.outstandingMinor !== 0 && (
               <Button variant="gold" leftIcon={<Redo2 className="size-4" />} onClick={() => setAction('settle')}>
-                Settle
+                {t('people.settle')}
               </Button>
             )}
           </div>
@@ -180,45 +188,45 @@ export function PersonLedgerPage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatTile label="Opening balance" amountMinor={summary.openingBalanceMinor} />
-        <StatTile label="Total given" amountMinor={summary.totalGivenMinor} tone="positive" />
-        <StatTile label="Total received" amountMinor={summary.totalReceivedMinor} tone="negative" />
+        <StatTile label={t('common.openingBalance')} amountMinor={summary.openingBalanceMinor} />
+        <StatTile label={t('people.totalGiven')} amountMinor={summary.totalGivenMinor} tone="positive" />
+        <StatTile label={t('people.totalReceived')} amountMinor={summary.totalReceivedMinor} tone="negative" />
       </div>
 
       <Card bare>
         <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-          <CardHeader eyebrow="Ledger" title="Full history" />
+          <CardHeader eyebrow={t('people.ledger')} title={t('people.fullHistory')} />
         </div>
 
         {rows.length === 0 ? (
           <EmptyState
             icon={<Banknote className="size-5" />}
-            title="No transactions yet"
-            description={`Record what you gave ${subject.name} or received from them, and it will appear here.`}
+            title={t('common.noTransactionsYet')}
+            description={t('people.recordWhatYouGaveOrReceived', { name: subject.name })}
             action={
               <Button variant="gold" size="sm" leftIcon={<HandCoins className="size-4" />} onClick={() => setAction('lend')}>
-                Give money
+                {t('people.giveMoney')}
               </Button>
             }
           />
         ) : (
-          <div className="overflow-x-auto border-t border-line-faint">
+          <ScrollRegion label={t('scroll.ledger')} className="border-t border-line-faint">
             <table className="w-full min-w-[560px] text-left">
-              <caption className="sr-only">Ledger for {subject.name}</caption>
+              <caption className="sr-only">{t('people.ledgerFor')} {subject.name}</caption>
               <thead>
                 <tr className="border-b border-line bg-sunken/60">
-                  <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">Date</th>
-                  <th scope="col" className="label-eyebrow px-3 py-2.5">Description</th>
-                  <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">You gave</th>
-                  <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">You received</th>
-                  <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">Balance</th>
+                  <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">{t('common.date')}</th>
+                  <th scope="col" className="label-eyebrow px-3 py-2.5">{t('common.description')}</th>
+                  <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{t('people.youGave')}</th>
+                  <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{t('people.youReceived')}</th>
+                  <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">{t('common.balance')}</th>
                 </tr>
               </thead>
               <tbody>
                 {summary.openingBalanceMinor !== 0 && (
                   <tr className="border-b border-line-faint bg-sunken/30">
                     <td className="px-5 py-2.5 text-[12px] text-ink-muted sm:px-6" colSpan={4}>
-                      Opening balance
+                      {t('common.openingBalance')}
                     </td>
                     <td className="px-5 py-2.5 text-right sm:px-6">
                       <Money amountMinor={summary.openingBalanceMinor} size="sm" tone="neutral" weight="medium" compactDecimals />
@@ -226,8 +234,17 @@ export function PersonLedgerPage() {
                   </tr>
                 )}
 
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-line-faint last:border-0 hover:bg-sunken/40">
+                {rows.map((row) => {
+                  const isLoanRow = row.type === 'lend' || row.type === 'borrow';
+                  return (
+                  <tr
+                    key={row.id}
+                    onClick={isLoanRow ? () => setSelectedLoanId(row.id) : undefined}
+                    className={cn(
+                      'border-b border-line-faint last:border-0 hover:bg-sunken/40',
+                      isLoanRow && 'cursor-pointer',
+                    )}
+                  >
                     <td className="whitespace-nowrap px-5 py-3 text-[12.5px] text-ink-muted sm:px-6">
                       {formatDate(row.date, 'dd MMM yyyy')}
                     </td>
@@ -238,17 +255,17 @@ export function PersonLedgerPage() {
                         <span className="truncate text-[13px] font-medium text-ink">{row.description}</span>
                         {row.isSettlement && (
                           <Badge tone="positive" eyebrow className="shrink-0">
-                            Settled
+                            {t('common.settled')}
                           </Badge>
                         )}
                         {row.dueDate && (
                           <Badge tone="outline" eyebrow className="shrink-0">
-                            Due {formatDate(row.dueDate, 'dd MMM')}
+                            {t('common.due')} {formatDate(row.dueDate, 'dd MMM')}
                           </Badge>
                         )}
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
-                        {TRANSACTION_META[row.type as keyof typeof TRANSACTION_META]?.label}
+                        {t.label('txType', row.type, TRANSACTION_META[row.type as keyof typeof TRANSACTION_META]?.label ?? row.type)}
                         {row.accountName ? ` · ${row.accountName}` : ''}
                       </span>
                     </td>
@@ -272,10 +289,11 @@ export function PersonLedgerPage() {
                       />
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </Card>
 
@@ -302,6 +320,12 @@ export function PersonLedgerPage() {
             outstandingMinor={summary.outstandingMinor}
             open={action === 'settle'}
             onClose={() => setAction(null)}
+          />
+          <LoanDetailSheet
+            personId={id}
+            personName={subject.name}
+            entry={selectedLoanEntry}
+            onClose={() => setSelectedLoanId(null)}
           />
         </>
       )}

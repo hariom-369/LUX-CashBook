@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '../../lib/cn';
+import { useT, msg } from '../../i18n';
 
 /**
  * Password strength feedback.
@@ -22,10 +23,11 @@ function score(password: string): number {
   return Math.min(value, 4);
 }
 
-const LABELS = ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
+const LABELS = [msg('auth.veryWeak'), msg('auth.weak'), msg('auth.fair'), msg('auth.strong'), msg('auth.veryStrong')];
 const COLORS = ['bg-negative', 'bg-negative', 'bg-warning', 'bg-positive', 'bg-positive'];
 
 export function PasswordStrength({ password }: { password: string }) {
+  const t = useT();
   const value = useMemo(() => score(password), [password]);
 
   if (value < 0) return null;
@@ -44,7 +46,7 @@ export function PasswordStrength({ password }: { password: string }) {
         ))}
       </div>
       <p aria-live="polite" className="mt-1.5 text-[12px] text-ink-muted">
-        Strength: <span className="font-medium text-ink-secondary">{LABELS[value]}</span>
+        {t('auth.strength')} <span className="font-medium text-ink-secondary">{LABELS[value] && t(LABELS[value].key)}</span>
       </p>
     </div>
   );

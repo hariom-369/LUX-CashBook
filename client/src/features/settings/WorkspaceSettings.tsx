@@ -1,15 +1,19 @@
-import { useState } from 'react';
-import { Briefcase, Check, Plus, User } from 'lucide-react';
-import { CURRENCIES, type WorkspaceDto, type WorkspaceMode } from '@khata/shared';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Briefcase, Building2, Check, Plus, User, Users } from 'lucide-react';
+import { CURRENCIES, INDIAN_STATES, WORKSPACE_ROLE_LABELS, type WorkspaceDto, type WorkspaceMode } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Button } from '../../components/ui/Button';
-import { Field, Input, Select } from '../../components/ui/Input';
-import { Sheet } from '../../components/ui/Sheet';
+import { Field, Input, Select, Textarea } from '../../components/ui/Input';
+import { Sheet, ConfirmDialog } from '../../components/ui/Sheet';
 import { Badge } from '../../components/ui/Badge';
 import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { MembersSheet } from './MembersSheet';
+import { InvitationPrompt } from './InvitationPrompt';
+import { useT } from '../../i18n';
 
 /**
  * Workspace management (§4, §6).
@@ -19,6 +23,7 @@ import { useQueryClient } from '@tanstack/react-query';
  * the Personal/Business split rather than the daily-use side.
  */
 export function WorkspaceSettings() {
+  const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
   const workspaces = useAuthStore((s) => s.workspaces);
@@ -28,10 +33,36 @@ export function WorkspaceSettings() {
 
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [managingMembers, setManagingMembers] = useState<WorkspaceDto | null>(null);
+  const [editingProfile, setEditingProfile] = useState<WorkspaceDto | null>(null);
+  const [leaving, setLeaving] = useState<WorkspaceDto | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const inviteToken = searchParams.get('inviteToken');
+
+  function clearInviteToken() {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('inviteToken');
+      return next;
+    });
+  }
 
   async function refresh() {
     const list = await api.get<WorkspaceDto[]>('/workspaces');
     setWorkspaces(list);
+  }
+
+  async function createDemo() {
+    setBusyId('demo');
+    try {
+      await api.post('/workspaces/demo');
+      await refresh();
+      toast.success(t('settings.demoWorkspaceReady'), t('settings.sampleDataYouCanExploreAnd'));
+    } catch (err) {
+      toast.error(t('settings.couldNotCreateTheDemo'), errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function makeDefault(id: string) {
@@ -39,9 +70,9 @@ export function WorkspaceSettings() {
     try {
       await api.post(`/workspaces/${id}/default`);
       await refresh();
-      toast.success('Default workspace updated');
+      toast.success(t('settings.defaultWorkspaceUpdated'));
     } catch (err) {
-      toast.error('Could not update that', errorMessage(err));
+      toast.error(t('common.couldNotUpdateThat'), errorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -51,21 +82,53 @@ export function WorkspaceSettings() {
     if (id === activeId) return;
     await switchWorkspace(id);
     queryClient.clear();
-    toast.success('Switched workspace');
+    toast.success(t('settings.switchedWorkspace'));
+  }
+
+  async function leave() {
+    if (!leaving) return;
+    setBusyId(leaving.id);
+    try {
+      await api.post(`/workspaces/${leaving.id}/leave`);
+      await refresh();
+      toast.success(t('settings.leftWorkspace'), t('settings.youNoLongerHaveAccessTo', { name: leaving.name }));
+    } catch (err) {
+      toast.error(t('settings.couldNotLeaveThatWorkspace'), errorMessage(err));
+    } finally {
+      setBusyId(null);
+      setLeaving(null);
+    }
   }
 
   return (
     <div className="flex flex-col gap-5">
+      {inviteToken && (
+        <InvitationPrompt
+          token={inviteToken}
+          onDone={() => {
+            clearInviteToken();
+            void refresh();
+          }}
+        />
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 basis-48">
-          <p className="text-[13.5px] font-medium text-ink">Your workspaces</p>
+          <p className="text-[13.5px] font-medium text-ink">{t('settings.yourWorkspaces')}</p>
           <p className="mt-1 text-[12px] text-ink-muted">
-            Personal and business ledgers are kept completely separate.
+            {t('settings.personalAndBusinessLedgersAreKept')}
           </p>
         </div>
-        <Button size="sm" variant="secondary" leftIcon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-          New workspace
-        </Button>
+        <div className="flex gap-2">
+          {!workspaces.some((w) => w.isDemo) && (
+            <Button size="sm" variant="ghost" loading={busyId === 'demo'} onClick={() => void createDemo()}>
+              {t('settings.tryADemoWorkspace')}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" leftIcon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
+            {t('common.newWorkspace')}
+          </Button>
+        </div>
       </div>
 
       <ul className="flex flex-col gap-2.5">
@@ -90,18 +153,21 @@ export function WorkspaceSettings() {
             <div className="min-w-0 flex-1 basis-32">
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="min-w-0 max-w-full truncate text-[13.5px] font-semibold text-ink">{workspace.name}</span>
-                {workspace.isDefault && <Badge tone="gold">Default</Badge>}
-                {workspace.id === activeId && <Badge tone="positive">Active</Badge>}
+                {workspace.isDemo && <Badge tone="info">{t('settings.demo')}</Badge>}
+                {workspace.isDefault && <Badge tone="gold">{t('settings.default')}</Badge>}
+                {workspace.id === activeId && <Badge tone="positive">{t('settings.active')}</Badge>}
+                {workspace.memberCount > 1 && <Badge tone="outline">{t.label('role', workspace.myRole, WORKSPACE_ROLE_LABELS[workspace.myRole])}</Badge>}
               </span>
               <span className="mt-0.5 block text-[11.5px] capitalize text-ink-muted">
                 {workspace.mode} · {workspace.currency}
+                {workspace.memberCount > 1 && ` ${t('settings.membersCount', { count: workspace.memberCount })}`}
               </span>
             </div>
 
-            <div className="ml-auto flex shrink-0 gap-2">
+            <div className="ml-auto flex shrink-0 flex-wrap gap-2">
               {workspace.id !== activeId && (
                 <Button variant="secondary" size="sm" onClick={() => void open(workspace.id)}>
-                  Switch to
+                  {t('settings.switchTo')}
                 </Button>
               )}
               {!workspace.isDefault && (
@@ -111,7 +177,22 @@ export function WorkspaceSettings() {
                   loading={busyId === workspace.id}
                   onClick={() => void makeDefault(workspace.id)}
                 >
-                  Make default
+                  {t('settings.makeDefault')}
+                </Button>
+              )}
+              {workspace.id === activeId && (workspace.myRole === 'owner' || workspace.myRole === 'admin') && (
+                <Button variant="ghost" size="sm" leftIcon={<Users className="size-3.5" />} onClick={() => setManagingMembers(workspace)}>
+                  {t('common.members')}
+                </Button>
+              )}
+              {workspace.mode === 'business' && (workspace.myRole === 'owner' || workspace.myRole === 'admin') && (
+                <Button variant="ghost" size="sm" leftIcon={<Building2 className="size-3.5" />} onClick={() => setEditingProfile(workspace)}>
+                  {t('settings.businessProfile')}
+                </Button>
+              )}
+              {workspace.myRole !== 'owner' && (
+                <Button variant="ghost" size="sm" loading={busyId === workspace.id} onClick={() => setLeaving(workspace)}>
+                  {t('settings.leave')}
                 </Button>
               )}
             </div>
@@ -120,6 +201,32 @@ export function WorkspaceSettings() {
       </ul>
 
       <CreateWorkspaceSheet open={creating} onClose={() => setCreating(false)} onCreated={refresh} />
+
+      {managingMembers && (
+        <MembersSheet
+          open={Boolean(managingMembers)}
+          onClose={() => setManagingMembers(null)}
+          workspaceName={managingMembers.name}
+        />
+      )}
+
+      <BusinessProfileSheet
+        open={Boolean(editingProfile)}
+        workspace={editingProfile}
+        onClose={() => setEditingProfile(null)}
+        onSaved={refresh}
+      />
+
+      <ConfirmDialog
+        open={Boolean(leaving)}
+        onCancel={() => setLeaving(null)}
+        onConfirm={leave}
+        title={t('settings.leave2', { name: leaving?.name ?? '' })}
+        description={t('settings.youLoseAccessToThisWorkspace')}
+        confirmLabel={t('settings.leave')}
+        tone="danger"
+        busy={busyId === leaving?.id}
+      />
     </div>
   );
 }
@@ -133,6 +240,7 @@ function CreateWorkspaceSheet({
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
+  const t = useT();
   const toast = useToast();
   const [name, setName] = useState('');
   const [mode, setMode] = useState<WorkspaceMode>('personal');
@@ -146,7 +254,7 @@ function CreateWorkspaceSheet({
     try {
       await api.post('/workspaces', { name: name.trim(), mode, currency });
       await onCreated();
-      toast.success('Workspace created', `${name.trim()} is ready.`);
+      toast.success(t('settings.workspaceCreated'), t('settings.nameIsReady', { name: name.trim() }));
       setName('');
       onClose();
     } catch (err) {
@@ -160,17 +268,17 @@ function CreateWorkspaceSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title="New workspace"
-      description="A separate ledger with its own accounts, categories and transactions."
+      title={t('common.newWorkspace')}
+      description={t('settings.aSeparateLedgerWithItsOwn')}
       size="sm"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="gold" loading={busy} disabled={!name.trim()} onClick={() => void create()}>
-            Create workspace
+            {t('settings.createWorkspace')}
           </Button>
         </div>
       }
@@ -188,11 +296,11 @@ function CreateWorkspaceSheet({
           </div>
         )}
 
-        <Field label="Name" required>
+        <Field label={t('common.name')} required>
           {({ id }) => <Input id={id} autoFocus value={name} maxLength={60} onChange={(event) => setName(event.target.value)} />}
         </Field>
 
-        <Field label="Type">
+        <Field label={t('reminders.form.type')}>
           {({ id }) => (
             <div id={id} className="grid grid-cols-2 gap-2">
               {(['personal', 'business'] as const).map((option) => (
@@ -216,12 +324,119 @@ function CreateWorkspaceSheet({
           )}
         </Field>
 
-        <Field label="Currency">
+        <Field label={t('common.currency')}>
           {({ id }) => (
             <Select id={id} value={currency} onChange={(event) => setCurrency(event.target.value)}>
               {Object.values(CURRENCIES).map((option) => (
                 <option key={option.code} value={option.code}>
-                  {option.symbol} · {option.name}
+                  {option.symbol} · {t.label('currency', option.code, option.name)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </form>
+    </Sheet>
+  );
+}
+
+/**
+ * Business profile (§Phase 13) — name, address, GSTIN and state. Shown on
+ * generated statements and invoice PDFs, and `state` is what decides
+ * intra- vs inter-state GST on an invoice (compared against the customer's
+ * own state) — see `lib/invoiceMath.ts#splitGst`.
+ */
+function BusinessProfileSheet({
+  open,
+  workspace,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  workspace: WorkspaceDto | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const t = useT();
+  const toast = useToast();
+  const [businessName, setBusinessName] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [gstin, setGstin] = useState('');
+  const [state, setState] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setBusinessName(workspace?.businessName ?? '');
+    setBusinessAddress(workspace?.businessAddress ?? '');
+    setGstin(workspace?.gstin ?? '');
+    setState(workspace?.state ?? '');
+  }, [open, workspace]);
+
+  async function save() {
+    if (!workspace) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/workspaces/${workspace.id}`, {
+        businessName: businessName.trim() || undefined,
+        businessAddress: businessAddress.trim() || undefined,
+        gstin: gstin.trim() || undefined,
+        state: state || undefined,
+      });
+      await onSaved();
+      toast.success(t('settings.businessProfileUpdated'));
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={t('settings.businessProfile')}
+      description={t('settings.shownOnInvoicesAndStatementsState')}
+      size="sm"
+      busy={busy}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="gold" loading={busy} onClick={() => void save()}>
+            {t('common.save')}
+          </Button>
+        </div>
+      }
+    >
+      <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="flex flex-col gap-4 pb-2">
+        {error && (
+          <div role="alert" className="rounded-md border border-negative/25 bg-negative-soft px-3.5 py-3 text-[13px] text-negative">
+            {error}
+          </div>
+        )}
+        <Field label={t('settings.businessName')}>
+          {({ id }) => <Input id={id} value={businessName} maxLength={120} onChange={(e) => setBusinessName(e.target.value)} />}
+        </Field>
+        <Field label={t('settings.address')}>
+          {({ id }) => <Textarea id={id} rows={2} value={businessAddress} maxLength={400} onChange={(e) => setBusinessAddress(e.target.value)} />}
+        </Field>
+        <Field label="GSTIN" hint={t('common.optional')}>
+          {({ id }) => <Input id={id} value={gstin} maxLength={15} placeholder="29ABCDE1234F1Z5" onChange={(e) => setGstin(e.target.value.toUpperCase())} />}
+        </Field>
+        <Field label={t('common.state')} hint={t('common.forPlaceOfSupply')}>
+          {({ id }) => (
+            <Select id={id} value={state} onChange={(e) => setState(e.target.value)}>
+              <option value="">{t('common.notSet')}</option>
+              {INDIAN_STATES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
                 </option>
               ))}
             </Select>

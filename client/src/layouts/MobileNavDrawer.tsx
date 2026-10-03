@@ -8,6 +8,8 @@ import { NAV_GROUPS, navItemsFor } from '../config/navigation';
 import { useAuthStore } from '../stores/auth.store';
 import { useUiStore } from '../stores/ui.store';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { useNavLabels } from '../i18n/nav';
+import { useT } from '../i18n';
 
 /**
  * The full navigation on a phone.
@@ -20,6 +22,8 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function MobileNavDrawer() {
+  const t = useT();
+  const navLabels = useNavLabels();
   const open = useUiStore((s) => s.mobileNavOpen);
   const setOpen = useUiStore((s) => s.setMobileNavOpen);
   const mode = useAuthStore(
@@ -94,7 +98,7 @@ export function MobileNavDrawer() {
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation"
+        aria-label={t('layout.navigation')}
         className="animate-fade-in relative flex h-full w-[86%] max-w-xs flex-col border-r border-line bg-surface pl-[env(safe-area-inset-left,0px)] pt-safe"
       >
         <div className="flex h-16 shrink-0 items-center justify-between px-5">
@@ -102,7 +106,7 @@ export function MobileNavDrawer() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="Close menu"
+            aria-label={t('layout.closeMenu')}
             className="-mr-2 flex size-10 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-sunken"
           >
             <X aria-hidden className="size-5" />
@@ -120,7 +124,7 @@ export function MobileNavDrawer() {
 
             return (
               <div key={group.id}>
-                {group.label && <div className="label-eyebrow px-3 pb-1.5 pt-4">{group.label}</div>}
+                {group.label && <div className="label-eyebrow px-3 pb-1.5 pt-4">{navLabels.group(group.id, group.label)}</div>}
                 <ul className="flex flex-col gap-0.5">
                   {groupItems.map((item) => (
                     <li key={item.to}>
@@ -145,7 +149,7 @@ export function MobileNavDrawer() {
                               className={cn('size-[18px] shrink-0', isActive && 'text-gold')}
                               strokeWidth={isActive ? 2.1 : 1.8}
                             />
-                            {item.label}
+                            {navLabels.item(item)}
                           </>
                         )}
                       </NavLink>

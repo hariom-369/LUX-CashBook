@@ -2,6 +2,7 @@ import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { booleanWord } from '../lib/boolean.js';
+import { checkProduction } from './productionChecks.js';
 import { FEATURE_FLAGS, FEATURE_FLAG_NAMES, type FeatureFlags } from '@khata/shared';
 
 // Tests must only ever see the environment they set up themselves. Under Vitest a
@@ -81,6 +82,8 @@ const schema = z.object({
   /** File storage: `local` writes under STORAGE_DIR; `s3` uses the S3 adapter. */
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_DIR: z.string().default('./storage'),
+  /** Escape hatch for a host with a persistent disk mounted at STORAGE_DIR; otherwise production requires S3. */
+  ALLOW_LOCAL_STORAGE_IN_PRODUCTION: envBoolean(false),
   MAX_UPLOAD_MB: z.coerce.number().positive().default(10),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
@@ -91,6 +94,15 @@ const schema = z.object({
   RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().positive().default(15),
   RATE_LIMIT_MAX: z.coerce.number().positive().default(600),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().positive().default(20),
+
+  /** Web push (browser notifications) — when absent, push is silently skipped. */
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default('mailto:support@khata.app'),
+
+  /** AI assistant (§Phase 10, decision 7) — when absent, the assistant reports itself as unavailable rather than faking a response. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().default('claude-sonnet-5'),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   /** Run recurring-transaction and reminder processing inside this process. */
@@ -153,6 +165,19 @@ if (raw.COOKIE_CROSS_SITE && raw.COOKIE_SECURE === 'false') {
   process.exit(1);
 }
 
+if (isProduction) {
+  const { problems, warnings } = checkProduction({ ...raw, mailFromExplicit: Boolean(process.env.MAIL_FROM) });
+  for (const warning of warnings) {
+    // eslint-disable-next-line no-console
+    console.warn('\nWarning: ' + warning + '\n');
+  }
+  if (problems.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error('\nThis configuration is not safe to run in production:\n' + problems.map((p) => '  - ' + p).join('\n') + '\n\nSee docs/DEPLOYMENT.md.\n');
+    process.exit(1);
+  }
+}
+
 export const env = {
   ...raw,
   isProduction,
@@ -170,6 +195,7 @@ export const env = {
     ...(raw.CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
   ],
   maxUploadBytes: raw.MAX_UPLOAD_MB * 1024 * 1024,
+  pushConfigured: Boolean(raw.VAPID_PUBLIC_KEY && raw.VAPID_PRIVATE_KEY),
   features: Object.fromEntries(
     FEATURE_FLAG_NAMES.map((flag) => [flag, raw[FEATURE_FLAGS[flag]] === true]),
   ) as FeatureFlags,

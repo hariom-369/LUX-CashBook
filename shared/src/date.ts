@@ -178,9 +178,46 @@ const MONTHS_LONG = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+/**
+ * The language month names are written in. English is the built-in table; any other locale uses the
+ * runtime's own `Intl` names (so Hindi reads "अक्टूबर", not "October"). Set by the client when the
+ * interface language changes; the server never sets it and stays English.
+ */
+let dateLocale: string | null = null;
+let localeResolver: (() => string | null) | null = null;
+const localisedMonths = new Map<string, string[]>();
+
+export function setDateLocale(locale: string | null): void {
+  dateLocale = locale;
+}
+
+/** Ask for the locale each time a name is needed, so it can never be stale. Takes precedence over `setDateLocale`. */
+export function setDateLocaleResolver(resolver: (() => string | null) | null): void {
+  localeResolver = resolver;
+}
+
+function monthNames(long: boolean): readonly string[] {
+  const english = long ? MONTHS_LONG : MONTHS_SHORT;
+  const requested = localeResolver ? localeResolver() : dateLocale;
+  const locale = requested && requested !== 'en' ? requested : null;
+  if (!locale) return english;
+  const cacheKey = `${locale}:${long ? 'long' : 'short'}`;
+  let names = localisedMonths.get(cacheKey);
+  if (!names) {
+    try {
+      const format = new Intl.DateTimeFormat(locale, { month: long ? 'long' : 'short', timeZone: 'UTC' });
+      names = english.map((_, index) => format.format(new Date(Date.UTC(2000, index, 15))));
+    } catch {
+      // An unknown locale or a runtime without its data: keep English rather than show blanks.
+      names = [...english];
+    }
+    localisedMonths.set(cacheKey, names);
+  }
+  return names;
+}
+
 export function monthLabel(year: number, monthIndex: number, long = false): string {
-  const names = long ? MONTHS_LONG : MONTHS_SHORT;
-  return `${names[monthIndex] ?? ''} ${year}`;
+  return `${monthNames(long)[monthIndex] ?? ''} ${year}`;
 }
 
 /** `yyyy-MM-dd` in local time — the key format used for day buckets everywhere. */
@@ -205,7 +242,7 @@ export function formatDate(d: Date | string, pattern = 'dd MMM yyyy'): string {
   const yyyy = String(date.getFullYear());
   return pattern
     .replace('yyyy', yyyy)
-    .replace('MMM', MONTHS_SHORT[date.getMonth()] ?? '')
+    .replace('MMM', monthNames(false)[date.getMonth()] ?? '')
     .replace('MM', MM)
     .replace('dd', dd);
 }

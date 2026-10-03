@@ -13,6 +13,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useDayClosingPreview, useDayClosings, useInvalidateBusiness } from '../../lib/queries4';
 import { useAccounts } from '../../lib/queries';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 /**
  * Daily cash closing (§32).
@@ -23,6 +24,7 @@ import { api, ApiRequestError, errorMessage } from '../../lib/api';
  * difference is arithmetic, not opinion.
  */
 export function DailyClosingPage() {
+  const t = useT();
   const { data: accounts = [] } = useAccounts();
   const cashAccounts = useMemo(() => accounts.filter((a) => a.type === 'cash'), [accounts]);
 
@@ -51,11 +53,11 @@ export function DailyClosingPage() {
         note: note.trim() || undefined,
       });
       invalidate();
-      toast.success('Day closed', difference === 0 ? 'The drawer matched exactly.' : `Difference recorded.`);
+      toast.success(t('business.dayClosed'), difference === 0 ? t('business.theDrawerMatchedExactly') : t('business.differenceRecorded'));
       setActualClosing(null);
       setNote('');
     } catch (err) {
-      toast.error('Could not close the day', err instanceof ApiRequestError ? err.message : errorMessage(err));
+      toast.error(t('business.couldNotCloseTheDay'), err instanceof ApiRequestError ? err.message : errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -65,30 +67,30 @@ export function DailyClosingPage() {
     try {
       await api.post(`/closing/day/${id}/reopen`);
       invalidate();
-      toast.success('Day reopened');
+      toast.success(t('business.dayReopened'));
     } catch (err) {
-      toast.error('Could not reopen that day', errorMessage(err));
+      toast.error(t('business.couldNotReopenThatDay'), errorMessage(err));
     }
   }
 
   return (
     <div className="flex flex-col gap-5">
       <header>
-        <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Daily Closing</h1>
-        <p className="mt-0.5 text-[13px] text-ink-muted">Count the drawer and reconcile against the ledger.</p>
+        <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.daily-closing')}</h1>
+        <p className="mt-0.5 text-[13px] text-ink-muted">{t('business.countTheDrawerAndReconcileAgainst')}</p>
       </header>
 
       <Card>
-        <CardHeader eyebrow="Close a day" title="Cash count" />
+        <CardHeader eyebrow={t('business.closeADay')} title={t('business.cashCount')} />
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
-            <span className="label-eyebrow">Date</span>
+            <span className="label-eyebrow">{t('common.date')}</span>
             <Input type="date" value={date} max={toDateKey(new Date())} onChange={(event) => { setDate(event.target.value); setActualClosing(null); }} />
           </label>
 
           <div className="flex flex-col gap-1.5">
-            <span className="label-eyebrow">Accounts</span>
+            <span className="label-eyebrow">{t('nav.accounts')}</span>
             <div className="flex flex-wrap gap-1.5">
               {cashAccounts.map((account) => {
                 // No explicit selection means "every cash account" — the common
@@ -120,18 +122,18 @@ export function DailyClosingPage() {
 
         {alreadyClosed ? (
           <p className="mt-5 rounded-md border border-line bg-sunken px-4 py-3 text-[13px] text-ink-muted">
-            This day is already closed. Reopen it below to close it again.
+            {t('business.thisDayIsAlreadyClosedReopen')}
           </p>
         ) : (
           <>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <StatTile label="Opening cash" amountMinor={preview?.openingCashMinor ?? 0} loading={previewLoading} />
-              <StatTile label="Received" amountMinor={preview?.cashReceivedMinor ?? 0} tone="positive" loading={previewLoading} />
-              <StatTile label="Paid" amountMinor={preview?.cashPaidMinor ?? 0} tone="negative" loading={previewLoading} />
+              <StatTile label={t('business.openingCash')} amountMinor={preview?.openingCashMinor ?? 0} loading={previewLoading} />
+              <StatTile label={t('business.received')} amountMinor={preview?.cashReceivedMinor ?? 0} tone="positive" loading={previewLoading} />
+              <StatTile label={t('business.paid')} amountMinor={preview?.cashPaidMinor ?? 0} tone="negative" loading={previewLoading} />
             </div>
 
             <div className="mt-4 rounded-lg border border-gold/30 bg-gold-soft/40 p-4">
-              <p className="label-eyebrow">Expected closing cash</p>
+              <p className="label-eyebrow">{t('business.expectedClosingCash')}</p>
               <div className="mt-1.5">
                 <Money amountMinor={preview?.expectedClosingMinor ?? 0} size="xl" tone="neutral" compactDecimals />
               </div>
@@ -139,25 +141,25 @@ export function DailyClosingPage() {
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
-                <span className="label-eyebrow">Actual closing cash</span>
+                <span className="label-eyebrow">{t('business.actualClosingCash')}</span>
                 <MoneyInput value={actualClosing} onChange={setActualClosing} size="hero" />
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="label-eyebrow">Note (optional)</span>
-                <Input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} placeholder="Investigate a shortfall, etc." />
+                <span className="label-eyebrow">{t('business.noteOptional')}</span>
+                <Input value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} placeholder={t('business.investigateAShortfallEtc')} />
               </label>
             </div>
 
             {difference !== null && difference !== 0 && (
               <div className={cn('mt-4 flex items-center justify-between rounded-md border px-4 py-3', difference < 0 ? 'border-negative/25 bg-negative-soft' : 'border-positive/25 bg-positive-soft')}>
-                <span className="text-[13px] font-medium text-ink">{difference < 0 ? 'Shortfall' : 'Surplus'}</span>
+                <span className="text-[13px] font-medium text-ink">{difference < 0 ? t('business.shortfall') : t('business.surplus')}</span>
                 <Money amountMinor={Math.abs(difference)} size="md" tone={difference < 0 ? 'negative' : 'positive'} compactDecimals />
               </div>
             )}
 
             <div className="mt-5 flex justify-end">
               <Button variant="gold" loading={busy} disabled={actualClosing === null} leftIcon={<Check className="size-4" />} onClick={() => void close()}>
-                Close day
+                {t('business.closeDay')}
               </Button>
             </div>
           </>
@@ -166,7 +168,7 @@ export function DailyClosingPage() {
 
       <Card bare>
         <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-          <CardHeader eyebrow="History" title="Recent closings" />
+          <CardHeader eyebrow={t('common.history')} title={t('business.recentClosings')} />
         </div>
         {isLoading ? (
           <div className="p-5">
@@ -175,7 +177,7 @@ export function DailyClosingPage() {
         ) : isError ? (
           <ErrorState error={error} onRetry={() => void refetch()} />
         ) : history.length === 0 ? (
-          <EmptyState icon={<CalendarCheck className="size-5" />} title="No closings yet" description="Close your first day above to start a history." />
+          <EmptyState icon={<CalendarCheck className="size-5" />} title={t('business.noClosingsYet')} description={t('business.closeYourFirstDayAboveTo')} />
         ) : (
           <ul className="divide-y divide-line-faint border-t border-line-faint">
             {history.map((closing) => (
@@ -183,17 +185,17 @@ export function DailyClosingPage() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium text-ink">{formatDate(closing.date, 'dd MMM yyyy')}</p>
                   <p className="mt-0.5 text-[11.5px] text-ink-muted">
-                    Expected <Money amountMinor={closing.expectedClosingMinor} size="xs" tone="inherit" compactDecimals /> · Actual{' '}
+                    {t('business.expected')} <Money amountMinor={closing.expectedClosingMinor} size="xs" tone="inherit" compactDecimals /> {t('business.actual')}{' '}
                     <Money amountMinor={closing.actualClosingMinor} size="xs" tone="inherit" compactDecimals />
                   </p>
                 </div>
                 {closing.differenceMinor === 0 ? (
-                  <Badge tone="positive">Matched</Badge>
+                  <Badge tone="positive">{t('business.matched')}</Badge>
                 ) : (
                   <Money amountMinor={closing.differenceMinor} size="sm" tone={closing.differenceMinor < 0 ? 'negative' : 'positive'} signed compactDecimals />
                 )}
                 <Button variant="ghost" size="sm" onClick={() => void reopen(closing.id)}>
-                  Reopen
+                  {t('business.reopen')}
                 </Button>
               </li>
             ))}

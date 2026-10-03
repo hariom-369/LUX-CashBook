@@ -1,6 +1,6 @@
 import { Types, type HydratedDocument } from 'mongoose';
 import type { AuthSessionDto, UserDto, UserPreferences } from '@khata/shared';
-import { User, RefreshToken, Workspace, type IUser } from '../../models/index.js';
+import { User, RefreshToken, type IUser } from '../../models/index.js';
 import { DEFAULT_PREFERENCES } from '../../models/User.js';
 import { conflict, forbidden, notFound, tooManyRequests, unauthorized } from '../../lib/errors.js';
 import { hashPassword, needsRehash, verifyPassword } from '../../lib/password.js';
@@ -14,7 +14,7 @@ import {
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
 import { passwordChangedEmail, passwordResetEmail, sendMail, verificationEmail } from '../../lib/mailer.js';
-import { createWorkspace, toWorkspaceDto } from '../workspaces/workspace.service.js';
+import { createWorkspace, listWorkspaces } from '../workspaces/workspace.service.js';
 import { recordAudit } from '../../services/audit.service.js';
 import type { RegisterInput } from './auth.schema.js';
 
@@ -175,12 +175,14 @@ async function issueSession(
   meta: RequestMeta,
   familyId?: string,
 ): Promise<IssuedSession> {
-  const workspaces = await Workspace.find({ userId: user._id }).sort({ isDefault: -1, createdAt: 1 });
+  // Membership, not ownership (§Phase 9) — this is what makes a shared
+  // workspace actually show up for an invited member at login.
+  const workspaces = await listWorkspaces(user._id);
 
   // Self-heal a user whose active workspace was deleted or never set.
   let activeWorkspaceId = user.activeWorkspaceId ? String(user.activeWorkspaceId) : null;
-  if (!activeWorkspaceId || !workspaces.some((w) => String(w._id) === activeWorkspaceId)) {
-    activeWorkspaceId = workspaces[0] ? String(workspaces[0]._id) : null;
+  if (!activeWorkspaceId || !workspaces.some((w) => w.id === activeWorkspaceId)) {
+    activeWorkspaceId = workspaces[0] ? workspaces[0].id : null;
     if (activeWorkspaceId) {
       await User.updateOne({ _id: user._id }, { $set: { activeWorkspaceId } });
     }
@@ -210,7 +212,7 @@ async function issueSession(
   return {
     session: {
       user: toUserDto(user),
-      workspaces: workspaces.map(toWorkspaceDto),
+      workspaces,
       activeWorkspaceId,
       accessToken,
       expiresIn: accessTokenTtlSeconds(),
@@ -293,10 +295,10 @@ export async function buildSessionForUser(
 ): Promise<Omit<AuthSessionDto, 'accessToken' | 'expiresIn'>> {
   const user = await User.findById(userId);
   if (!user) throw notFound('User');
-  const workspaces = await Workspace.find({ userId }).sort({ isDefault: -1, createdAt: 1 });
+  const workspaces = await listWorkspaces(userId);
   return {
     user: toUserDto(user),
-    workspaces: workspaces.map(toWorkspaceDto),
+    workspaces,
     activeWorkspaceId: user.activeWorkspaceId ? String(user.activeWorkspaceId) : null,
   };
 }

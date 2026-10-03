@@ -1,20 +1,40 @@
 import { Types, type HydratedDocument } from 'mongoose';
-import { DEFAULT_CATEGORIES, type WorkspaceDto, type WorkspaceMode } from '@khata/shared';
-import { Account, Category, Workspace, type IWorkspace } from '../../models/index.js';
+import { DEFAULT_CATEGORIES, type WorkspaceDto, type WorkspaceMode, type WorkspaceRole } from '@khata/shared';
+import { Account, Category, Workspace, WorkspaceMember, type IWorkspace } from '../../models/index.js';
 import { conflict, forbidden, notFound } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
+import { countMembers, listMemberships, resolveMembership } from '../../services/workspaceMembership.service.js';
+
+export { countMembers };
 
 export type WorkspaceDoc = HydratedDocument<IWorkspace>;
 
-export function toWorkspaceDto(w: IWorkspace): WorkspaceDto {
+/** This user's own membership row for a workspace — carries `role` and `isDefault`. */
+export async function getOwnMembership(userId: Types.ObjectId, workspaceId: Types.ObjectId) {
+  return WorkspaceMember.findOne({ userId, workspaceId }).select('role isDefault').lean();
+}
+
+export function toWorkspaceDto(
+  w: IWorkspace,
+  myRole: WorkspaceRole,
+  memberCount: number,
+  isDefault: boolean,
+): WorkspaceDto {
   return {
     id: String(w._id),
     name: w.name,
     mode: w.mode,
     currency: w.currency,
-    isDefault: w.isDefault,
+    isDefault,
     isDemo: w.isDemo,
     fiscalYearStartMonth: w.fiscalYearStartMonth,
+    myRole,
+    memberCount,
+    businessName: w.businessName,
+    businessAddress: w.businessAddress,
+    gstin: w.gstin,
+    logoUrl: w.logoUrl,
+    state: w.state,
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),
   };
@@ -63,6 +83,17 @@ export async function createWorkspace(
     isDefault: input.isDefault ?? count === 0,
     isDemo: input.isDemo ?? false,
     fiscalYearStartMonth: input.fiscalYearStartMonth ?? (input.currency === 'INR' ? 4 : 1),
+  });
+
+  // The creator is always the owner — membership is what `requireWorkspace`
+  // actually checks (§Phase 9), so without this row the creator couldn't
+  // reach the workspace they just made.
+  await WorkspaceMember.create({
+    workspaceId: workspace._id,
+    userId,
+    role: 'owner',
+    isDefault: input.isDefault ?? count === 0,
+    joinedAt: new Date(),
   });
 
   await seedCategories(userId, workspace._id, input.mode);
@@ -140,35 +171,56 @@ export async function seedCategories(
   }
 }
 
-export async function listWorkspaces(userId: Types.ObjectId): Promise<WorkspaceDoc[]> {
-  return Workspace.find({ userId }).sort({ isDefault: -1, createdAt: 1 });
+/** Every workspace this user can reach — owned or shared with them (§Phase 9) — not just ones they created. */
+export async function listWorkspaces(userId: Types.ObjectId): Promise<WorkspaceDto[]> {
+  const memberRows = await WorkspaceMember.find({ userId }).select('workspaceId role isDefault').lean();
+  if (memberRows.length === 0) return [];
+
+  const byWorkspace = new Map(memberRows.map((m) => [String(m.workspaceId), m]));
+  const workspaces = await Workspace.find({ _id: { $in: memberRows.map((m) => m.workspaceId) } }).sort({ createdAt: 1 });
+
+  const counts = await Promise.all(workspaces.map((w) => countMembers(w._id)));
+  return workspaces
+    .map((w, i) => {
+      const membership = byWorkspace.get(String(w._id));
+      return toWorkspaceDto(w, membership?.role ?? 'viewer', counts[i] ?? 1, membership?.isDefault ?? false);
+    })
+    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
 }
 
 export async function getWorkspace(
   userId: Types.ObjectId,
   workspaceId: string | Types.ObjectId,
-): Promise<WorkspaceDoc> {
+): Promise<{ doc: WorkspaceDoc; role: WorkspaceRole }> {
   if (!Types.ObjectId.isValid(workspaceId)) throw notFound('Workspace');
-  const workspace = await Workspace.findOne({ _id: workspaceId, userId });
+  const resolved = await resolveMembership(userId, new Types.ObjectId(workspaceId));
   // Same response whether it does not exist or belongs to someone else — we never
   // confirm the existence of records the caller cannot see.
-  if (!workspace) throw notFound('Workspace');
-  return workspace;
+  if (!resolved) throw notFound('Workspace');
+  return { doc: resolved.workspace as WorkspaceDoc, role: resolved.role };
 }
 
 export type WorkspacePatch = Partial<
   Pick<
     IWorkspace,
-    'name' | 'currency' | 'fiscalYearStartMonth' | 'businessName' | 'businessAddress' | 'gstin' | 'logoUrl'
+    'name' | 'currency' | 'fiscalYearStartMonth' | 'businessName' | 'businessAddress' | 'gstin' | 'logoUrl' | 'state'
   >
 >;
+
+/** Owner/admin only — a member or viewer can use the workspace but not rename or reconfigure it. */
+function assertCanManageWorkspace(role: WorkspaceRole): void {
+  if (role !== 'owner' && role !== 'admin') {
+    throw forbidden('Only an owner or admin can change workspace settings.');
+  }
+}
 
 export async function updateWorkspace(
   userId: Types.ObjectId,
   workspaceId: string,
   patch: WorkspacePatch,
 ): Promise<WorkspaceDoc> {
-  const workspace = await getWorkspace(userId, workspaceId);
+  const { doc: workspace, role } = await getWorkspace(userId, workspaceId);
+  assertCanManageWorkspace(role);
 
   // Changing the currency of a workspace that already holds accounts would silently
   // reinterpret every stored amount. Refuse rather than corrupt.
@@ -187,42 +239,68 @@ export async function updateWorkspace(
   return workspace;
 }
 
+/**
+ * Which workspace this user lands on at login — per-membership (see
+ * `WorkspaceMember.isDefault`), so marking a shared workspace as "default"
+ * only ever changes *this* user's landing page, never anyone else's.
+ */
 export async function setDefaultWorkspace(userId: Types.ObjectId, workspaceId: string): Promise<void> {
-  const workspace = await getWorkspace(userId, workspaceId);
-  await Workspace.updateMany({ userId }, { $set: { isDefault: false } });
-  await Workspace.updateOne({ _id: workspace._id }, { $set: { isDefault: true } });
+  const { doc: workspace } = await getWorkspace(userId, workspaceId);
+  await WorkspaceMember.updateMany({ userId }, { $set: { isDefault: false } });
+  await WorkspaceMember.updateOne({ userId, workspaceId: workspace._id }, { $set: { isDefault: true } });
 }
 
 /**
- * Deleting a workspace destroys financial history, so it is guarded: it cannot be
- * the last remaining workspace, and a non-demo workspace requires its name to be
- * typed back as confirmation.
+ * Leaving/deleting a workspace destroys financial history if you're the
+ * owner, so it is guarded: a non-owner can always leave (they lose nothing
+ * of their own), but deleting the underlying data requires being the owner,
+ * it cannot be the last workspace this user can reach, and a non-demo
+ * workspace requires its name to be typed back as confirmation.
  */
 export async function deleteWorkspace(
   userId: Types.ObjectId,
   workspaceId: string,
   confirmation: string,
 ): Promise<void> {
-  const workspace = await getWorkspace(userId, workspaceId);
+  const { doc: workspace, role } = await getWorkspace(userId, workspaceId);
+  if (role !== 'owner') {
+    throw forbidden('Only the owner can delete this workspace. Use "Leave workspace" instead.');
+  }
 
-  const total = await Workspace.countDocuments({ userId });
-  if (total <= 1) {
+  const memberships = await listMemberships(userId);
+  if (memberships.length <= 1) {
     throw forbidden('You need at least one workspace.');
   }
   if (!workspace.isDemo && confirmation !== workspace.name) {
     throw forbidden('Type the workspace name exactly to confirm deletion.');
   }
 
+  const wasDefault = (await WorkspaceMember.findOne({ userId, workspaceId: workspace._id }).lean())?.isDefault ?? false;
+
   await purgeWorkspaceData(workspace._id);
   await workspace.deleteOne();
+  await WorkspaceMember.deleteMany({ workspaceId: workspace._id });
 
-  if (workspace.isDefault) {
-    const next = await Workspace.findOne({ userId }).sort({ createdAt: 1 });
+  if (wasDefault) {
+    const remaining = await listMemberships(userId);
+    const next = remaining[0];
     if (next) {
-      next.isDefault = true;
-      await next.save();
+      await WorkspaceMember.updateOne({ userId, workspaceId: next.workspaceId }, { $set: { isDefault: true } });
     }
   }
+}
+
+/** A non-owner member can leave a shared workspace at any time — their own membership row, nothing else. */
+export async function leaveWorkspace(userId: Types.ObjectId, workspaceId: string): Promise<void> {
+  const { role } = await getWorkspace(userId, workspaceId);
+  if (role === 'owner') {
+    throw forbidden('The owner cannot leave — delete the workspace or transfer ownership first.');
+  }
+  const memberships = await listMemberships(userId);
+  if (memberships.length <= 1) {
+    throw forbidden('You need at least one workspace.');
+  }
+  await WorkspaceMember.deleteOne({ userId, workspaceId: new Types.ObjectId(workspaceId) });
 }
 
 /**

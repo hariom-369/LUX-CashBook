@@ -54,7 +54,7 @@ export function PinLockScreen() {
       setPin('');
       setShake(true);
       setTimeout(() => setShake(false), 400);
-      setError(err instanceof ApiRequestError ? err.message : 'Could not verify that PIN.');
+      setError(err instanceof ApiRequestError ? err.message : t('app.couldNotVerifyThatPin'));
     } finally {
       setBusy(false);
     }
@@ -78,7 +78,7 @@ export function PinLockScreen() {
       <div className="mt-6 flex items-center gap-2 text-ink-secondary">
         <Lock aria-hidden className="size-4" />
         <p className="text-[14px] font-medium">
-          {userName ? `Welcome back, ${userName}` : 'Enter your PIN'}
+          {userName ? t('app.welcomeBack', { name: userName }) : t('app.enterYourPin')}
         </p>
       </div>
 
@@ -122,7 +122,7 @@ export function PinLockScreen() {
           type="button"
           onClick={() => setPin((current) => current.slice(0, -1))}
           disabled={busy || pin.length === 0}
-          aria-label="Delete digit"
+          aria-label={t('app.deleteDigit')}
           className="flex size-16 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-sunken disabled:opacity-30"
         >
           <Delete aria-hidden className="size-5" />
@@ -135,7 +135,7 @@ export function PinLockScreen() {
         className="mb-auto mt-10 flex items-center gap-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         <LogOut aria-hidden className="size-3.5" />
-        Sign in with password instead
+        {t('app.signInWithPasswordInstead')}
       </button>
     </div>
   );

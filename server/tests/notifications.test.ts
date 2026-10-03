@@ -22,6 +22,8 @@ function scopeOf(u: TestUser) {
     workspaceId: Types.ObjectId.createFromHexString(u.workspaceId),
     currency: 'INR',
     mode: 'personal' as const,
+    role: 'owner' as const,
+    hiddenAccountIds: [],
   };
 }
 

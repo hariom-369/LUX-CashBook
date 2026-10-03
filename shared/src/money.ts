@@ -213,3 +213,33 @@ export function formatPercent(value: number, decimals = 1): string {
   if (!Number.isFinite(value)) return '0%';
   return `${value.toFixed(decimals).replace(/\.0+$/, '')}%`;
 }
+
+/**
+ * Split `totalMinor` proportionally to `weights`, with every share an exact
+ * integer and the shares summing to exactly `totalMinor` (Phase 8: category
+ * splits, equal/percentage/shares group-expense splits). Equal weights give
+ * an equal split; weights of 1 for N parts split evenly, remainder paise
+ * going to the parts with the largest fractional remainder first — the
+ * standard "largest remainder" apportionment method, so no paise is ever
+ * dropped or invented.
+ */
+export function allocateProportionally(totalMinor: number, weights: number[]): number[] {
+  if (weights.length === 0) return [];
+  const weightSum = weights.reduce((sum, w) => sum + w, 0);
+  if (weightSum <= 0) return weights.map(() => 0);
+
+  const raw = weights.map((w) => (totalMinor * w) / weightSum);
+  const floors = raw.map((r) => Math.floor(r));
+  const allocated = floors.reduce((sum, f) => sum + f, 0);
+  const remainder = totalMinor - allocated;
+
+  const order = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+    .sort((a, b) => b.frac - a.frac);
+
+  const result = [...floors];
+  for (let k = 0; k < remainder; k++) {
+    result[order[k]!.i]! += 1;
+  }
+  return result;
+}

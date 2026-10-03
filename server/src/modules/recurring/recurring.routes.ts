@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { PAYMENT_METHODS, RECURRENCE_FREQUENCIES, TRANSACTION_TYPES } from '@khata/shared';
+import { BILL_KINDS, PAYMENT_METHODS, RECURRENCE_FREQUENCIES, TRANSACTION_TYPES } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
@@ -26,6 +26,7 @@ const createSchema = z
     toAccountId: objectIdSchema.optional(),
     categoryId: objectIdSchema.nullable().optional(),
     personId: objectIdSchema.nullable().optional(),
+    payeeId: objectIdSchema.nullable().optional(),
     description: text(200),
     paymentMethod: z.enum(PAYMENT_METHODS).optional(),
     frequency: z.enum(RECURRENCE_FREQUENCIES),
@@ -38,6 +39,7 @@ const createSchema = z
     autoPost: z.boolean().default(true),
     reminderDaysBefore: z.number().int().min(0).max(30).default(1),
     maxOccurrences: z.number().int().min(1).nullable().optional(),
+    billKind: z.enum(BILL_KINDS).nullable().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.frequency === 'custom' && !value.intervalDays) {

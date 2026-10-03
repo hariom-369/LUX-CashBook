@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { useT } from '../../i18n';
 
 /**
  * One overlay primitive, three presentations.
@@ -52,6 +53,7 @@ export function Sheet({
   busy = false,
   className,
 }: SheetProps) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
 
@@ -158,7 +160,7 @@ export function Sheet({
           )}
 
           {(title || description) && (
-            <header className="flex items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-6">
+            <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-5 sm:px-6">
               <div className="min-w-0">
                 {title && (
                   <h2 className="text-balance text-[17px] font-semibold tracking-[-0.01em] text-ink">
@@ -173,12 +175,12 @@ export function Sheet({
                 type="button"
                 onClick={requestClose}
                 disabled={busy}
-                aria-label="Close"
+                aria-label={t('common.close')}
                 className="-mr-1.5 -mt-1 shrink-0 rounded-md p-2 text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-40"
               >
                 <X aria-hidden className="size-4" />
               </button>
-            </header>
+            </div>
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6">{children}</div>
@@ -215,11 +217,12 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   tone = 'default',
   busy = false,
 }: ConfirmDialogProps) {
+  const t = useT();
   return (
     <Sheet open={open} onClose={onCancel} title={title} description={description} size="sm" busy={busy}>
       <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -229,18 +232,18 @@ export function ConfirmDialog({
           disabled={busy}
           className="h-11 rounded-md border border-line bg-surface px-5 text-sm font-medium text-ink transition-colors hover:bg-sunken disabled:opacity-60"
         >
-          {cancelLabel}
+          {cancelLabel ?? t('common.cancel')}
         </button>
         <button
           type="button"
           onClick={() => void onConfirm()}
           disabled={busy}
           className={cn(
-            'h-11 rounded-md px-5 text-sm font-medium text-white transition-colors disabled:opacity-60',
-            tone === 'danger' ? 'bg-negative hover:bg-negative/90' : 'bg-ink text-ink-inverse hover:bg-ink/90',
+            'h-11 rounded-md px-5 text-sm font-medium transition-colors disabled:opacity-60',
+            tone === 'danger' ? 'bg-negative text-ink-inverse hover:bg-negative/90' : 'bg-ink text-ink-inverse hover:bg-ink/90',
           )}
         >
-          {busy ? 'Working…' : confirmLabel}
+          {busy ? t('common.working') : (confirmLabel ?? t('common.confirm'))}
         </button>
       </div>
     </Sheet>

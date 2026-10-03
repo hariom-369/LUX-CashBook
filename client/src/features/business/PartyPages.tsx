@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States
 import { usePeople } from '../../lib/queries';
 import { Avatar } from '../people/PeoplePage';
 import { PersonFormSheet } from '../people/PersonFormSheet';
+import { useT } from '../../i18n';
 
 /**
  * Customers and suppliers (§55).
@@ -33,6 +34,8 @@ function PartyList({
   icon: React.ReactNode;
   emptyAction: string;
 }) {
+  const t = useT();
+  const noun = t.label('relationship', relationship, relationship).toLowerCase();
   const { data: people = [], isLoading, isError, error, refetch } = usePeople({ relationship, sortBy: 'balance' });
   const [creating, setCreating] = useState(false);
 
@@ -46,13 +49,13 @@ function PartyList({
           <p className="mt-0.5 text-[13px] text-ink-muted">{description}</p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add {relationship}
+          {t('common.add')} {noun}
         </Button>
       </header>
 
       {people.length > 0 && (
         <div className="rounded-lg border border-line bg-surface px-5 py-4 shadow-xs">
-          <p className="label-eyebrow">Total outstanding</p>
+          <p className="label-eyebrow">{t('business.totalOutstanding')}</p>
           <div className="mt-1.5">
             <Money amountMinor={totalOutstanding} size="xl" tone="neutral" compactDecimals />
           </div>
@@ -69,8 +72,8 @@ function PartyList({
         ) : people.length === 0 ? (
           <EmptyState
             icon={icon}
-            title={`No ${relationship}s yet`}
-            description={`Add a ${relationship} and every transaction with them builds a running ledger automatically.`}
+            title={t('business.noSYet', { relationship: noun })}
+            description={t('business.addAAndEveryTransactionWith', { relationship: noun })}
             action={
               <Button variant="gold" size="sm" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
                 {emptyAction}
@@ -106,25 +109,27 @@ function PartyList({
 }
 
 export function CustomersPage() {
+  const t = useT();
   return (
     <PartyList
       relationship="customer"
-      title="Customers"
-      description="Who owes you for goods or services — receivables at a glance."
+      title={t('nav.customers')}
+      description={t('business.whoOwesYouForGoodsOr')}
       icon={<Store className="size-5" />}
-      emptyAction="Add your first customer"
+      emptyAction={t('business.addYourFirstCustomer')}
     />
   );
 }
 
 export function SuppliersPage() {
+  const t = useT();
   return (
     <PartyList
       relationship="supplier"
-      title="Suppliers"
-      description="Who you owe for stock or services — payables at a glance."
+      title={t('nav.suppliers')}
+      description={t('business.whoYouOweForStockOr')}
       icon={<Truck className="size-5" />}
-      emptyAction="Add your first supplier"
+      emptyAction={t('business.addYourFirstSupplier')}
     />
   );
 }

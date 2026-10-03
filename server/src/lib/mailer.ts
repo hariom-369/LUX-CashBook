@@ -17,13 +17,24 @@ function getTransporter(): Transporter | null {
   if (transporter) return transporter;
   if (!env.SMTP_HOST) return null;
 
-  transporter = nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT ?? 587,
-    secure: env.SMTP_SECURE,
-    auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
-  });
+  transporter = nodemailer.createTransport(smtpOptions(env));
   return transporter;
+}
+
+/**
+ * The SMTP connection settings. In production, a connection that is not already TLS (`secure`, port 465) must
+ * upgrade with STARTTLS or the send fails: without `requireTLS`, nodemailer upgrades only if the server offers
+ * it, so a network attacker who strips the offer would get the SMTP password and the message in the clear.
+ * Certificates are always validated (nodemailer's default; nothing here relaxes it).
+ */
+export function smtpOptions(config: Pick<typeof env, 'SMTP_HOST' | 'SMTP_PORT' | 'SMTP_SECURE' | 'SMTP_USER' | 'SMTP_PASS' | 'isProduction'>) {
+  return {
+    host: config.SMTP_HOST,
+    port: config.SMTP_PORT ?? 587,
+    secure: config.SMTP_SECURE,
+    requireTLS: config.isProduction && !config.SMTP_SECURE,
+    auth: config.SMTP_USER ? { user: config.SMTP_USER, pass: config.SMTP_PASS } : undefined,
+  };
 }
 
 export interface MailMessage {
@@ -128,6 +139,36 @@ export function passwordChangedEmail(name: string): Omit<MailMessage, 'to'> {
        <p style="margin:12px 0 0">If this wasn't you, reset your password immediately.</p>`,
     ),
     text: `Hello ${name},\n\nThe password for your Khata account was just changed and all other sessions were signed out.\n\nIf this wasn't you, reset your password immediately.`,
+  };
+}
+
+export function workspaceInvitationEmail(workspaceName: string, role: string, url: string): Omit<MailMessage, 'to'> {
+  return {
+    subject: `You're invited to "${workspaceName}" on Khata`,
+    html: layout(
+      `Join "${escapeHtml(workspaceName)}"`,
+      `<p style="margin:0">You've been invited to join <strong>${escapeHtml(workspaceName)}</strong> as ${escapeHtml(role)}. Sign in with this email address and open the link below to accept.</p>`,
+      { label: 'View invitation', url },
+    ),
+    text: `You've been invited to join "${workspaceName}" on Khata as ${role}.\n\nSign in with this email address and open this link to accept:\n${url}\n\nThis invitation expires in 7 days.`,
+  };
+}
+
+export function invoiceSentEmail(options: {
+  customerName: string;
+  businessName: string;
+  invoiceNumber: string;
+  totalFormatted: string;
+  dueDateFormatted: string;
+}): Omit<MailMessage, 'to'> {
+  const { customerName, businessName, invoiceNumber, totalFormatted, dueDateFormatted } = options;
+  return {
+    subject: `Invoice ${invoiceNumber} from ${businessName}`,
+    html: layout(
+      `Invoice ${escapeHtml(invoiceNumber)}`,
+      `<p style="margin:0">Hello ${escapeHtml(customerName)}, ${escapeHtml(businessName)} has sent you an invoice for <strong>${escapeHtml(totalFormatted)}</strong>, due ${escapeHtml(dueDateFormatted)}.</p>`,
+    ),
+    text: `Hello ${customerName},\n\n${businessName} has sent you an invoice (${invoiceNumber}) for ${totalFormatted}, due ${dueDateFormatted}.`,
   };
 }
 

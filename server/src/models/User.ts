@@ -58,6 +58,8 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   accountingView: false,
   privacyModeDefault: false,
   numberFormat: 'indian',
+  aiAssistantEnabled: false,
+  homeScreen: 'dashboard',
   notifications: {
     inApp: true,
     email: true,
@@ -88,6 +90,8 @@ const preferencesSchema = new Schema<UserPreferences>(
     accountingView: { type: Boolean, default: false },
     privacyModeDefault: { type: Boolean, default: false },
     numberFormat: { type: String, enum: ['indian', 'western'], default: 'indian' },
+    aiAssistantEnabled: { type: Boolean, default: false },
+    homeScreen: { type: String, enum: ['dashboard', 'daily'], default: 'dashboard' },
     notifications: {
       inApp: { type: Boolean, default: true },
       email: { type: Boolean, default: true },

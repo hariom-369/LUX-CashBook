@@ -1,9 +1,10 @@
 import { Types, type HydratedDocument } from 'mongoose';
-import { addDays, endOfDay, type ReminderDto, type ReminderType } from '@khata/shared';
-import { Person, Reminder, Transaction, type IReminder } from '../../models/index.js';
+import { addDays, addMonths, daysInMonth, endOfDay, toDateKey, type ReminderDto, type ReminderType } from '@khata/shared';
+import { Account, Attachment, InstallmentPlan, Person, Reminder, Transaction, type IReminder } from '../../models/index.js';
 import { notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
+import { excludeHiddenAccounts, excludeHiddenTransactions } from '../../services/accountVisibility.js';
 
 export type ReminderDoc = HydratedDocument<IReminder>;
 
@@ -43,7 +44,17 @@ export async function listReminders(
   const filter: Record<string, unknown> = { workspaceId: scope.workspaceId };
   if (!options.includeDone) filter.isDone = false;
 
-  const reminders = await Reminder.find(filter).sort({ dueDate: 1 }).lean();
+  let reminders = await Reminder.find(filter).sort({ dueDate: 1 }).lean();
+  if (scope.hiddenAccountIds.length > 0) {
+    // Reminders derived from a loan on another member's private account would announce it.
+    const linked = reminders.map((r) => r.transactionId).filter(Boolean) as Types.ObjectId[];
+    if (linked.length > 0) {
+      const visible = new Set(
+        (await Transaction.find({ _id: { $in: linked }, ...excludeHiddenTransactions(scope) }).select('_id').lean()).map((t) => String(t._id)),
+      );
+      reminders = reminders.filter((r) => !r.transactionId || visible.has(String(r.transactionId)));
+    }
+  }
   const personIds = reminders.map((r) => r.personId).filter(Boolean) as Types.ObjectId[];
   const people = personIds.length
     ? await Person.find({ _id: { $in: personIds } }).select('name').lean()
@@ -152,7 +163,7 @@ export async function syncLoanReminders(scope: RequestScope): Promise<void> {
     workspaceId: scope.workspaceId,
     deletedAt: null,
     type: { $in: ['lend', 'borrow'] },
-    dueDate: { $ne: null },
+    ...excludeHiddenTransactions(scope),
     $expr: { $lt: ['$settledMinor', '$amountMinor'] },
   })
     .select('type amountMinor settledMinor dueDate personId')
@@ -164,12 +175,54 @@ export async function syncLoanReminders(scope: RequestScope): Promise<void> {
     : [];
   const nameById = new Map(people.map((p) => [String(p._id), p.name]));
 
+  const loanIds = outstandingLoans.map((l) => l._id);
+  const plans = loanIds.length
+    ? await InstallmentPlan.find({ workspaceId: scope.workspaceId, transactionId: { $in: loanIds } }).lean()
+    : [];
+  const planByLoan = new Map(plans.map((p) => [String(p.transactionId), p]));
+
   const liveKeys = new Set<string>();
 
   for (const loan of outstandingLoans) {
+    const name = loan.personId ? (nameById.get(String(loan.personId)) ?? 'Someone') : 'Someone';
+    const plan = planByLoan.get(String(loan._id));
+
+    if (plan) {
+      // Installments carry their own reminders — one per unpaid entry, in place
+      // of the single loan-level one below (§Phase 4).
+      let cumulative = 0;
+      for (const installment of [...plan.installments].sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())) {
+        cumulative += installment.amountMinor;
+        if (cumulative <= loan.settledMinor) continue; // already covered by real repayments
+
+        const sourceKey = `installment:${loan._id}:${toDateKey(installment.dueDate)}`;
+        liveKeys.add(sourceKey);
+        await Reminder.updateOne(
+          { workspaceId: scope.workspaceId, sourceKey },
+          {
+            $set: {
+              userId: scope.userId,
+              workspaceId: scope.workspaceId,
+              type: 'loan_due',
+              title: loan.type === 'lend' ? `${name} owes you (installment)` : `You owe ${name} (installment)`,
+              amountMinor: installment.amountMinor,
+              dueDate: installment.dueDate,
+              personId: loan.personId,
+              transactionId: loan._id,
+              sourceKey,
+              isDone: false,
+            },
+          },
+          { upsert: true },
+        );
+      }
+      continue;
+    }
+
+    if (!loan.dueDate) continue; // Nothing to base a reminder's date on.
+
     const sourceKey = `loan:${loan._id}`;
     liveKeys.add(sourceKey);
-    const name = loan.personId ? (nameById.get(String(loan.personId)) ?? 'Someone') : 'Someone';
     const outstanding = loan.amountMinor - loan.settledMinor;
 
     await Reminder.updateOne(
@@ -192,11 +245,113 @@ export async function syncLoanReminders(scope: RequestScope): Promise<void> {
     );
   }
 
-  // Retire generated reminders for loans that are now settled, deleted, or lost
-  // their due date — a stale "loan due" reminder is worse than none.
+  // Retire generated reminders for loans (or installments) that are now
+  // settled, deleted, replaced by a plan, or lost their due date — a stale
+  // "due" reminder is worse than none.
   await Reminder.deleteMany({
     workspaceId: scope.workspaceId,
-    sourceKey: { $regex: /^loan:/, $nin: [...liveKeys] },
+    sourceKey: { $regex: /^(loan|installment):/, $nin: [...liveKeys] },
+  });
+}
+
+/**
+ * Keep document-expiry reminders in sync with the vault (§Phase 6) — a
+ * warranty, insurance policy or rent agreement with an `expiryDate` gets one
+ * derived reminder 14 days out, retired the moment the document is deleted
+ * or its expiry date is cleared. Same upsert-by-`sourceKey` pattern as
+ * `syncLoanReminders`, for the same reason: idempotent, safe to run on every
+ * scheduler tick.
+ */
+export async function syncDocumentReminders(scope: RequestScope): Promise<void> {
+  const documents = await Attachment.find({
+    workspaceId: scope.workspaceId,
+    deletedAt: null,
+    expiryDate: { $ne: null },
+  })
+    .select('title fileName expiryDate docType')
+    .lean();
+
+  const liveKeys = new Set<string>();
+
+  for (const doc of documents) {
+    const sourceKey = `document:${doc._id}`;
+    liveKeys.add(sourceKey);
+
+    await Reminder.updateOne(
+      { workspaceId: scope.workspaceId, sourceKey },
+      {
+        $set: {
+          userId: scope.userId,
+          workspaceId: scope.workspaceId,
+          type: 'document_expiry',
+          title: `${doc.title || doc.fileName} expires`,
+          dueDate: doc.expiryDate,
+          sourceKey,
+          notifyDaysBefore: 14,
+          isDone: false,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  await Reminder.deleteMany({
+    workspaceId: scope.workspaceId,
+    sourceKey: { $regex: /^document:/, $nin: [...liveKeys] },
+  });
+}
+
+/**
+ * Keep credit-card payment-due reminders in sync (§Phase 7 credit card
+ * centre). One reminder per upcoming due date, retired once the card is paid
+ * down to zero or stops being overdrawn — the due date itself always comes
+ * from the account's `dueDay`, never duplicated into the reminder.
+ */
+export async function syncCardDueReminders(scope: RequestScope, now: Date = new Date()): Promise<void> {
+  const cards = await Account.find({
+    workspaceId: scope.workspaceId,
+    deletedAt: null,
+    type: 'credit_card',
+    dueDay: { $ne: null },
+    ...excludeHiddenAccounts(scope),
+  })
+    .select('name cachedBalanceMinor dueDay minimumDueMinor')
+    .lean();
+
+  const liveKeys = new Set<string>();
+
+  for (const card of cards) {
+    const outstanding = Math.max(0, -card.cachedBalanceMinor);
+    if (outstanding === 0) continue;
+
+    const clampedDay = Math.min(card.dueDay!, daysInMonth(now.getFullYear(), now.getMonth()));
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), clampedDay, 12);
+    const dueDate = thisMonth >= now ? thisMonth : addMonths(thisMonth, 1);
+
+    const sourceKey = `card:${card._id}:${toDateKey(dueDate)}`;
+    liveKeys.add(sourceKey);
+
+    await Reminder.updateOne(
+      { workspaceId: scope.workspaceId, sourceKey },
+      {
+        $set: {
+          userId: scope.userId,
+          workspaceId: scope.workspaceId,
+          type: 'bill',
+          title: `${card.name} payment due`,
+          amountMinor: card.minimumDueMinor || outstanding,
+          dueDate,
+          sourceKey,
+          isDone: false,
+        },
+      },
+      { upsert: true },
+    );
+  }
+
+  await Reminder.deleteMany({
+    workspaceId: scope.workspaceId,
+    sourceKey: { $regex: /^card:/, $nin: [...liveKeys] },
   });
 }
 
@@ -238,29 +393,37 @@ export async function raiseDueReminderNotifications(now: Date = new Date()): Pro
 
     const overdue = daysUntil < 0;
     const dedupeKey = `reminder:${reminder._id}:${now.toISOString().slice(0, 10)}`;
+    const title = overdue ? `Overdue: ${reminder.title}` : reminder.title;
+    const body = reminder.amountMinor
+      ? `${formatMoney(reminder.amountMinor, { compactDecimals: true })}${overdue ? ' is overdue.' : ` due ${daysUntil === 0 ? 'today' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`}.`}`
+      : overdue
+        ? 'This is overdue.'
+        : 'Coming up soon.';
+    // Loans are managed from People; everything else lives with the reminders.
+    const link = topic === 'moneyDue' ? '/people' : reminder.type === 'document_expiry' ? '/documents' : '/notifications';
 
-    await Notification.updateOne(
+    const result = await Notification.updateOne(
       { userId: reminder.userId, dedupeKey },
       {
         $setOnInsert: {
           userId: reminder.userId,
           workspaceId: reminder.workspaceId,
           type: reminder.type === 'loan_due' ? 'money_due' : 'money_due',
-          title: overdue ? `Overdue: ${reminder.title}` : reminder.title,
-          body: reminder.amountMinor
-            ? `${formatMoney(reminder.amountMinor, { compactDecimals: true })}${overdue ? ' is overdue.' : ` due ${daysUntil === 0 ? 'today' : `in ${daysUntil} day${daysUntil === 1 ? '' : 's'}`}.`}`
-            : overdue
-              ? 'This is overdue.'
-              : 'Coming up soon.',
+          title,
+          body,
           icon: 'Bell',
-          // Loans are managed from People; everything else lives with the reminders.
-          link: topic === 'moneyDue' ? '/people' : '/notifications',
+          link,
           amountMinor: reminder.amountMinor,
           dedupeKey,
         },
       },
       { upsert: true },
     );
+
+    if (result.upsertedCount > 0) {
+      const { deliverPushToUser } = await import('../../services/pushDelivery.service.js');
+      await deliverPushToUser(reminder.userId, { title, body, link });
+    }
 
     reminder.lastNotifiedAt = now;
     await reminder.save();

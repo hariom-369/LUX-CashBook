@@ -6,6 +6,7 @@ import { useUiStore, resolveTheme } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
 import { usePwaStore } from '../stores/pwa.store';
 import { useT } from '../i18n';
+import { useNavLabels } from '../i18n/nav';
 import { navItemsFor } from '../config/navigation';
 import { Logo } from '../components/brand/Logo';
 import { useNotifications } from '../lib/queries3';
@@ -18,6 +19,8 @@ import { useNotifications } from '../lib/queries3';
  * the moment it is useful is the moment someone is standing behind you.
  */
 export function TopBar() {
+  const t = useT();
+  const navLabels = useNavLabels();
   const location = useLocation();
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
@@ -43,7 +46,7 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setMobileNavOpen(true)}
-        aria-label="Open menu"
+        aria-label={t('layout.openMenu')}
         className="-ml-1.5 flex size-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-sunken lg:hidden"
       >
         <Menu aria-hidden className="size-5" />
@@ -51,9 +54,10 @@ export function TopBar() {
 
       <Logo compact className="lg:hidden" />
 
-      <h1 className="hidden min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-ink lg:block">
-        {current?.label ?? 'Khata'}
-      </h1>
+      {/* A visual page label only — every page renders its own <h1>, so this is not a second one. */}
+      <p className="hidden min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-ink lg:block">
+        {current ? navLabels.item(current) : 'Khata'}
+      </p>
 
       <div className="flex-1" />
 
@@ -64,7 +68,7 @@ export function TopBar() {
         className="hidden h-10 w-64 items-center gap-2.5 rounded-md border border-line bg-sunken px-3 text-[13px] text-ink-faint transition-colors hover:border-line-strong hover:bg-surface md:flex"
       >
         <Search aria-hidden className="size-4" />
-        <span className="flex-1 text-left">Search or jump to…</span>
+        <span className="flex-1 text-left">{t('common.searchOrJumpTo')}</span>
         <kbd className="rounded-sm border border-line bg-surface px-1.5 py-0.5 font-sans text-[10px] font-semibold text-ink-faint">
           Ctrl K
         </kbd>
@@ -73,7 +77,7 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setCommandPaletteOpen(true)}
-        aria-label="Search"
+        aria-label={t('layout.search')}
         className="flex size-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-sunken md:hidden"
       >
         <Search aria-hidden className="size-[18px]" />
@@ -82,9 +86,8 @@ export function TopBar() {
       <button
         type="button"
         onClick={togglePrivacy}
-        aria-pressed={privacyMode}
-        aria-label={privacyMode ? 'Show amounts' : 'Hide amounts'}
-        title={privacyMode ? 'Show amounts' : 'Hide amounts'}
+        aria-label={privacyMode ? t('common.showAmounts') : t('common.hideAmounts')}
+        title={privacyMode ? t('common.showAmounts') : t('common.hideAmounts')}
         className={cn(
           'flex size-10 items-center justify-center rounded-md transition-colors',
           privacyMode ? 'bg-gold-soft text-gold-strong' : 'text-ink-secondary hover:bg-sunken',
@@ -96,7 +99,7 @@ export function TopBar() {
       <button
         type="button"
         onClick={toggleTheme}
-        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={isDark ? t('layout.switchToLightMode') : t('layout.switchToDarkMode')}
         className="flex size-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-sunken"
       >
         {isDark ? <Sun aria-hidden className="size-[18px]" /> : <Moon aria-hidden className="size-[18px]" />}
@@ -110,20 +113,21 @@ export function TopBar() {
 }
 
 function NotificationBell() {
+  const t = useT();
   const { data } = useNotifications(true);
   const unreadCount = (data?.meta?.unreadCount as number | undefined) ?? 0;
 
   return (
     <Link
       to="/notifications"
-      aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+      aria-label={unreadCount > 0 ? t('layout.notificationsUnread', { count: unreadCount }) : t('settings.tab.notifications')}
       className="relative flex size-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-sunken"
     >
       <Bell aria-hidden className="size-[18px]" />
       {unreadCount > 0 && (
         <span
           aria-hidden
-          className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-gold text-[9px] font-bold text-white"
+          className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-gold text-[9px] font-bold text-ink-inverse"
         >
           {unreadCount > 9 ? '9+' : unreadCount}
         </span>
@@ -178,7 +182,7 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Account menu"
+        aria-label={t('layout.accountMenu')}
         className="flex size-9 items-center justify-center overflow-hidden rounded-full border border-line bg-sunken text-[12px] font-semibold text-ink-secondary transition-colors hover:border-gold"
       >
         {avatarUrl ? (
@@ -207,7 +211,7 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
             className="flex items-center gap-2.5 rounded-sm px-3 py-2 text-[13px] text-ink-secondary transition-colors hover:bg-sunken hover:text-ink"
           >
             <Settings aria-hidden className="size-4" />
-            Settings
+            {t('nav.settings')}
           </Link>
 
           {/* Only while the browser can actually install Khata (never a dead item). */}
@@ -230,7 +234,7 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
             className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13px] text-negative transition-colors hover:bg-negative-soft"
           >
             <LogOut aria-hidden className="size-4" />
-            Sign out
+            {t('common.signOut')}
           </button>
         </div>
       )}

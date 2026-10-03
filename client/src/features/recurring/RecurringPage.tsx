@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CalendarClock, Pause, Play, Plus, SkipForward } from 'lucide-react';
-import { RECURRENCE_FREQUENCIES, TRANSACTION_META, formatDate, relativeDay } from '@khata/shared';
+import { RECURRENCE_FREQUENCIES, TRANSACTION_META, formatDate, } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -13,13 +13,15 @@ import { useRecurring, useInvalidatePlanning } from '../../lib/queries3';
 import { api, errorMessage } from '../../lib/api';
 import { RecurringFormSheet } from './RecurringFormSheet';
 import type { RecurringTransactionDto } from '@khata/shared';
+import { useT, msg, type MessageRef } from '../../i18n';
+import { useRelativeDay } from '../../i18n/relativeDay';
 
-const FREQUENCY_LABEL: Record<(typeof RECURRENCE_FREQUENCIES)[number], string> = {
-  daily: 'Daily',
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  yearly: 'Yearly',
-  custom: 'Custom',
+const FREQUENCY_LABEL: Record<(typeof RECURRENCE_FREQUENCIES)[number], MessageRef> = {
+  daily: msg('recurring.daily'),
+  weekly: msg('recurring.weekly'),
+  monthly: msg('recurring.monthly'),
+  yearly: msg('recurring.yearly'),
+  custom: msg('recurring.custom'),
 };
 
 /**
@@ -30,6 +32,7 @@ const FREQUENCY_LABEL: Record<(typeof RECURRENCE_FREQUENCIES)[number], string> =
  * schedule up and, when a specific occurrence needs it, overriding it by hand.
  */
 export function RecurringPage() {
+  const t = useT();
   const { data: recurring = [], isLoading, isError, error, refetch } = useRecurring();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<RecurringTransactionDto | null>(null);
@@ -38,11 +41,11 @@ export function RecurringPage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Recurring</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">Salary, rent, EMIs and subscriptions, on autopilot.</p>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.recurring')}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{t('recurring.salaryRentEmisAndSubscriptionsOn')}</p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add recurring
+          {t('recurring.addRecurring')}
         </Button>
       </header>
 
@@ -56,11 +59,11 @@ export function RecurringPage() {
         ) : recurring.length === 0 ? (
           <EmptyState
             icon={<CalendarClock className="size-5" />}
-            title="Nothing scheduled"
-            description="Salary, rent, SIPs, subscriptions — set them up once and they post automatically, with a reminder before each one."
+            title={t('recurring.nothingScheduled')}
+            description={t('recurring.salaryRentSipsSubscriptionsSetThem')}
             action={
               <Button variant="gold" size="sm" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-                Add your first recurring entry
+                {t('recurring.addYourFirstRecurringEntry')}
               </Button>
             }
           />
@@ -86,6 +89,8 @@ export function RecurringPage() {
 }
 
 function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit: () => void }) {
+  const t = useT();
+  const relativeDay = useRelativeDay();
   const toast = useToast();
   const invalidate = useInvalidatePlanning();
   const meta = TRANSACTION_META[item.type];
@@ -96,9 +101,9 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
     try {
       await api.post(`/recurring/${item.id}/run`);
       invalidate();
-      toast.success(`${item.name} posted`);
+      toast.success(t('recurring.posted', { name: item.name }));
     } catch (err) {
-      toast.error('Could not post that', errorMessage(err));
+      toast.error(t('recurring.couldNotPostThat'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -109,9 +114,9 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
     try {
       await api.post(`/recurring/${item.id}/skip`);
       invalidate();
-      toast.success('Occurrence skipped');
+      toast.success(t('recurring.occurrenceSkipped'));
     } catch (err) {
-      toast.error('Could not skip that', errorMessage(err));
+      toast.error(t('recurring.couldNotSkipThat'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -122,9 +127,9 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
     try {
       await api.patch(`/recurring/${item.id}`, { isPaused: item.isActive });
       invalidate();
-      toast.success(item.isActive ? 'Paused' : 'Resumed');
+      toast.success(item.isActive ? t('recurring.paused') : t('recurring.resumed'));
     } catch (err) {
-      toast.error('Could not update that', errorMessage(err));
+      toast.error(t('common.couldNotUpdateThat'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -151,13 +156,13 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
           <span className="truncate text-[13.5px] font-medium text-ink">{item.name}</span>
           {!item.isActive && (
             <Badge tone="outline" eyebrow>
-              Paused
+              {t('recurring.paused')}
             </Badge>
           )}
         </span>
         <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
-          {FREQUENCY_LABEL[item.frequency]} · {item.accountName} ·{' '}
-          {item.isActive ? `Next ${relativeDay(item.nextRunDate)}` : `Was due ${formatDate(item.nextRunDate)}`}
+          {t(FREQUENCY_LABEL[item.frequency].key)} · {item.accountName} ·{' '}
+          {item.isActive ? t('recurring.nextWhen', { when: relativeDay(item.nextRunDate) }) : t('recurring.wasDue', { date: formatDate(item.nextRunDate) })}
         </span>
       </button>
 
@@ -174,8 +179,8 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
           type="button"
           onClick={() => void skip()}
           disabled={busy !== null || !item.isActive}
-          aria-label="Skip next occurrence"
-          title="Skip next occurrence"
+          aria-label={t('recurring.skipNextOccurrence')}
+          title={t('recurring.skipNextOccurrence')}
           className="rounded-sm p-2 text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-40"
         >
           <SkipForward aria-hidden className="size-4" />
@@ -184,14 +189,14 @@ function RecurringRow({ item, onEdit }: { item: RecurringTransactionDto; onEdit:
           type="button"
           onClick={() => void togglePause()}
           disabled={busy !== null}
-          aria-label={item.isActive ? 'Pause' : 'Resume'}
-          title={item.isActive ? 'Pause' : 'Resume'}
+          aria-label={item.isActive ? t('recurring.pause') : t('recurring.resume')}
+          title={item.isActive ? t('recurring.pause') : t('recurring.resume')}
           className="rounded-sm p-2 text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:opacity-40"
         >
           {item.isActive ? <Pause aria-hidden className="size-4" /> : <Play aria-hidden className="size-4" />}
         </button>
         <Button variant="secondary" size="sm" loading={busy === 'run'} disabled={busy !== null || !item.isActive} onClick={() => void runNow()}>
-          Run now
+          {t('recurring.runNow')}
         </Button>
       </div>
     </li>

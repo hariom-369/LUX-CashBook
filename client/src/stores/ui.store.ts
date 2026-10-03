@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Theme } from '@khata/shared';
+import type { ParsedQuickEntry } from '../lib/naturalLanguageEntry';
 
 /**
  * UI state that must survive a reload but never belongs on the server:
@@ -15,6 +16,7 @@ import type { Theme } from '@khata/shared';
 const THEME_KEY = 'khata.theme';
 const PRIVACY_KEY = 'khata.privacy';
 const SIDEBAR_KEY = 'khata.sidebar';
+const LANGUAGE_KEY = 'khata.language';
 
 function readStorage(key: string): string | null {
   try {
@@ -59,8 +61,12 @@ interface UiState {
   theme: Theme;
   privacyMode: boolean;
   sidebarCollapsed: boolean;
+  /** The language this device shows while nobody is signed in (login, register, reset). A signed-in user's own preference wins. */
+  deviceLanguage: string;
   commandPaletteOpen: boolean;
   quickAddOpen: boolean;
+  /** Set by the Assistant (§Phase 10) before opening Quick Add, so a parsed draft lands straight on the review form — consumed once, then cleared. */
+  quickAddPrefill: ParsedQuickEntry | null;
   mobileNavOpen: boolean;
   /** The app-lock PIN screen (§37) is covering the UI until this clears. */
   locked: boolean;
@@ -71,8 +77,11 @@ interface UiState {
   togglePrivacyMode: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebar: () => void;
+  setDeviceLanguage: (language: string) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setQuickAddOpen: (open: boolean) => void;
+  openQuickAddWithPrefill: (prefill: ParsedQuickEntry) => void;
+  consumeQuickAddPrefill: () => ParsedQuickEntry | null;
   setMobileNavOpen: (open: boolean) => void;
   setLocked: (locked: boolean) => void;
 }
@@ -81,8 +90,13 @@ export const useUiStore = create<UiState>((set, get) => ({
   theme: (readStorage(THEME_KEY) as Theme | null) ?? 'system',
   privacyMode: readStorage(PRIVACY_KEY) === '1',
   sidebarCollapsed: readStorage(SIDEBAR_KEY) === '1',
+  deviceLanguage: (() => {
+    const stored = readStorage(LANGUAGE_KEY);
+    return stored && /^[a-z]{2,3}$/.test(stored) ? stored : 'en';
+  })(),
   commandPaletteOpen: false,
   quickAddOpen: false,
+  quickAddPrefill: null,
   mobileNavOpen: false,
   locked: false,
 
@@ -118,8 +132,19 @@ export const useUiStore = create<UiState>((set, get) => ({
     get().setSidebarCollapsed(!get().sidebarCollapsed);
   },
 
+  setDeviceLanguage(language) {
+    writeStorage(LANGUAGE_KEY, language);
+    set({ deviceLanguage: language });
+  },
+
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
   setQuickAddOpen: (quickAddOpen) => set({ quickAddOpen }),
+  openQuickAddWithPrefill: (prefill) => set({ quickAddPrefill: prefill, quickAddOpen: true }),
+  consumeQuickAddPrefill: () => {
+    const prefill = get().quickAddPrefill;
+    if (prefill) set({ quickAddPrefill: null });
+    return prefill;
+  },
   setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),
   setLocked: (locked) => set({ locked }),
 }));

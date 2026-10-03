@@ -1,4 +1,6 @@
 import type { ApiError, ApiResponse } from '@khata/shared';
+import { currentLanguage, tNow } from '../i18n';
+import { translateServerMessage } from '../i18n/serverMessages';
 
 /**
  * The HTTP client.
@@ -17,6 +19,20 @@ import type { ApiError, ApiResponse } from '@khata/shared';
  */
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
+
+/**
+ * The server hands out attachment and document links already prefixed with `/api/v1` (`url`, `thumbnailUrl`).
+ * `API_BASE` carries that prefix too, so a link used as-is was requested as `/api/v1/api/v1/...` and 404ed:
+ * thumbnails never rendered and downloads of those links failed. Drop a leading prefix before joining.
+ */
+export function apiPath(path: string): string {
+  return path.replace(/^\/api\/v1(?=\/)/, '');
+}
+
+/** The absolute-or-relative URL for an API path or a server-issued link. */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${apiPath(path)}`;
+}
 
 let accessToken: string | null = null;
 let activeWorkspaceId: string | null = null;
@@ -60,11 +76,13 @@ export class ApiRequestError extends Error {
   readonly requestId?: string;
 
   constructor(status: number, error: ApiError['error']) {
-    super(error.message);
+    // The server answers in English; show the catalogue's translation of the sentences it knows (§Phase 14).
+    const language = currentLanguage();
+    super(translateServerMessage(language, error.message));
     this.name = 'ApiRequestError';
     this.status = status;
     this.code = error.code;
-    this.fields = error.fields ?? [];
+    this.fields = (error.fields ?? []).map((field) => ({ ...field, message: translateServerMessage(language, field.message) }));
     this.requestId = error.requestId;
   }
 
@@ -146,7 +164,7 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
     // fetch only rejects for network-level failures — the offline case (§39).
     throw new ApiRequestError(0, {
       code: 'NETWORK_ERROR',
-      message: "You're offline. Your changes are saved on this device and will sync when you reconnect.",
+      message: tNow('api.offlineMessage'),
     });
   }
 
@@ -160,12 +178,12 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   } catch {
     throw new ApiRequestError(response.status, {
       code: 'BAD_RESPONSE',
-      message: 'The server sent a response we could not read. Please try again.',
+      message: tNow('api.unreadableResponse'),
     });
   }
 
   if (!response.ok || payload.ok === false) {
-    const error = 'error' in payload ? payload.error : { code: 'UNKNOWN', message: 'Something went wrong.' };
+    const error = 'error' in payload ? payload.error : { code: 'UNKNOWN', message: tNow('api.somethingWentWrong') };
     throw new ApiRequestError(response.status, error);
   }
 
@@ -252,5 +270,5 @@ export const api = {
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiRequestError) return err.message;
   if (err instanceof Error && err.message) return err.message;
-  return 'Something went wrong. Please try again.';
+  return tNow('api.somethingWentWrongTryAgain');
 }

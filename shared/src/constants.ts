@@ -222,10 +222,68 @@ export const PERSON_RELATIONSHIP_LABELS: Record<PersonRelationship, string> = {
 export const RECURRENCE_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly', 'custom'] as const;
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 
+// ─────────────────────────────────────────────── Bills & subscriptions
+
+export const BILL_KINDS = [
+  'electricity', 'water', 'gas', 'internet', 'phone', 'rent', 'emi', 'insurance', 'subscription', 'other',
+] as const;
+export type BillKind = (typeof BILL_KINDS)[number];
+
+export const BILL_KIND_LABELS: Record<BillKind, string> = {
+  electricity: 'Electricity', water: 'Water', gas: 'Gas', internet: 'Internet', phone: 'Phone',
+  rent: 'Rent', emi: 'EMI', insurance: 'Insurance', subscription: 'Subscription', other: 'Other',
+};
+
+// ─────────────────────────────────────────────── Household workspaces
+
+export const WORKSPACE_ROLES = ['owner', 'admin', 'member', 'viewer'] as const;
+export type WorkspaceRole = (typeof WORKSPACE_ROLES)[number];
+
+export const WORKSPACE_ROLE_LABELS: Record<WorkspaceRole, string> = {
+  owner: 'Owner', admin: 'Admin', member: 'Member', viewer: 'Viewer',
+};
+
+export const ACCOUNT_VISIBILITIES = ['shared', 'private'] as const;
+export type AccountVisibility = (typeof ACCOUNT_VISIBILITIES)[number];
+
+// ─────────────────────────────────────────────── Splits & groups
+
+export const GROUP_SPLIT_METHODS = ['equal', 'exact', 'percentage', 'shares'] as const;
+export type GroupSplitMethod = (typeof GROUP_SPLIT_METHODS)[number];
+
+// ─────────────────────────────────────────────── Document vault
+
+/**
+ * What another member sees in place of a transfer that touches someone else's private account
+ * (§Phase 9): only the leg on a shared account is shown, and this is all it says. The client
+ * translates it by matching this exact text (or the DTO's `isMasked` flag).
+ */
+export const PRIVATE_TRANSFER_LABEL = 'Transfer with a private account';
+
+// ─────────────────────────────────────────────── Reimbursements (§Phase 7)
+
+/**
+ * Where an expense you expect to be paid back stands. A *tracking* status only: it never changes the
+ * expense, an account balance, or the income/expense totals. The payout, when it arrives, is an
+ * ordinary income entry the user records themselves and then links here.
+ */
+export const REIMBURSEMENT_STATUSES = ['pending', 'submitted', 'approved', 'paid'] as const;
+export type ReimbursementStatus = (typeof REIMBURSEMENT_STATUSES)[number];
+
+export const DOCUMENT_TYPES = [
+  'receipt', 'bill', 'warranty', 'rent_agreement', 'insurance', 'salary_slip', 'id_document', 'other',
+] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  receipt: 'Receipt', bill: 'Bill', warranty: 'Warranty', rent_agreement: 'Rent agreement',
+  insurance: 'Insurance', salary_slip: 'Salary slip', id_document: 'ID document', other: 'Other',
+};
+
 // ─────────────────────────────────────────────── Reminders & notifications
 
 export const REMINDER_TYPES = [
-  'receivable', 'payable', 'loan_due', 'bill', 'subscription', 'rent', 'emi', 'recurring', 'custom',
+  'receivable', 'payable', 'loan_due', 'bill', 'subscription', 'rent', 'emi', 'recurring', 'document_expiry', 'custom',
 ] as const;
 export type ReminderType = (typeof REMINDER_TYPES)[number];
 
@@ -260,3 +318,79 @@ export const GOAL_ICONS = [
 
 /** Budget alert thresholds offered by default; users may set their own (§29). */
 export const DEFAULT_BUDGET_THRESHOLDS = [50, 75, 90, 100] as const;
+
+// ─────────────────────────────────────────────── Invoicing (Phase 11)
+
+/**
+ * Stored invoice statuses. `overdue` is NOT one of these — it is derived at read
+ * time (`sent` past its due date), never stored, so there is nothing for a cron
+ * job to keep in sync and no way for it to go stale. The client-facing status
+ * type includes it anyway (`InvoiceStatus`) because a DTO can legitimately report
+ * it; the schema enum below is the stored subset only.
+ */
+export const INVOICE_STORED_STATUSES = ['draft', 'sent', 'paid', 'cancelled'] as const;
+export type InvoiceStoredStatus = (typeof INVOICE_STORED_STATUSES)[number];
+
+export const INVOICE_STATUSES = ['draft', 'sent', 'overdue', 'paid', 'cancelled'] as const;
+export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
+
+export const INVOICE_STATUS_META: Record<InvoiceStatus, { label: string; tone: 'positive' | 'negative' | 'neutral' | 'warning' }> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  sent: { label: 'Sent', tone: 'neutral' },
+  overdue: { label: 'Overdue', tone: 'negative' },
+  paid: { label: 'Paid', tone: 'positive' },
+  cancelled: { label: 'Cancelled', tone: 'neutral' },
+};
+
+export const QUOTATION_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'expired', 'converted'] as const;
+export type QuotationStatus = (typeof QUOTATION_STATUSES)[number];
+
+export const QUOTATION_STATUS_META: Record<QuotationStatus, { label: string; tone: 'positive' | 'negative' | 'neutral' | 'warning' }> = {
+  draft: { label: 'Draft', tone: 'neutral' },
+  sent: { label: 'Sent', tone: 'neutral' },
+  accepted: { label: 'Accepted', tone: 'positive' },
+  declined: { label: 'Declined', tone: 'negative' },
+  expired: { label: 'Expired', tone: 'warning' },
+  converted: { label: 'Converted to invoice', tone: 'positive' },
+};
+
+export const PROJECT_STATUSES = ['active', 'completed', 'archived'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+
+// ─────────────────────────────────────────────── Inventory (Phase 12)
+
+export const STOCK_MOVEMENT_TYPES = ['in', 'out', 'adjustment'] as const;
+export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
+
+export const STOCK_MOVEMENT_LABELS: Record<StockMovementType, string> = {
+  in: 'Stock in',
+  out: 'Stock out',
+  adjustment: 'Adjustment',
+};
+
+// ─────────────────────────────────────────────── GST (Phase 13)
+
+/**
+ * India's states and union territories, for "place of supply" — GST's rule
+ * for whether a sale is intra-state (CGST+SGST) or inter-state (IGST) turns
+ * on comparing the supplier's and the recipient's state, not just whether
+ * they're the "same workspace"/"same customer". No filing or return claims
+ * are made anywhere in this app — see `docs/ROADMAP_PHASE13_NOTES.md`.
+ */
+export const INDIAN_STATES = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat',
+  'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+  'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand',
+  'West Bengal', 'Andaman and Nicobar Islands', 'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu', 'Delhi', 'Jammu and Kashmir', 'Ladakh',
+  'Lakshadweep', 'Puducherry',
+] as const;
+export type IndianState = (typeof INDIAN_STATES)[number];
+
+/** The slabs actually in use under GST — not every percentage is valid. */
+export const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 12, 18, 28] as const;
+export type GstRate = (typeof GST_RATES)[number];
+
+export const PRICE_TYPES = ['exclusive', 'inclusive'] as const;
+export type PriceType = (typeof PRICE_TYPES)[number];

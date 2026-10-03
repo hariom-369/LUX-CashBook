@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { PERSON_RELATIONSHIPS } from '@khata/shared';
+import { INDIAN_STATES, PERSON_RELATIONSHIPS } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
@@ -17,6 +17,7 @@ import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './person.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import { getTransaction } from '../transactions/transaction.query.js';
+import { getPersonTimeline } from '../loans/loan.service.js';
 
 export const personRouter: Router = Router();
 
@@ -34,6 +35,8 @@ const createSchema = z.object({
   avatarUrl: text(512),
   relationship: z.enum(PERSON_RELATIONSHIPS).default('friend'),
   notes: text(1000),
+  gstin: text(15),
+  state: z.enum(INDIAN_STATES).optional(),
   tags: tagsSchema,
   /** Positive = they owe you. Negative = you owe them. */
   openingBalanceMinor: amountMinorSchema.default(0),
@@ -99,7 +102,7 @@ personRouter.get(
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const person = await service.getPerson(scopeOf(req), param(req, 'id'));
-    ok(res, service.toPersonDto(person));
+    ok(res, await service.toScopedPersonDto(scopeOf(req), person));
   }),
 );
 
@@ -138,6 +141,15 @@ personRouter.get(
       req.query as { from?: Date; to?: Date },
     );
     ok(res, ledger);
+  }),
+);
+
+/** Every loan with this person, each broken out into its own repayment timeline (Phase 4). */
+personRouter.get(
+  '/:id/timeline',
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await getPersonTimeline(scopeOf(req), param(req, 'id')));
   }),
 );
 

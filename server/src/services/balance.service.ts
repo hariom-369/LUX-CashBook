@@ -3,6 +3,7 @@ import { Account, Person, Transaction } from '../models/index.js';
 import type { RequestScope } from '../middleware/context.js';
 import type { UnitOfWork } from '../lib/transaction.js';
 import { logger } from '../lib/logger.js';
+import { excludeHiddenAccounts, excludeHiddenTransactions } from './accountVisibility.js';
 
 /**
  * Balances (invariants I2 and I3).
@@ -162,6 +163,7 @@ export async function getWorkspaceTotals(scope: RequestScope): Promise<{
     workspaceId: scope.workspaceId,
     deletedAt: null,
     excludeFromTotals: false,
+    ...excludeHiddenAccounts(scope),
   })
     .select('type cachedBalanceMinor isLiability')
     .lean();
@@ -270,6 +272,9 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
 
   const accounts = await Account.find({ workspaceId, deletedAt: null }).lean();
   const people = await Person.find({ workspaceId, deletedAt: null }).lean();
+  // The check itself runs over everything (a hidden account can still be wrong), but nothing
+  // that identifies another member's private account may be reported back to this viewer.
+  const hiddenIds = new Set(scope.hiddenAccountIds.map(String));
 
   // — Account balances must equal opening + Σ postings.
   const postingTotals = await Transaction.aggregate<{ _id: Types.ObjectId; total: number }>([
@@ -280,6 +285,7 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
   const postingByAccount = new Map(postingTotals.map((row) => [String(row._id), row.total]));
 
   for (const account of accounts) {
+    if (hiddenIds.has(String(account._id))) continue;
     const expected = account.openingBalanceMinor + (postingByAccount.get(String(account._id)) ?? 0);
     if (expected !== account.cachedBalanceMinor) {
       issues.push({
@@ -295,7 +301,7 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
   // — Postings must not reference accounts that no longer exist.
   const knownAccounts = new Set(accounts.map((a) => String(a._id)));
   for (const [accountId] of postingByAccount) {
-    if (!knownAccounts.has(accountId)) {
+    if (!knownAccounts.has(accountId) && !hiddenIds.has(accountId)) {
       issues.push({
         kind: 'orphan_posting',
         id: accountId,
@@ -327,7 +333,7 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
 
   // — Every transfer's legs must cancel exactly (invariant I4).
   const unbalanced = await Transaction.aggregate<{ _id: Types.ObjectId; sum: number; description: string }>([
-    { $match: { workspaceId, deletedAt: null, type: 'transfer' } },
+    { $match: { workspaceId, deletedAt: null, type: 'transfer', ...(scope.hiddenAccountIds.length > 0 ? { 'postings.accountId': { $nin: scope.hiddenAccountIds } } : {}) } },
     {
       $project: {
         description: 1,
@@ -348,7 +354,7 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
     });
   }
 
-  const transactionCount = await Transaction.countDocuments({ workspaceId, deletedAt: null });
+  const transactionCount = await Transaction.countDocuments({ workspaceId, deletedAt: null, ...excludeHiddenTransactions(scope) });
 
   if (issues.length > 0) {
     logger.warn(
@@ -359,7 +365,7 @@ export async function verifyIntegrity(scope: RequestScope): Promise<{
 
   return {
     ok: issues.length === 0,
-    checked: { accounts: accounts.length, people: people.length, transactions: transactionCount },
+    checked: { accounts: accounts.length - [...hiddenIds].filter((id) => knownAccounts.has(id)).length, people: people.length, transactions: transactionCount },
     issues,
   };
 }

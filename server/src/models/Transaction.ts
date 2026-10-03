@@ -37,6 +37,10 @@ export interface ITransaction {
   categoryId?: Types.ObjectId | null;
   subcategoryId?: Types.ObjectId | null;
   personId?: Types.ObjectId | null;
+  /** The merchant/counterparty this was recorded against, if any (`Payee`, decision 3). */
+  payeeId?: Types.ObjectId | null;
+  /** Billable expense attribution (§Phase 11) — which project this counts against, if any. Only ever set on `expense` rows in practice, but not enforced at the schema level, same as `payeeId`. */
+  projectId?: Types.ObjectId | null;
 
   /**
    * Signed effect on the person's ledger (ARCHITECTURE §3.3).
@@ -78,6 +82,18 @@ export interface ITransaction {
   /** Client-supplied key that makes a retried POST a no-op instead of a duplicate. */
   idempotencyKey?: string | null;
 
+  /** Set once a bank-statement row has been matched/confirmed against this transaction (§Phase 5). */
+  reconciledAt?: Date | null;
+  statementRef?: string | null;
+
+  /** Shared by every row one split payment created (§Phase 8). */
+  splitGroupId?: string | null;
+  /** Set on the expense/lend rows a group expense created. */
+  groupExpenseId?: Types.ObjectId | null;
+
+  /** Reimbursement tracking on an expense (§Phase 7) - a status, never an accounting entry. */
+  reimbursement?: { status: 'pending' | 'submitted' | 'approved' | 'paid'; payoutTransactionId?: Types.ObjectId | null; updatedAt: Date } | null;
+
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
   /** Edit revision, bumped only by user edits — see lib/revision.ts. */
@@ -115,6 +131,8 @@ const transactionSchema = new Schema<ITransaction>(
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
     subcategoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
     personId: { type: Schema.Types.ObjectId, ref: 'Person', default: null },
+    payeeId: { type: Schema.Types.ObjectId, ref: 'Payee', default: null },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', default: null },
     personDeltaMinor: moneyField({ default: 0 }),
 
     description: { type: String, trim: true, maxlength: 200, default: '' },
@@ -138,6 +156,23 @@ const transactionSchema = new Schema<ITransaction>(
     importBatchId: { type: String, default: null },
     idempotencyKey: { type: String, default: null },
 
+    reconciledAt: { type: Date, default: null },
+    statementRef: { type: String, default: null, maxlength: 120 },
+
+    splitGroupId: { type: String, default: null },
+    groupExpenseId: { type: Schema.Types.ObjectId, ref: 'GroupExpense', default: null },
+    reimbursement: {
+      type: new Schema(
+        {
+          status: { type: String, enum: ['pending', 'submitted', 'approved', 'paid'], required: true },
+          payoutTransactionId: { type: Schema.Types.ObjectId, ref: 'Transaction', default: null },
+          updatedAt: { type: Date, required: true },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
+
     ...softDeleteFields,
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
     rev: { type: Number, default: 0, min: 0 },
@@ -157,6 +192,10 @@ transactionSchema.index({ workspaceId: 1, deletedAt: 1, date: -1, _id: -1 });
 transactionSchema.index({ workspaceId: 1, 'postings.accountId': 1, deletedAt: 1, date: 1, _id: 1 });
 /** Person ledger (§13). */
 transactionSchema.index({ workspaceId: 1, personId: 1, deletedAt: 1, date: 1, _id: 1 });
+/** A payee's own transaction history. */
+transactionSchema.index({ workspaceId: 1, payeeId: 1, deletedAt: 1, date: -1 });
+/** A project's billable-expense history. */
+transactionSchema.index({ workspaceId: 1, projectId: 1, deletedAt: 1 });
 /** Category reports and budget consumption. */
 transactionSchema.index({ workspaceId: 1, categoryId: 1, deletedAt: 1, date: -1 });
 /** Type filters and income/expense aggregates. */
@@ -178,6 +217,9 @@ transactionSchema.index(
   { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
 );
 transactionSchema.index({ workspaceId: 1, importBatchId: 1 }, { sparse: true });
+transactionSchema.index({ workspaceId: 1, splitGroupId: 1 }, { sparse: true });
+transactionSchema.index({ workspaceId: 1, groupExpenseId: 1 }, { sparse: true });
+transactionSchema.index({ workspaceId: 1, 'reimbursement.status': 1 }, { sparse: true });
 
 // ─────────────────────────────────────────────── Integrity checks
 //

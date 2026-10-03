@@ -1,13 +1,14 @@
 import { Types } from 'mongoose';
 import {
   Account, Budget, Category, Person, PettyCash, RecurringTransaction,
-  Reminder, SavingsGoal, Transaction, Workspace,
+  Reminder, SavingsGoal, Transaction, Workspace, WorkspaceMember,
 } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { withTransaction } from '../../lib/transaction.js';
 import { badRequest } from '../../lib/errors.js';
 import { recomputeAllBalances } from '../../services/balance.service.js';
 import { logger } from '../../lib/logger.js';
+import { excludeHiddenAccounts } from '../../services/accountVisibility.js';
 
 /**
  * Backup & restore (§40).
@@ -44,15 +45,21 @@ export async function createBackup(scope: RequestScope): Promise<BackupPayload> 
   const workspace = await Workspace.findOne({ _id: scope.workspaceId, userId: scope.userId });
   if (!workspace) throw badRequest('Workspace not found.');
 
+  const hidden = scope.hiddenAccountIds;
   const [accounts, categories, people, transactions, budgets, goals, recurring, reminders, pettyCash] =
     await Promise.all([
-      Account.find({ workspaceId: scope.workspaceId }),
+      Account.find({ workspaceId: scope.workspaceId, ...excludeHiddenAccounts(scope) }),
       Category.find({ workspaceId: scope.workspaceId }),
       Person.find({ workspaceId: scope.workspaceId }),
-      Transaction.find({ workspaceId: scope.workspaceId }),
-      Budget.find({ workspaceId: scope.workspaceId }),
-      SavingsGoal.find({ workspaceId: scope.workspaceId }),
-      RecurringTransaction.find({ workspaceId: scope.workspaceId }),
+      // A backup restores into a fresh workspace, so it must be self-contained: anything touching
+      // another member's private account (even the visible half of a transfer) stays out entirely.
+      Transaction.find({ workspaceId: scope.workspaceId, ...(hidden.length > 0 ? { 'postings.accountId': { $nin: hidden } } : {}) }),
+      Budget.find({ workspaceId: scope.workspaceId, ...(hidden.length > 0 ? { accountId: { $nin: hidden } } : {}) }),
+      SavingsGoal.find({ workspaceId: scope.workspaceId, ...(hidden.length > 0 ? { linkedAccountId: { $nin: hidden } } : {}) }),
+      RecurringTransaction.find({
+        workspaceId: scope.workspaceId,
+        ...(hidden.length > 0 ? { accountId: { $nin: hidden }, toAccountId: { $nin: hidden } } : {}),
+      }),
       Reminder.find({ workspaceId: scope.workspaceId }),
       PettyCash.find({ workspaceId: scope.workspaceId }),
     ]);
@@ -118,6 +125,14 @@ export async function restoreBackup(
           isDemo: false,
         },
       ],
+      { session: uow.session },
+    );
+
+    // Without this, the person restoring their own backup would be locked
+    // out of the workspace they just created — `requireWorkspace` checks
+    // membership, not `Workspace.userId` (§Phase 9).
+    await WorkspaceMember.create(
+      [{ workspaceId, userId, role: 'owner', isDefault: false, joinedAt: new Date() }],
       { session: uow.session },
     );
 

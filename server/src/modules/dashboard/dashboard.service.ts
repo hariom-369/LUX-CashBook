@@ -25,6 +25,7 @@ import { getWorkspaceTotals } from '../../services/balance.service.js';
 import { getReceivablesAndPayables } from '../people/person.service.js';
 import { toAccountDto } from '../accounts/account.service.js';
 import { hydrate } from '../transactions/transaction.query.js';
+import { excludeHiddenAccounts, excludeHiddenTransactions } from '../../services/accountVisibility.js';
 
 const INCOME_TYPES = Object.entries(TRANSACTION_META)
   .filter(([, meta]) => meta.isIncome)
@@ -59,7 +60,7 @@ export async function getDashboard(
   const [totals, accounts, thisMonth, lastMonth, cashFlow, recent, people, upcoming] =
     await Promise.all([
       getWorkspaceTotals(scope),
-      Account.find({ workspaceId: scope.workspaceId, deletedAt: null, isActive: true })
+      Account.find({ workspaceId: scope.workspaceId, deletedAt: null, isActive: true, ...excludeHiddenAccounts(scope) })
         .sort({ sortOrder: 1 })
         .lean(),
       periodTotals(scope, monthStart, monthEnd),
@@ -152,6 +153,7 @@ async function periodTotals(scope: RequestScope, from: Date, to: Date): Promise<
         deletedAt: null,
         date: { $gte: from, $lte: to },
         type: { $in: [...INCOME_TYPES, ...EXPENSE_TYPES] },
+        ...excludeHiddenTransactions(scope),
       },
     },
     { $group: { _id: { type: '$type', categoryId: '$categoryId' }, total: { $sum: '$amountMinor' } } },
@@ -216,6 +218,7 @@ export async function getCashFlow(
         deletedAt: null,
         date: { $gte: range.from, $lte: range.to },
         type: { $in: [...INCOME_TYPES, ...EXPENSE_TYPES] },
+        ...excludeHiddenTransactions(scope),
       },
     },
     {
@@ -244,6 +247,7 @@ export async function getCashFlow(
   while (cursor <= range.to) {
     let key: string;
     let label: string;
+    const start = toDateKey(cursor);
 
     if (granularity === 'day') {
       key = toDateKey(cursor);
@@ -267,6 +271,7 @@ export async function getCashFlow(
     points.push({
       bucket: key,
       label,
+      start,
       incomeMinor: entry.incomeMinor,
       expenseMinor: entry.expenseMinor,
       netMinor: entry.incomeMinor - entry.expenseMinor,
@@ -290,7 +295,7 @@ function isoWeek(date: Date): number {
 }
 
 async function recentTransactions(scope: RequestScope, limit: number) {
-  const rows = await Transaction.find({ workspaceId: scope.workspaceId, deletedAt: null })
+  const rows = await Transaction.find({ workspaceId: scope.workspaceId, deletedAt: null, ...excludeHiddenTransactions(scope) })
     .sort({ date: -1, _id: -1 })
     .limit(limit)
     .lean();
@@ -313,6 +318,7 @@ export async function getUpcoming(scope: RequestScope, now: Date = new Date()): 
       workspaceId: scope.workspaceId,
       deletedAt: null,
       type: { $in: ['lend', 'borrow'] },
+      ...excludeHiddenTransactions(scope),
       dueDate: { $ne: null, $lte: horizon },
       $expr: { $lt: ['$settledMinor', '$amountMinor'] },
     })

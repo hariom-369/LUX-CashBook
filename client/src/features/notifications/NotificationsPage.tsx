@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
-import { relativeDay } from '@khata/shared';
+import { } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -11,9 +11,13 @@ import { api, errorMessage } from '../../lib/api';
 import { useToast } from '../../components/ui/Toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { RemindersCard } from './RemindersCard';
+import { useT } from '../../i18n';
+import { useRelativeDay } from '../../i18n/relativeDay';
 
 /** The full notification centre (§41), reached from the bell icon. */
 export function NotificationsPage() {
+  const t = useT();
+  const relativeDay = useRelativeDay();
   const { data, isLoading, isError, error, refetch } = useNotifications();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -26,7 +30,7 @@ export function NotificationsPage() {
       await api.post('/notifications/read-all');
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
     } catch (err) {
-      toast.error('Could not update notifications', errorMessage(err));
+      toast.error(t('notifications.couldNotUpdateNotifications'), errorMessage(err));
     }
   }
 
@@ -43,14 +47,14 @@ export function NotificationsPage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Notifications</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('settings.tab.notifications')}</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">
-            {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
+            {unreadCount > 0 ? t('notifications.unreadCount', { count: unreadCount }) : t('notifications.allCaughtUp')}
           </p>
         </div>
         {unreadCount > 0 && (
           <Button variant="secondary" size="sm" leftIcon={<Check className="size-3.5" />} onClick={() => void markAllRead()}>
-            Mark all read
+            {t('notifications.markAllRead')}
           </Button>
         )}
       </header>
@@ -67,8 +71,8 @@ export function NotificationsPage() {
         ) : items.length === 0 ? (
           <EmptyState
             icon={<Bell className="size-5" />}
-            title="Nothing here yet"
-            description="Budget alerts, loans coming due, and recurring reminders will show up here as they happen."
+            title={t('notifications.nothingHereYet')}
+            description={t('notifications.budgetAlertsLoansComingDueAnd')}
           />
         ) : (
           <ul className="divide-y divide-line-faint">

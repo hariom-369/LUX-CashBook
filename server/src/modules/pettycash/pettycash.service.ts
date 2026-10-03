@@ -1,11 +1,13 @@
 import { Types, type HydratedDocument } from 'mongoose';
-import type { PettyCashDto } from '@khata/shared';
-import { Account, PettyCash, type IPettyCash } from '../../models/index.js';
+import type { PettyCashCountDto, PettyCashDailyReportDto, PettyCashDto } from '@khata/shared';
+import { Account, PettyCash, PettyCashCount, type IPettyCash } from '../../models/index.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { createTransaction } from '../transactions/transaction.service.js';
+import { getIncomeExpenseStatement } from '../reports/report.service.js';
 import type { AuditContext } from '../../services/audit.service.js';
 import { recordAudit } from '../../services/audit.service.js';
+import { visibleAccountIds } from '../../services/accountVisibility.js';
 
 /**
  * Petty cash under the imprest system (§22).
@@ -37,7 +39,11 @@ export function toPettyCashDto(record: IPettyCash, accountName?: string, current
 }
 
 export async function listPettyCash(scope: RequestScope): Promise<PettyCashDto[]> {
-  const records = await PettyCash.find({ workspaceId: scope.workspaceId, isActive: true }).lean();
+  const records = await PettyCash.find({
+    workspaceId: scope.workspaceId,
+    isActive: true,
+    ...(scope.hiddenAccountIds.length > 0 ? { accountId: { $nin: scope.hiddenAccountIds } } : {}),
+  }).lean();
   if (records.length === 0) return [];
 
   const accounts = await Account.find({ _id: { $in: records.map((r) => r.accountId) } })
@@ -64,7 +70,7 @@ export async function createPettyCash(
   input: CreatePettyCashInput,
   audit: AuditContext,
 ): Promise<PettyCashDoc> {
-  const account = await Account.findOne({ _id: input.accountId, workspaceId: scope.workspaceId, deletedAt: null });
+  const account = await Account.findOne({ _id: visibleAccountIds(scope, input.accountId), workspaceId: scope.workspaceId, deletedAt: null });
   if (!account) throw notFound('Account');
   if (account.type !== 'cash') throw badRequest('Petty cash must be tracked on a cash account.');
 
@@ -72,7 +78,7 @@ export async function createPettyCash(
   if (existing) throw conflict('This account is already set up for petty cash.', 'PETTY_CASH_EXISTS');
 
   if (input.replenishFromAccountId) {
-    const source = await Account.findOne({ _id: input.replenishFromAccountId, workspaceId: scope.workspaceId }).lean();
+    const source = await Account.findOne({ _id: visibleAccountIds(scope, input.replenishFromAccountId), workspaceId: scope.workspaceId }).lean();
     if (!source) throw notFound('Account');
   }
 
@@ -116,7 +122,7 @@ export async function replenishPettyCash(
   const record = await PettyCash.findOne({ _id: pettyCashId, workspaceId: scope.workspaceId });
   if (!record) throw notFound('Petty cash');
 
-  const account = await Account.findOne({ _id: record.accountId, workspaceId: scope.workspaceId });
+  const account = await Account.findOne({ _id: visibleAccountIds(scope, record.accountId), workspaceId: scope.workspaceId });
   if (!account) throw notFound('Account');
 
   const fromAccountId = input.fromAccountId ?? record.replenishFromAccountId?.toString();
@@ -148,6 +154,90 @@ export async function replenishPettyCash(
   return {
     pettyCash: toPettyCashDto(record, refreshed?.name, refreshed?.cachedBalanceMinor ?? 0),
     replenishedMinor: spentSinceReplenish,
+  };
+}
+
+function toPettyCashCountDto(count: { _id: Types.ObjectId; pettyCashId: Types.ObjectId; date: Date; expectedMinor: number; countedMinor: number; differenceMinor: number; note?: string; createdAt: Date }): PettyCashCountDto {
+  return {
+    id: String(count._id),
+    pettyCashId: String(count.pettyCashId),
+    date: count.date.toISOString(),
+    expectedMinor: count.expectedMinor,
+    countedMinor: count.countedMinor,
+    differenceMinor: count.differenceMinor,
+    note: count.note,
+    countedAt: count.createdAt.toISOString(),
+  };
+}
+
+async function getPettyCashOrThrow(scope: RequestScope, pettyCashId: string): Promise<HydratedDocument<IPettyCash>> {
+  if (!Types.ObjectId.isValid(pettyCashId)) throw notFound('Petty cash');
+  const record = await PettyCash.findOne({ _id: pettyCashId, workspaceId: scope.workspaceId });
+  if (!record) throw notFound('Petty cash');
+  return record;
+}
+
+/**
+ * Record a physical cash count against the float (§Phase 12 — "petty cash
+ * 2.0"). `expectedMinor` is computed the same way `toPettyCashDto` already
+ * does — imprest minus what's been spent since the last replenishment — so
+ * the count always compares against the figure the custodian would see on
+ * the petty cash screen at that moment, not a stale one.
+ */
+export async function recordPettyCashCount(
+  scope: RequestScope,
+  pettyCashId: string,
+  input: { countedMinor: number; date?: Date; note?: string },
+  audit: AuditContext,
+): Promise<PettyCashCountDto> {
+  const record = await getPettyCashOrThrow(scope, pettyCashId);
+  const account = await Account.findOne({ _id: visibleAccountIds(scope, record.accountId), workspaceId: scope.workspaceId }).select('cachedBalanceMinor').lean();
+  if (!account) throw notFound('Account');
+
+  const expectedMinor = account.cachedBalanceMinor;
+  const differenceMinor = input.countedMinor - expectedMinor;
+
+  const count = await PettyCashCount.create({
+    userId: scope.userId,
+    workspaceId: scope.workspaceId,
+    pettyCashId: record._id,
+    date: input.date ?? new Date(),
+    expectedMinor,
+    countedMinor: input.countedMinor,
+    differenceMinor,
+    note: input.note,
+  });
+
+  await recordAudit(audit, {
+    action: 'created',
+    entityType: 'PettyCashCount',
+    entityId: count._id,
+    summary: `Counted petty cash: expected ${expectedMinor}, found ${input.countedMinor}`,
+  });
+
+  return toPettyCashCountDto(count);
+}
+
+/**
+ * The "daily report" (§Phase 12): float status, what's been spent since the
+ * last top-up broken down by category, and recent counts — one view tying
+ * together what petty cash already tracked with what this phase adds.
+ */
+export async function getPettyCashDailyReport(scope: RequestScope, pettyCashId: string): Promise<PettyCashDailyReportDto> {
+  const record = await getPettyCashOrThrow(scope, pettyCashId);
+  const account = await Account.findOne({ _id: visibleAccountIds(scope, record.accountId), workspaceId: scope.workspaceId }).select('name cachedBalanceMinor').lean();
+  if (!account) throw notFound('Account');
+
+  const since = record.lastReplenishedAt ?? record.createdAt;
+  const [statement, counts] = await Promise.all([
+    getIncomeExpenseStatement(scope, 'expense', since, new Date()),
+    PettyCashCount.find({ workspaceId: scope.workspaceId, pettyCashId: record._id }).sort({ createdAt: -1 }).limit(30).lean(),
+  ]);
+
+  return {
+    pettyCash: toPettyCashDto(record, account.name, account.cachedBalanceMinor),
+    spendByCategory: statement.rows,
+    recentCounts: counts.map(toPettyCashCountDto),
   };
 }
 

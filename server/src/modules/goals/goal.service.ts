@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { claimRevision } from '../../lib/revision.js';
+import { visibleAccountIds } from '../../services/accountVisibility.js';
 
 export type GoalDoc = HydratedDocument<ISavingsGoal>;
 
@@ -32,6 +33,26 @@ export function toGoalDto(goal: ISavingsGoal, linkedAccountBalanceMinor?: number
   };
 }
 
+/**
+ * "On track" compares actual progress against *time elapsed* since the goal
+ * was created, against the target date — a goal with no deadline has nothing
+ * to pace against, so it's reported separately rather than guessed at.
+ */
+function statusOf(dto: SavingsGoalDto, percentComplete: number, now: Date): GoalProgressDto['status'] {
+  if (dto.isAchieved) return 'achieved';
+  if (!dto.targetDate) return 'no_deadline';
+
+  const start = new Date(dto.createdAt).getTime();
+  const target = new Date(dto.targetDate).getTime();
+  const totalSpan = target - start;
+  if (totalSpan <= 0) return percentComplete >= 100 ? 'achieved' : 'behind';
+
+  const expectedPercent = Math.min(100, Math.max(0, ((now.getTime() - start) / totalSpan) * 100));
+  if (percentComplete >= expectedPercent + 5) return 'ahead';
+  if (percentComplete <= expectedPercent - 5) return 'behind';
+  return 'on_track';
+}
+
 function toProgressDto(dto: SavingsGoalDto, now: Date): GoalProgressDto {
   const percentComplete = Math.min(100, safePercent(dto.currentMinor, dto.targetMinor));
   const remainingMinor = Math.max(0, dto.targetMinor - dto.currentMinor);
@@ -44,6 +65,7 @@ function toProgressDto(dto: SavingsGoalDto, now: Date): GoalProgressDto {
     remainingMinor,
     daysRemaining,
     requiredMonthlyMinor: monthsRemaining ? Math.ceil(remainingMinor / monthsRemaining) : undefined,
+    status: statusOf(dto, percentComplete, now),
   };
 }
 
@@ -58,7 +80,12 @@ export interface CreateGoalInput {
 }
 
 export async function listGoals(scope: RequestScope, now: Date = new Date()): Promise<GoalProgressDto[]> {
-  const goals = await SavingsGoal.find({ workspaceId: scope.workspaceId, isArchived: false })
+  const goals = await SavingsGoal.find({
+    workspaceId: scope.workspaceId,
+    isArchived: false,
+    // A goal tracking another member's private account would show that balance.
+    ...(scope.hiddenAccountIds.length > 0 ? { linkedAccountId: { $nin: scope.hiddenAccountIds } } : {}),
+  })
     .sort({ isAchieved: 1, sortOrder: 1, createdAt: 1 })
     .lean();
 
@@ -77,6 +104,12 @@ export async function listGoals(scope: RequestScope, now: Date = new Date()): Pr
 }
 
 async function getGoalDoc(scope: RequestScope, goalId: string): Promise<GoalDoc> {
+  const doc = await getGoalDocUnchecked(scope, goalId);
+  if (doc.linkedAccountId && scope.hiddenAccountIds.some((h) => h.equals(doc.linkedAccountId!))) throw notFound('Goal');
+  return doc;
+}
+
+async function getGoalDocUnchecked(scope: RequestScope, goalId: string): Promise<GoalDoc> {
   if (!Types.ObjectId.isValid(goalId)) throw notFound('Goal');
   const goal = await SavingsGoal.findOne({ _id: goalId, workspaceId: scope.workspaceId });
   if (!goal) throw notFound('Goal');
@@ -86,7 +119,7 @@ async function getGoalDoc(scope: RequestScope, goalId: string): Promise<GoalDoc>
 export async function createGoal(scope: RequestScope, input: CreateGoalInput, audit: AuditContext): Promise<GoalDoc> {
   if (input.linkedAccountId && !Types.ObjectId.isValid(input.linkedAccountId)) throw notFound('Account');
   if (input.linkedAccountId) {
-    const account = await Account.findOne({ _id: input.linkedAccountId, workspaceId: scope.workspaceId }).lean();
+    const account = await Account.findOne({ _id: visibleAccountIds(scope, input.linkedAccountId), workspaceId: scope.workspaceId }).lean();
     if (!account) throw notFound('Account');
   }
 
@@ -192,15 +225,22 @@ export async function addContribution(
   const { isNotificationAllowed } = await import('../../services/notificationPolicy.js');
   if (justAchieved && (await isNotificationAllowed(scope.userId, 'always'))) {
     const { Notification } = await import('../../models/index.js');
-    await Notification.create({
+    const title = `Goal reached: ${goal.name}`;
+    const body = `You've hit your target. Well done.`;
+    const created = await Notification.create({
       userId: scope.userId,
       workspaceId: scope.workspaceId,
       type: 'goal_reached',
-      title: `Goal reached: ${goal.name}`,
-      body: `You've hit your target. Well done.`,
+      title,
+      body,
       icon: 'PartyPopper',
       link: '/goals',
-    }).catch(() => undefined);
+    }).catch(() => null);
+
+    if (created) {
+      const { deliverPushToUser } = await import('../../services/pushDelivery.service.js');
+      await deliverPushToUser(scope.userId, { title, body, link: '/goals' });
+    }
   }
 
   await recordAudit(audit, {
@@ -208,6 +248,61 @@ export async function addContribution(
     entityType: 'SavingsGoal',
     entityId: goal._id,
     summary: `Added a contribution to "${goal.name}"`,
+  });
+
+  return goal;
+}
+
+/**
+ * Contribute to an account-linked goal (§Phase 7) — the counterpart to
+ * `addContribution` for the other kind of goal. Posts a real transfer from
+ * the chosen account into the goal's `linkedAccountId`, through the same
+ * `createTransaction` every other transfer uses, so the goal's progress
+ * (which already just reads that account's balance) moves because real
+ * money moved, not because a record was appended.
+ */
+export async function contributeToLinkedGoal(
+  scope: RequestScope,
+  goalId: string,
+  input: { fromAccountId: string; amountMinor: number; date?: Date; note?: string },
+  audit: AuditContext,
+): Promise<GoalDoc> {
+  const goal = await getGoalDoc(scope, goalId);
+  if (!goal.linkedAccountId) {
+    throw badRequest('This goal has no linked account to transfer into — add a manual contribution instead.');
+  }
+  if (String(goal.linkedAccountId) === input.fromAccountId) {
+    throw badRequest('Choose a different account to contribute from.');
+  }
+
+  const { createTransaction } = await import('../transactions/transaction.service.js');
+  await createTransaction(
+    scope,
+    {
+      type: 'transfer',
+      amountMinor: input.amountMinor,
+      date: input.date ?? new Date(),
+      accountId: input.fromAccountId,
+      toAccountId: String(goal.linkedAccountId),
+      description: input.note?.trim() || `Contribution to "${goal.name}"`,
+    },
+    audit,
+  );
+
+  const { Account } = await import('../../models/index.js');
+  const linkedAccount = await Account.findById(goal.linkedAccountId).select('cachedBalanceMinor').lean();
+  const justAchieved = !goal.isAchieved && (linkedAccount?.cachedBalanceMinor ?? 0) >= goal.targetMinor;
+  if (justAchieved) {
+    goal.isAchieved = true;
+    goal.achievedAt = new Date();
+    await goal.save();
+  }
+
+  await recordAudit(audit, {
+    action: 'updated',
+    entityType: 'SavingsGoal',
+    entityId: goal._id,
+    summary: `Transferred a contribution into "${goal.name}"`,
   });
 
   return goal;

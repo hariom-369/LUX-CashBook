@@ -3,12 +3,13 @@ import type { UserDto } from '@khata/shared';
 import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { api, errorMessage } from '../../lib/api';
-import { useT } from '../../i18n';
+import { disablePush, enablePush, isPushSupported } from '../../lib/push';
+import { useT, msg, type MessageRef } from '../../i18n';
 
-const ITEMS: Array<{ key: keyof UserDto['preferences']['notifications']; label: string; hint: string }> = [
-  { key: 'moneyDue', label: 'Money due or receivable', hint: 'Loans coming due, either direction.' },
-  { key: 'budgetAlerts', label: 'Budget alerts', hint: 'When a category budget crosses a threshold.' },
-  { key: 'recurringReminders', label: 'Recurring reminders', hint: 'Before a recurring payment posts, and when one is waiting for you to confirm.' },
+const ITEMS: Array<{ key: keyof UserDto['preferences']['notifications']; label: MessageRef; hint: MessageRef }> = [
+  { key: 'moneyDue', label: msg('settings.moneyDueOrReceivable'), hint: msg('settings.loansComingDueEitherDirection') },
+  { key: 'budgetAlerts', label: msg('settings.budgetAlerts'), hint: msg('settings.whenACategoryBudgetCrossesA') },
+  { key: 'recurringReminders', label: msg('settings.recurringReminders'), hint: msg('settings.beforeARecurringPaymentPostsAnd') },
 ];
 
 export function NotificationSettings() {
@@ -29,7 +30,36 @@ export function NotificationSettings() {
       });
       setUser(updated);
     } catch (err) {
-      toast.error('Could not save that', errorMessage(err));
+      toast.error(t('common.couldNotSaveThat'), errorMessage(err));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function togglePush(value: boolean) {
+    setSaving('push');
+    try {
+      if (value) {
+        const result = await enablePush();
+        if (result === 'unsupported') {
+          toast.error(t('settings.notSupported'), t('settings.thisBrowserCannotReceivePushNotification'));
+          return;
+        }
+        if (result === 'unavailable') {
+          toast.error(t('settings.notSetUpYet'), t('settings.theServerHasNotConfiguredPush'));
+          return;
+        }
+        if (result === 'denied') {
+          toast.error(t('settings.permissionDenied'), t('settings.allowNotificationsForKhataInYour'));
+          return;
+        }
+      } else {
+        await disablePush();
+      }
+      const updated = await api.patch<UserDto>('/users/me/preferences', { notifications: { push: value } });
+      setUser(updated);
+    } catch (err) {
+      toast.error(t('common.couldNotSaveThat'), errorMessage(err));
     } finally {
       setSaving(null);
     }
@@ -38,28 +68,37 @@ export function NotificationSettings() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="text-[13.5px] font-medium text-ink">Channels</p>
+        <p className="text-[13.5px] font-medium text-ink">{t('settings.channels')}</p>
         <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">{t('notifications.channels.note')}</p>
 
         <div className="mt-4 flex flex-col gap-4">
           <ChannelRow
-            label="In-app"
+            label={t('settings.inApp')}
             checked={notifications.inApp}
             busy={saving === 'inApp'}
             onChange={(value) => void toggle('inApp', value)}
           />
+          {isPushSupported() && (
+            <ChannelRow
+              label={t('settings.browserPush')}
+              hint={t('settings.aSystemNotificationEvenWhenKhata')}
+              checked={notifications.push}
+              busy={saving === 'push'}
+              onChange={(value) => void togglePush(value)}
+            />
+          )}
         </div>
       </div>
 
       <div className="border-t border-line-faint pt-5">
-        <p className="text-[13.5px] font-medium text-ink">What to notify about</p>
+        <p className="text-[13.5px] font-medium text-ink">{t('settings.whatToNotifyAbout')}</p>
 
         <div className="mt-4 flex flex-col gap-4">
           {ITEMS.map((item) => (
             <ChannelRow
               key={item.key}
-              label={item.label}
-              hint={item.hint}
+              label={t(item.label.key)}
+              hint={t(item.hint.key)}
               checked={notifications[item.key] as boolean}
               busy={saving === item.key}
               onChange={(value) => void toggle(item.key, value)}

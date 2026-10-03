@@ -20,6 +20,18 @@ beforeEach(() => {
   process.env.JWT_ACCESS_SECRET = 'a'.repeat(32);
   process.env.JWT_REFRESH_SECRET = 'b'.repeat(32);
   process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/khata_env_test';
+  // The rest of a valid production configuration (config/productionChecks.ts), so each test below only varies what it is about.
+  Object.assign(process.env, {
+    STORAGE_DRIVER: 's3',
+    S3_BUCKET: 'khata-test',
+    S3_REGION: 'ap-south-1',
+    SMTP_HOST: 'smtp.example.com',
+    MAIL_FROM: 'Khata <no-reply@example.com>',
+    APP_URL: 'https://app.example.com',
+    API_URL: 'https://api.example.com',
+  });
+  delete process.env.S3_ACCESS_KEY_ID;
+  delete process.env.S3_SECRET_ACCESS_KEY;
 });
 
 afterEach(() => {
@@ -147,5 +159,58 @@ describe('feature flags', () => {
     await expect(freshEnv()).rejects.toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
     errorSpy.mockRestore();
+  });
+});
+
+describe('production boot checks (docs/DEPLOYMENT.md)', () => {
+  async function refused(): Promise<string> {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await freshEnv();
+    const message = error.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(exit).toHaveBeenCalledWith(1);
+    return message;
+  }
+
+  it('boots with a complete production configuration', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { env } = await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+    expect(env.STORAGE_DRIVER).toBe('s3');
+  });
+
+  it('refuses local storage, naming the way out', async () => {
+    process.env.STORAGE_DRIVER = 'local';
+    expect(await refused()).toMatch(/STORAGE_DRIVER=local[\s\S]*ALLOW_LOCAL_STORAGE_IN_PRODUCTION/);
+  });
+
+  it('accepts local storage only when a persistent disk is declared', async () => {
+    process.env.STORAGE_DRIVER = 'local';
+    process.env.ALLOW_LOCAL_STORAGE_IN_PRODUCTION = 'true';
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a missing SMTP host and the placeholder sender', async () => {
+    delete process.env.SMTP_HOST;
+    delete process.env.MAIL_FROM;
+    const message = await refused();
+    expect(message).toMatch(/SMTP_HOST/);
+    expect(message).toMatch(/MAIL_FROM/);
+  });
+
+  it('refuses localhost URLs', async () => {
+    process.env.APP_URL = 'http://localhost:5173';
+    expect(await refused()).toMatch(/APP_URL still points at localhost/);
+  });
+
+  it('warns, but boots, when cross-site cookies are chosen', async () => {
+    process.env.COOKIE_CROSS_SITE = 'true';
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+    expect(warn.mock.calls.join(' ')).toMatch(/third-party cookies/);
   });
 });

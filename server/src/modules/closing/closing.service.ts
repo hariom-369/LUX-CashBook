@@ -6,6 +6,7 @@ import type { RequestScope } from '../../middleware/context.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { getReceivablesAndPayables } from '../people/person.service.js';
+import { excludeHiddenAccounts, visibleAccountIds, excludeHiddenTransactions } from '../../services/accountVisibility.js';
 
 export type DayClosingDoc = HydratedDocument<IDayClosing>;
 export type MonthClosingDoc = HydratedDocument<IMonthClosing>;
@@ -42,8 +43,8 @@ export async function previewDayClosing(
   accountIds?: string[],
 ): Promise<Omit<DayClosingDto, 'id' | 'workspaceId' | 'actualClosingMinor' | 'differenceMinor' | 'closedAt' | 'closedBy'>> {
   const cashAccounts = accountIds?.length
-    ? await Account.find({ _id: { $in: accountIds }, workspaceId: scope.workspaceId }).lean()
-    : await Account.find({ workspaceId: scope.workspaceId, type: 'cash', deletedAt: null }).lean();
+    ? await Account.find({ _id: visibleAccountIds(scope, accountIds), workspaceId: scope.workspaceId }).lean()
+    : await Account.find({ workspaceId: scope.workspaceId, type: 'cash', deletedAt: null, ...excludeHiddenAccounts(scope) }).lean();
 
   const accountObjectIds = cashAccounts.map((a) => a._id);
   const dayStart = startOfDay(date);
@@ -209,7 +210,7 @@ export async function closeMonth(
 
   const [totals, receivablesPayables] = await Promise.all([
     Transaction.aggregate<{ _id: string; total: number }>([
-      { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from, $lte: to } } },
+      { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from, $lte: to }, ...excludeHiddenTransactions(scope) } },
       { $group: { _id: '$type', total: { $sum: '$amountMinor' } } },
     ]),
     getReceivablesAndPayables(scope),
@@ -225,7 +226,7 @@ export async function closeMonth(
     { $unwind: '$postings' },
     { $group: { _id: null, total: { $sum: '$postings.amountMinor' } } },
   ]);
-  const accounts = await Account.find({ workspaceId: scope.workspaceId }).select('openingBalanceMinor').lean();
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, ...excludeHiddenAccounts(scope) }).select('openingBalanceMinor').lean();
   const openingBalanceMinor = accounts.reduce((s, a) => s + a.openingBalanceMinor, 0) + (openingBalanceAgg[0]?.total ?? 0);
 
   const closingAgg = await Transaction.aggregate<{ total: number }>([
@@ -235,7 +236,7 @@ export async function closeMonth(
   ]);
   const closingBalanceMinor = accounts.reduce((s, a) => s + a.openingBalanceMinor, 0) + (closingAgg[0]?.total ?? 0);
 
-  const transactionCount = await Transaction.countDocuments({ workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from, $lte: to } });
+  const transactionCount = await Transaction.countDocuments({ workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from, $lte: to }, ...excludeHiddenTransactions(scope) });
 
   const record = await MonthClosing.create({
     userId: scope.userId,

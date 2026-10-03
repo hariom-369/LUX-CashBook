@@ -7,6 +7,7 @@ import { requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { scopeOf } from '../../middleware/context.js';
 import { validate } from '../../middleware/validate.js';
 import { reportLimiter } from '../../middleware/rateLimit.js';
+import { getHiddenEntityIds } from '../../services/accountVisibility.js';
 
 /** The user-facing audit trail (§42) — what changed, when, and by what action. */
 export const auditRouter: Router = Router();
@@ -26,7 +27,10 @@ auditRouter.get(
     const scope = scopeOf(req);
     const { page, limit, entityType } = req.query as unknown as { page: number; limit: number; entityType?: string };
 
+    const hiddenEntityIds = await getHiddenEntityIds(scope);
     const filter: Record<string, unknown> = { workspaceId: scope.workspaceId };
+    // Entries about another member's private account (or anything that only exists because of it) are not shown.
+    if (hiddenEntityIds.length > 0) filter.entityId = { $nin: hiddenEntityIds };
     if (entityType) filter.entityType = entityType;
 
     const [rows, total] = await Promise.all([

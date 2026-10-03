@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BellPlus, CalendarClock, Check, Trash2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { relativeDay, toDateKey, type ReminderDto, type ReminderType } from '@khata/shared';
+import { toDateKey, type ReminderDto, type ReminderType } from '@khata/shared';
 import { Card, CardHeader } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Field, Input, Select } from '../../components/ui/Input';
@@ -14,7 +14,9 @@ import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { cn } from '../../lib/cn';
 import { useT } from '../../i18n';
+import { useRelativeDay } from '../../i18n/relativeDay';
 import type { MessageKey } from '../../i18n/messages/en';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 /**
  * Types a person creates themselves. Loan reminders are generated from loans
@@ -32,6 +34,7 @@ const LEAD_DAYS = [0, 1, 3, 7] as const;
  */
 export function RemindersCard() {
   const t = useT();
+  const relativeDay = useRelativeDay();
   const toast = useToast();
   const { data, isLoading, isError } = useReminders();
   const invalidatePlanning = useInvalidatePlanning();
@@ -144,6 +147,7 @@ export function RemindersCard() {
 
 function ReminderFormSheet({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: () => void }) {
   const t = useT();
+  const createOrQueue = useOfflineCreate();
   const [title, setTitle] = useState('');
   const [type, setType] = useState<UserReminderType>('bill');
   const [dueDate, setDueDate] = useState(() => toDateKey(new Date()));
@@ -165,7 +169,7 @@ function ReminderFormSheet({ open, onClose, onSaved }: { open: boolean; onClose:
     setBusy(true);
     setErrors({});
     try {
-      await api.post('/reminders', {
+      const created = await createOrQueue('/reminders', {
         title,
         type,
         dueDate: new Date(`${dueDate}T09:00:00`).toISOString(),
@@ -173,7 +177,9 @@ function ReminderFormSheet({ open, onClose, onSaved }: { open: boolean; onClose:
         ...(amountMinor ? { amountMinor } : {}),
       });
       reset();
-      onSaved();
+      // Queued offline: the hook has already told the user, so just close.
+      if (created) onSaved();
+      else onClose();
     } catch (err) {
       if (err instanceof ApiRequestError && err.fields.length) {
         setErrors(Object.fromEntries(err.fields.map((f) => [f.path, f.message])));

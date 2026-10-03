@@ -1,27 +1,46 @@
 import { useEffect, useState } from 'react';
-import { RECURRENCE_FREQUENCIES, TRANSACTION_META, TRANSACTION_TYPES, toDateKey, type RecurringTransactionDto, type TransactionType } from '@khata/shared';
+import {
+  BILL_KINDS,
+  BILL_KIND_LABELS,
+  RECURRENCE_FREQUENCIES,
+  TRANSACTION_META,
+  TRANSACTION_TYPES,
+  toDateKey,
+  type BillKind,
+  type RecurringTransactionDto,
+  type TransactionType,
+} from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
 import { Field, Input, Select } from '../../components/ui/Input';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { useToast } from '../../components/ui/Toast';
-import { useAccounts, useCategories } from '../../lib/queries';
+import { useAccounts, useCategories, usePayees } from '../../lib/queries';
 import { useInvalidatePlanning } from '../../lib/queries3';
-import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { ApiRequestError, errorMessage } from '../../lib/api';
+import { useOfflinePatch } from '../../hooks/useOfflinePatch';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 const POSTABLE_TYPES = TRANSACTION_TYPES.filter((t) => t === 'income' || t === 'expense' || t === 'transfer');
 
 export function RecurringFormSheet({
   open,
   recurring,
+  defaultBillKind,
   onClose,
 }: {
   open: boolean;
   recurring: RecurringTransactionDto | null;
+  /** Pre-selects a bill kind when opened from the Bills & Subscriptions centre. */
+  defaultBillKind?: BillKind;
   onClose: () => void;
 }) {
+  const tr = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
+  const patchOrQueue = useOfflinePatch();
   const invalidate = useInvalidatePlanning();
   const isEdit = Boolean(recurring);
 
@@ -31,6 +50,8 @@ export function RecurringFormSheet({
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [payeeId, setPayeeId] = useState('');
+  const [billKind, setBillKind] = useState<BillKind | ''>('');
   const [frequency, setFrequency] = useState<(typeof RECURRENCE_FREQUENCIES)[number]>('monthly');
   const [intervalDays, setIntervalDays] = useState(30);
   const [dayOfMonth, setDayOfMonth] = useState<number | ''>('');
@@ -42,6 +63,7 @@ export function RecurringFormSheet({
 
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories(type === 'income' ? 'income' : 'expense');
+  const { data: payees = [] } = usePayees();
   const meta = TRANSACTION_META[type];
 
   useEffect(() => {
@@ -54,6 +76,8 @@ export function RecurringFormSheet({
       setAccountId(recurring.accountId);
       setToAccountId(recurring.toAccountId ?? '');
       setCategoryId(recurring.categoryId ?? '');
+      setPayeeId(recurring.payeeId ?? '');
+      setBillKind(recurring.billKind ?? '');
       setFrequency(recurring.frequency);
       setIntervalDays(recurring.intervalDays ?? 30);
       setDayOfMonth(recurring.dayOfMonth ?? '');
@@ -67,6 +91,8 @@ export function RecurringFormSheet({
       setAccountId((current) => current || accounts[0]?.id || '');
       setToAccountId('');
       setCategoryId('');
+      setPayeeId('');
+      setBillKind(defaultBillKind ?? '');
       setFrequency('monthly');
       setIntervalDays(30);
       setDayOfMonth('');
@@ -74,7 +100,7 @@ export function RecurringFormSheet({
       setEndDate('');
       setAutoPost(true);
     }
-  }, [open, recurring, accounts]);
+  }, [open, recurring, accounts, defaultBillKind]);
 
   async function save() {
     if (!name.trim() || !amountMinor || amountMinor <= 0 || !accountId) return;
@@ -88,6 +114,8 @@ export function RecurringFormSheet({
         accountId,
         toAccountId: type === 'transfer' ? toAccountId : undefined,
         categoryId: type === 'transfer' ? undefined : categoryId || undefined,
+        payeeId: type === 'transfer' ? undefined : payeeId || undefined,
+        billKind: type === 'expense' && billKind ? billKind : null,
         frequency,
         intervalDays: frequency === 'custom' ? intervalDays : undefined,
         dayOfMonth: (frequency === 'monthly' || frequency === 'yearly') && dayOfMonth ? Number(dayOfMonth) : undefined,
@@ -96,11 +124,10 @@ export function RecurringFormSheet({
         autoPost,
       };
       if (recurring) {
-        await api.patch(`/recurring/${recurring.id}`, { ...payload, rev: recurring.rev });
-        toast.success('Recurring entry updated');
+        await patchOrQueue(`/recurring/${recurring.id}`, { ...payload, rev: recurring.rev });
+        toast.success(tr('recurring.recurringEntryUpdated'));
       } else {
-        await api.post('/recurring', payload);
-        toast.success('Recurring entry created');
+        if (await createOrQueue('/recurring', payload)) toast.success(tr('recurring.recurringEntryCreated'));
       }
       invalidate();
       onClose();
@@ -115,16 +142,16 @@ export function RecurringFormSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit recurring entry' : 'New recurring entry'}
+      title={isEdit ? tr('recurring.editRecurringEntry') : tr('recurring.newRecurringEntry')}
       size="md"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {tr('common.cancel')}
           </Button>
           <Button variant="gold" loading={busy} disabled={!name.trim() || !amountMinor || !accountId} onClick={() => void save()}>
-            {isEdit ? 'Save changes' : 'Create'}
+            {isEdit ? tr('common.saveChanges') : tr('recurring.create')}
           </Button>
         </div>
       }
@@ -136,11 +163,11 @@ export function RecurringFormSheet({
           </div>
         )}
 
-        <Field label="Name" required>
-          {({ id }) => <Input id={id} autoFocus value={name} maxLength={60} placeholder="Rent" onChange={(event) => setName(event.target.value)} />}
+        <Field label={tr('common.name')} required>
+          {({ id }) => <Input id={id} autoFocus value={name} maxLength={60} placeholder={tr('reminders.type.rent')} onChange={(event) => setName(event.target.value)} />}
         </Field>
 
-        <Field label="Type" required>
+        <Field label={tr('reminders.form.type')} required>
           {({ id }) => (
             <div id={id} className="grid grid-cols-3 gap-2">
               {POSTABLE_TYPES.map((option) => (
@@ -155,19 +182,19 @@ export function RecurringFormSheet({
                     type === option ? 'border-gold bg-gold-soft text-gold-strong' : 'border-line bg-surface text-ink-secondary hover:bg-sunken',
                   )}
                 >
-                  {TRANSACTION_META[option].label}
+                  {tr.label('txType', option, TRANSACTION_META[option].label)}
                 </button>
               ))}
             </div>
           )}
         </Field>
 
-        <Field label="Amount" required>
+        <Field label={tr('reminders.form.amount')} required>
           {({ id }) => <MoneyInput id={id} size="hero" value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
         <div className={cn('grid grid-cols-1 gap-4', type === 'transfer' && 'sm:grid-cols-2')}>
-          <Field label={type === 'transfer' ? 'From account' : 'Account'} required>
+          <Field label={type === 'transfer' ? tr('goals.fromAccount') : tr('common.account')} required>
             {({ id }) => (
               <Select id={id} value={accountId} onChange={(event) => setAccountId(event.target.value)}>
                 {accounts.map((account) => (
@@ -179,10 +206,10 @@ export function RecurringFormSheet({
             )}
           </Field>
           {type === 'transfer' && (
-            <Field label="To account" required>
+            <Field label={tr('common.toAccount')} required>
               {({ id }) => (
                 <Select id={id} value={toAccountId} onChange={(event) => setToAccountId(event.target.value)}>
-                  <option value="">Choose…</option>
+                  <option value="">{tr('common.choose')}</option>
                   {accounts.filter((a) => a.id !== accountId).map((account) => (
                     <option key={account.id} value={account.id}>
                       {account.name}
@@ -195,13 +222,42 @@ export function RecurringFormSheet({
         </div>
 
         {type !== 'transfer' && (
-          <Field label="Category">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label={tr('common.category')}>
+              {({ id }) => (
+                <Select id={id} value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+                  <option value="">{tr('common.uncategorised')}</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label={tr('common.payee')} hint={tr('common.optional')}>
+              {({ id }) => (
+                <Select id={id} value={payeeId} onChange={(event) => setPayeeId(event.target.value)}>
+                  <option value="">{tr('common.none')}</option>
+                  {payees.map((payee) => (
+                    <option key={payee.id} value={payee.id}>
+                      {payee.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          </div>
+        )}
+
+        {type === 'expense' && (
+          <Field label={tr('recurring.billType')} hint={tr('recurring.groupsThisInTheBillsSubscriptions')}>
             {({ id }) => (
-              <Select id={id} value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-                <option value="">Uncategorised</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
+              <Select id={id} value={billKind} onChange={(event) => setBillKind(event.target.value as BillKind | '')}>
+                <option value="">{tr('recurring.notABill')}</option>
+                {BILL_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {tr.label('billKind', kind, BILL_KIND_LABELS[kind])}
                   </option>
                 ))}
               </Select>
@@ -209,7 +265,7 @@ export function RecurringFormSheet({
           </Field>
         )}
 
-        <Field label="Frequency">
+        <Field label={tr('recurring.frequency')}>
           {({ id }) => (
             <Select id={id} value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)} disabled={isEdit}>
               {RECURRENCE_FREQUENCIES.map((option) => (
@@ -222,7 +278,7 @@ export function RecurringFormSheet({
         </Field>
 
         {frequency === 'custom' && (
-          <Field label="Repeat every (days)">
+          <Field label={tr('recurring.repeatEveryDays')}>
             {({ id }) => (
               <Input id={id} type="number" min={1} max={3650} value={intervalDays} onChange={(event) => setIntervalDays(Number(event.target.value))} />
             )}
@@ -230,7 +286,7 @@ export function RecurringFormSheet({
         )}
 
         {(frequency === 'monthly' || frequency === 'yearly') && (
-          <Field label="Day of month" hint="Optional — clamps to the month's last day when needed.">
+          <Field label={tr('recurring.dayOfMonth')} hint={tr('recurring.optionalClampsToTheMonthS')}>
             {({ id }) => (
               <Input
                 id={id}
@@ -245,10 +301,10 @@ export function RecurringFormSheet({
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Start date">
+          <Field label={tr('recurring.startDate')}>
             {({ id }) => <Input id={id} type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />}
           </Field>
-          <Field label="End date" hint="Optional">
+          <Field label={tr('recurring.endDate')} hint={tr('common.optional')}>
             {({ id }) => <Input id={id} type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />}
           </Field>
         </div>
@@ -261,10 +317,10 @@ export function RecurringFormSheet({
             className="mt-0.5 size-4 shrink-0 rounded-sm border-line text-gold focus:ring-gold"
           />
           <span>
-            <span className="block text-[13px] font-medium text-ink">Post automatically</span>
+            <span className="block text-[13px] font-medium text-ink">{tr('recurring.postAutomatically')}</span>
             <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">
               {autoPost
-                ? `Each ${meta.label.toLowerCase()} is recorded on schedule without confirmation.`
+                ? tr('recurring.eachRecordedOnSchedule', { type: tr.label('txType', type, meta.label).toLowerCase() })
                 : 'A reminder is raised instead — you confirm each occurrence yourself.'}
             </span>
           </span>

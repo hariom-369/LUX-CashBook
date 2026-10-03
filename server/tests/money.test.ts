@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allocateProportionally,
   formatMoney,
   formatMoneyCompact,
   parseMoney,
@@ -122,5 +123,35 @@ describe('isValidAmountMinor', () => {
     expect(isValidAmountMinor(Number.POSITIVE_INFINITY)).toBe(false);
     expect(isValidAmountMinor(1e20)).toBe(false);
     expect(isValidAmountMinor('100' as unknown as number)).toBe(false);
+  });
+});
+
+/**
+ * Splits (Phase 8): the one guarantee a category split or an equal group
+ * share absolutely cannot break is "the parts sum to exactly the whole" —
+ * paise cannot be invented or dropped, however awkward the division.
+ */
+describe('allocateProportionally', () => {
+  it('splits evenly, giving the single leftover paisa to one part', () => {
+    const shares = allocateProportionally(100, [1, 1, 1]);
+    expect(shares.reduce((a, b) => a + b, 0)).toBe(100);
+    expect(shares.sort((a, b) => b - a)).toEqual([34, 33, 33]);
+  });
+
+  it('splits proportionally to arbitrary weights (e.g. percentages or share counts)', () => {
+    const shares = allocateProportionally(10_000, [50, 30, 20]);
+    expect(shares).toEqual([5_000, 3_000, 2_000]);
+    expect(shares.reduce((a, b) => a + b, 0)).toBe(10_000);
+  });
+
+  it('never drops or invents a paisa on an awkward division', () => {
+    const shares = allocateProportionally(1, [1, 1, 1, 1, 1, 1, 1]);
+    expect(shares.reduce((a, b) => a + b, 0)).toBe(1);
+    expect(shares.filter((s) => s === 1)).toHaveLength(1);
+  });
+
+  it('gives every weight-zero entry nothing, and handles an all-zero weight list without dividing by zero', () => {
+    expect(allocateProportionally(500, [1, 0, 0])).toEqual([500, 0, 0]);
+    expect(allocateProportionally(500, [0, 0])).toEqual([0, 0]);
   });
 });

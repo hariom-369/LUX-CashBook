@@ -9,6 +9,7 @@ import { downloadFile } from '../../lib/download';
 import { api, errorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { DataHealthSection } from './DataHealthSection';
+import { useT } from '../../i18n';
 
 interface ImportPreviewRow {
   row: number;
@@ -54,6 +55,7 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 function ExportSection() {
+  const t = useT();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -61,9 +63,9 @@ function ExportSection() {
     setBusy('transactions');
     try {
       await downloadFile('/import-export/transactions.csv');
-      toast.success('Export started');
+      toast.success(t('settings.exportStarted'));
     } catch (err) {
-      toast.error('Could not export', errorMessage(err));
+      toast.error(t('settings.couldNotExport'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -71,10 +73,10 @@ function ExportSection() {
 
   return (
     <section>
-      <SectionHeader title="Export" description="Download your transactions as a spreadsheet you can open anywhere." />
+      <SectionHeader title={t('settings.export')} description={t('settings.downloadYourTransactionsAsASpreadsheet')} />
       <div className="mt-4">
         <Button variant="secondary" size="sm" loading={busy === 'transactions'} leftIcon={<Download className="size-3.5" />} onClick={() => void exportTransactions()}>
-          Export all transactions (CSV)
+          {t('settings.exportAllTransactionsCsv')}
         </Button>
       </div>
     </section>
@@ -82,6 +84,7 @@ function ExportSection() {
 }
 
 function ImportSection() {
+  const t = useT();
   const toast = useToast();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -95,7 +98,7 @@ function ImportSection() {
     try {
       await downloadFile('/import-export/template');
     } catch (err) {
-      toast.error('Could not download the template', errorMessage(err));
+      toast.error(t('settings.couldNotDownloadTheTemplate'), errorMessage(err));
     }
   }
 
@@ -110,7 +113,7 @@ function ImportSection() {
       const data = await api.post<ImportPreview>('/import-export/preview', form);
       setPreview(data);
     } catch (err) {
-      toast.error('Could not read that file', errorMessage(err));
+      toast.error(t('common.couldNotReadThatFile'), errorMessage(err));
       setFile(null);
     } finally {
       setBusy(null);
@@ -128,9 +131,9 @@ function ImportSection() {
       setPreview(null);
       setFile(null);
       await queryClient.invalidateQueries();
-      toast.success(`Imported ${data.imported} transactions`, data.skipped > 0 ? `${data.skipped} rows were skipped.` : undefined);
+      toast.success(t('settings.importedTransactions', { imported: data.imported }), data.skipped > 0 ? t('settings.rowsSkipped', { count: data.skipped }) : undefined);
     } catch (err) {
-      toast.error('Import failed', errorMessage(err));
+      toast.error(t('settings.importFailed'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -142,10 +145,10 @@ function ImportSection() {
     try {
       await api.post(`/import-export/undo/${result.importBatchId}`);
       await queryClient.invalidateQueries();
-      toast.success('Import undone');
+      toast.success(t('settings.importUndone'));
       setResult(null);
     } catch (err) {
-      toast.error('Could not undo that import', errorMessage(err));
+      toast.error(t('settings.couldNotUndoThatImport'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -154,9 +157,9 @@ function ImportSection() {
   return (
     <section className="border-t border-line-faint pt-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <SectionHeader title="Import" description="Bring transactions in from a CSV — a bank statement export, or another app's data." />
+        <SectionHeader title={t('settings.import')} description={t('settings.bringTransactionsInFromACsv')} />
         <button type="button" onClick={() => void downloadTemplate()} className="shrink-0 text-[12px] font-medium text-gold underline-offset-4 hover:underline">
-          Download template
+          {t('settings.downloadTemplate')}
         </button>
       </div>
 
@@ -173,7 +176,7 @@ function ImportSection() {
           }}
         />
         <Button variant="secondary" size="sm" loading={busy === 'preview'} leftIcon={<FileUp className="size-3.5" />} onClick={() => fileRef.current?.click()}>
-          Choose CSV file
+          {t('settings.chooseCsvFile')}
         </Button>
       </div>
 
@@ -181,11 +184,11 @@ function ImportSection() {
         <div className="mt-4 rounded-lg border border-line bg-surface p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="min-w-0 flex-1 basis-48 text-[13px] font-medium text-ink">
-              {preview.validCount} row{preview.validCount === 1 ? '' : 's'} ready to import
-              {preview.errorCount > 0 && <span className="text-negative"> · {preview.errorCount} will be skipped</span>}
+              {t.plural('settings.rowsReady', preview.validCount)}
+              {preview.errorCount > 0 && <span className="text-negative"> · {preview.errorCount} {t('settings.willBeSkipped')}</span>}
             </p>
             <Button size="sm" variant="gold" loading={busy === 'commit'} disabled={preview.validCount === 0} onClick={() => void commit()}>
-              Import {preview.validCount} row{preview.validCount === 1 ? '' : 's'}
+              {t.plural('settings.importRows', preview.validCount)}
             </Button>
           </div>
 
@@ -195,12 +198,12 @@ function ImportSection() {
                 <li key={row.row} className="flex items-start gap-2 text-[11.5px] text-ink-muted">
                   <AlertTriangle aria-hidden className="mt-0.5 size-3 shrink-0 text-negative" />
                   <span>
-                    Row {row.row}: {row.errors.join(' ')}
+                    {t('settings.row2')} {row.row}: {row.errors.join(' ')}
                   </span>
                 </li>
               ))}
               {preview.errorCount > 8 && (
-                <li className="text-[11.5px] text-ink-faint">and {preview.errorCount - 8} more…</li>
+                <li className="text-[11.5px] text-ink-faint">{t('settings.and')} {preview.errorCount - 8} {t('settings.more')}</li>
               )}
             </ul>
           )}
@@ -210,11 +213,11 @@ function ImportSection() {
       {result && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-positive/25 bg-positive-soft p-4">
           <p className="min-w-0 flex-1 basis-48 text-[13px] text-ink-secondary">
-            Imported {result.imported} transaction{result.imported === 1 ? '' : 's'}
-            {result.skipped > 0 ? `, ${result.skipped} skipped` : ''}.
+            {t.plural('settings.importedCount', result.imported)}
+            {result.skipped > 0 ? t('settings.skippedSuffix', { count: result.skipped }) : ''}.
           </p>
           <Button size="sm" variant="ghost" leftIcon={<Undo2 className="size-3.5" />} loading={busy === 'commit'} onClick={() => void undo()}>
-            Undo
+            {t('settings.undo')}
           </Button>
         </div>
       )}
@@ -223,6 +226,7 @@ function ImportSection() {
 }
 
 function BackupSection() {
+  const t = useT();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const workspaces = useAuthStore((s) => s.workspaces);
@@ -234,9 +238,9 @@ function BackupSection() {
     setBusy('export');
     try {
       await downloadFile('/backup');
-      toast.success('Backup downloaded', 'Keep it somewhere safe — it contains your full ledger.');
+      toast.success(t('settings.backupDownloaded'), t('settings.keepItSomewhereSafeItContains'));
     } catch (err) {
-      toast.error('Could not create a backup', errorMessage(err));
+      toast.error(t('settings.couldNotCreateABackup'), errorMessage(err));
     } finally {
       setBusy(null);
     }
@@ -250,10 +254,10 @@ function BackupSection() {
       form.append('file', confirmRestore);
       if (newWorkspaceName.trim()) form.append('workspaceName', newWorkspaceName.trim());
       await api.post('/backup/restore', form);
-      toast.success('Backup restored', 'It was added as a new workspace — nothing existing was changed.');
+      toast.success(t('settings.backupRestored'), t('settings.itWasAddedAsANew'));
       window.location.reload();
     } catch (err) {
-      toast.error('Could not restore that backup', errorMessage(err));
+      toast.error(t('settings.couldNotRestoreThatBackup'), errorMessage(err));
     } finally {
       setBusy(null);
       setConfirmRestore(null);
@@ -263,11 +267,11 @@ function BackupSection() {
   return (
     <>
       <section className="border-t border-line-faint pt-6">
-        <SectionHeader title="Backup & restore" description="A complete, portable copy of one workspace — every account, category, person and transaction." />
+        <SectionHeader title={t('settings.backupRestore')} description={t('settings.aCompletePortableCopyOfOne')} />
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" loading={busy === 'export'} leftIcon={<HardDriveDownload className="size-3.5" />} onClick={() => void exportBackup()}>
-            Download backup
+            {t('settings.downloadBackup')}
           </Button>
 
           <input
@@ -285,34 +289,34 @@ function BackupSection() {
             }}
           />
           <Button variant="secondary" size="sm" leftIcon={<HardDriveUpload className="size-3.5" />} onClick={() => fileRef.current?.click()}>
-            Restore from backup
+            {t('settings.restoreFromBackup')}
           </Button>
         </div>
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
-          Restoring always creates a brand-new workspace — it never overwrites {workspaces.length > 1 ? 'any of your existing workspaces' : 'your existing data'}.
+          {t('settings.restoringAlwaysCreatesABrandNew')} {workspaces.length > 1 ? t('settings.anyOfYourExistingWorkspaces') : t('settings.yourExistingData')}.
         </p>
       </section>
 
       <Sheet
         open={Boolean(confirmRestore)}
         onClose={() => setConfirmRestore(null)}
-        title="Restore this backup?"
-        description="It will be added as a new workspace — nothing existing is changed. The page reloads once it's done."
+        title={t('settings.restoreThisBackup')}
+        description={t('settings.itWillBeAddedAsA')}
         size="sm"
         busy={busy === 'restore'}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setConfirmRestore(null)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="gold" loading={busy === 'restore'} onClick={() => void restore()}>
-              Restore
+              {t('common.restore')}
             </Button>
           </div>
         }
       >
-        <Field label="Name this workspace" hint={`Defaults to the original name with "(Restored)" appended.`}>
+        <Field label={t('settings.nameThisWorkspace')} hint={t('settings.defaultsToTheOriginalNameWith')}>
           {({ id }) => (
             <Input
               id={id}

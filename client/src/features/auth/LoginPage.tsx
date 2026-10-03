@@ -11,15 +11,17 @@ import { Field, Input } from '../../components/ui/Input';
 import { ApiRequestError, api } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { applyServerFieldErrors } from './formErrors';
+import { useT } from '../../i18n';
 
 const schema = z.object({
-  email: z.string().trim().min(1, 'Enter your email address.').email('Enter a valid email address.'),
-  password: z.string().min(1, 'Enter your password.'),
+  email: z.string().trim().min(1, 'auth.enterYourEmailAddress').email('auth.enterAValidEmailAddress'),
+  password: z.string().min(1, 'auth.enterYourPassword'),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function LoginPage() {
+  const t = useT();
   const navigate = useNavigate();
   const location = useLocation();
   const startSession = useAuthStore((s) => s.startSession);
@@ -45,19 +47,19 @@ export function LoginPage() {
       navigate(session.user.onboardingCompleted ? (target ?? '/') : '/onboarding', { replace: true });
     } catch (err) {
       if (err instanceof ApiRequestError && applyServerFieldErrors(err, setError)) return;
-      setFormError(err instanceof Error ? err.message : 'Could not sign you in. Please try again.');
+      setFormError(err instanceof Error ? err.message : t('auth.couldNotSignYouInPlease'));
     }
   }
 
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to your ledger."
+      title={t('auth.welcomeBack')}
+      subtitle={t('auth.signInToYourLedger')}
       footer={
         <>
-          New here?{' '}
+          {t('auth.newHere')}{' '}
           <Link to="/register" className="font-medium text-gold underline-offset-4 hover:underline">
-            Create an account
+            {t('auth.createAnAccount')}
           </Link>
         </>
       }
@@ -72,7 +74,7 @@ export function LoginPage() {
           </div>
         )}
 
-        <Field label="Email" error={errors.email?.message}>
+        <Field label={t('common.email')} error={errors.email?.message && t.maybe(errors.email.message)}>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -87,7 +89,7 @@ export function LoginPage() {
           )}
         </Field>
 
-        <Field label="Password" error={errors.password?.message}>
+        <Field label={t('auth.password')} error={errors.password?.message && t.maybe(errors.password.message)}>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -100,7 +102,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="pointer-events-auto rounded-sm p-1 text-ink-muted transition-colors hover:text-ink"
                 >
                   {showPassword ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
@@ -116,12 +118,12 @@ export function LoginPage() {
             to="/forgot-password"
             className="text-[13px] font-medium text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline"
           >
-            Forgot password?
+            {t('auth.forgotPassword')}
           </Link>
         </div>
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting} className="mt-1">
-          Sign in
+          {t('auth.signIn')}
         </Button>
       </form>
     </AuthLayout>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PAYMENT_METHODS, TRANSACTION_TYPES } from '@khata/shared';
+import { PAYMENT_METHODS, TRANSACTION_TYPES, REIMBURSEMENT_STATUSES } from '@khata/shared';
 import {
   amountMinorSchema,
   csvArray,
@@ -20,6 +20,8 @@ export const createTransactionSchema = z
     categoryId: objectIdSchema.nullable().optional(),
     subcategoryId: objectIdSchema.nullable().optional(),
     personId: objectIdSchema.nullable().optional(),
+    payeeId: objectIdSchema.nullable().optional(),
+    projectId: objectIdSchema.nullable().optional(),
     description: text(200),
     notes: text(2000),
     paymentMethod: z.enum(PAYMENT_METHODS).optional(),
@@ -85,6 +87,8 @@ export const updateTransactionSchema = z.object({
   toAccountId: objectIdSchema.optional(),
   categoryId: objectIdSchema.nullable().optional(),
   subcategoryId: objectIdSchema.nullable().optional(),
+  payeeId: objectIdSchema.nullable().optional(),
+  projectId: objectIdSchema.nullable().optional(),
   description: text(200),
   notes: text(2000),
   paymentMethod: z.enum(PAYMENT_METHODS).optional(),
@@ -103,6 +107,8 @@ export const listTransactionsSchema = z.object({
   accountIds: csvObjectIds,
   categoryIds: csvObjectIds,
   personIds: csvObjectIds,
+  payeeIds: csvObjectIds,
+  projectIds: csvObjectIds,
   tags: z
     .union([z.string(), z.array(z.string())])
     .optional()
@@ -116,12 +122,32 @@ export const listTransactionsSchema = z.object({
   onlyDeleted: queryBoolean(false),
   hasAttachment: queryBoolean(),
   outstandingOnly: queryBoolean(),
+  reimbursement: csvArray(REIMBURSEMENT_STATUSES),
 });
 
 export const duplicateTransactionSchema = z.object({
   /** Defaults to today, because a duplicate is nearly always "the same, now" (§44). */
   date: dateSchema.optional(),
   amountMinor: positiveAmountSchema.optional(),
+});
+
+/** Splitting one payment across categories (§Phase 8) — one bank line, several category rows. */
+export const createSplitSchema = z.object({
+  type: z.enum(['income', 'expense']),
+  date: dateSchema,
+  accountId: objectIdSchema,
+  description: text(200),
+  paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+  parts: z
+    .array(
+      z.object({
+        categoryId: objectIdSchema.nullable(),
+        amountMinor: positiveAmountSchema,
+        description: text(200),
+      }),
+    )
+    .min(2, 'A split needs at least two parts.')
+    .max(20, 'Keep a split under 20 parts.'),
 });
 
 export type CreateTransactionBody = z.infer<typeof createTransactionSchema>;

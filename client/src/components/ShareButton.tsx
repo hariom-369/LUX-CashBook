@@ -4,6 +4,7 @@ import { cn } from '../lib/cn';
 import { Button, type ButtonProps } from './ui/Button';
 import { useToast } from './ui/Toast';
 import { canUseNativeShare, copyToClipboard, shareNatively, whatsAppShareUrl, type ShareContent } from '../lib/share';
+import { useT } from '../i18n';
 
 /**
  * Share (§36, §48).
@@ -16,7 +17,7 @@ import { canUseNativeShare, copyToClipboard, shareNatively, whatsAppShareUrl, ty
  */
 export function ShareButton({
   content,
-  label = 'Share',
+  label,
   size = 'sm',
   variant = 'secondary',
 }: {
@@ -25,6 +26,7 @@ export function ShareButton({
   size?: ButtonProps['size'];
   variant?: ButtonProps['variant'];
 }) {
+  const t = useT();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -50,7 +52,7 @@ export function ShareButton({
       const result = await shareNatively(content);
       if (result === 'unavailable') {
         const copied = await copyToClipboard(content);
-        if (copied === 'copied') toast.success('Copied to clipboard', 'Sharing was unavailable, so we copied it instead.');
+        if (copied === 'copied') toast.success(t('app.copiedToClipboard'), t('app.sharingWasUnavailableSoWeCopied'));
       }
       return;
     }
@@ -60,8 +62,8 @@ export function ShareButton({
   async function handleCopy() {
     const result = await copyToClipboard(content);
     setOpen(false);
-    if (result === 'copied') toast.success('Copied to clipboard');
-    else toast.error("Couldn't copy", 'Your browser blocked clipboard access.');
+    if (result === 'copied') toast.success(t('app.copiedToClipboard'));
+    else toast.error(t('app.couldnTCopy'), t('app.yourBrowserBlockedClipboardAccess'));
   }
 
   function handleWhatsApp() {
@@ -72,13 +74,13 @@ export function ShareButton({
   return (
     <div ref={menuRef} className="relative inline-block">
       <Button type="button" size={size} variant={variant} leftIcon={<Share2 className="size-3.5" />} onClick={() => void handlePrimaryClick()}>
-        {label}
+        {label ?? t('common.share')}
       </Button>
 
       {open && (
         <div
           role="menu"
-          aria-label="Share options"
+          aria-label={t('app.shareOptions')}
           className={cn(
             'absolute right-0 z-40 mt-1.5 w-48 overflow-hidden rounded-md border border-line bg-raised py-1 shadow-lg',
             'animate-rise-in',
@@ -91,7 +93,7 @@ export function ShareButton({
             className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] text-ink transition-colors hover:bg-sunken"
           >
             <Icon />
-            Share via WhatsApp
+            {t('app.shareViaWhatsapp')}
           </button>
           <button
             type="button"
@@ -100,7 +102,7 @@ export function ShareButton({
             className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] text-ink transition-colors hover:bg-sunken"
           >
             <Copy aria-hidden className="size-4 text-ink-muted" />
-            Copy summary
+            {t('app.copySummary')}
           </button>
         </div>
       )}

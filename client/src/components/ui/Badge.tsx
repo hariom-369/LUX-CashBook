@@ -29,6 +29,7 @@ export function Badge({ children, tone = 'neutral', icon, className, eyebrow = f
         'inline-flex items-center gap-1 whitespace-nowrap rounded-sm px-2 py-0.5 font-medium',
         eyebrow ? 'text-[10px] uppercase tracking-[0.07em]' : 'text-[11.5px]',
         TONES[tone],
+        'forced-colors:border forced-colors:border-[CanvasText]',
         className,
       )}
     >

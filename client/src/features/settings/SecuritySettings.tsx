@@ -13,14 +13,15 @@ import { PinSection } from './PinSection';
 import { SecurityActivitySection } from './SecurityActivitySection';
 import { DeleteAccountSection } from './DeleteAccountSection';
 import { isMobileUserAgent, shortUserAgent } from './userAgent';
+import { useT } from '../../i18n';
 
 const passwordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Enter your current password.'),
-    newPassword: z.string().min(10, 'Use at least 10 characters.').max(256),
-    confirm: z.string().min(1, 'Type the new password again.'),
+    currentPassword: z.string().min(1, 'settings.enterYourCurrentPassword'),
+    newPassword: z.string().min(10, 'auth.useAtLeast10Characters').max(256),
+    confirm: z.string().min(1, 'settings.typeTheNewPasswordAgain'),
   })
-  .refine((v) => v.newPassword === v.confirm, { path: ['confirm'], message: 'Those passwords do not match.' });
+  .refine((v) => v.newPassword === v.confirm, { path: ['confirm'], message: 'auth.thosePasswordsDoNotMatch' });
 
 type PasswordForm = z.infer<typeof passwordSchema>;
 
@@ -41,6 +42,7 @@ interface Session {
  * only to explain that plainly before it happens.
  */
 export function SecuritySettings() {
+  const t = useT();
   const toast = useToast();
   const signOut = useAuthStore((s) => s.signOut);
 
@@ -73,7 +75,7 @@ export function SecuritySettings() {
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       });
-      toast.success('Password changed', 'You were signed out everywhere else.');
+      toast.success(t('common.passwordChanged'), t('settings.youWereSignedOutEverywhereElse'));
       reset();
       await signOut();
     } catch (err) {
@@ -83,7 +85,7 @@ export function SecuritySettings() {
           return;
         }
       }
-      toast.error('Could not change your password', errorMessage(err));
+      toast.error(t('settings.couldNotChangeYourPassword'), errorMessage(err));
     }
   }
 
@@ -92,9 +94,9 @@ export function SecuritySettings() {
     try {
       await api.delete(`/users/me/sessions/${id}`);
       setSessions((current) => current?.filter((s) => s.id !== id) ?? null);
-      toast.success('Session signed out');
+      toast.success(t('settings.sessionSignedOut'));
     } catch (err) {
-      toast.error('Could not sign that session out', errorMessage(err));
+      toast.error(t('settings.couldNotSignThatSessionOut'), errorMessage(err));
     } finally {
       setRevoking(null);
     }
@@ -106,7 +108,7 @@ export function SecuritySettings() {
       await api.post('/auth/logout-all');
       await signOut();
     } catch (err) {
-      toast.error('Could not sign out everywhere', errorMessage(err));
+      toast.error(t('settings.couldNotSignOutEverywhere'), errorMessage(err));
       setSigningOutAll(false);
       setConfirmSignOutAll(false);
     }
@@ -115,29 +117,29 @@ export function SecuritySettings() {
   return (
     <div className="flex flex-col gap-8">
       <section>
-        <p className="text-[13.5px] font-medium text-ink">Change password</p>
+        <p className="text-[13.5px] font-medium text-ink">{t('common.changePassword')}</p>
         <p className="mt-1 text-[12px] text-ink-muted">
-          Changing your password signs out every other session immediately.
+          {t('settings.changingYourPasswordSignsOutEvery')}
         </p>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate className="mt-4 flex flex-col gap-4 sm:max-w-sm">
-          <Field label="Current password" error={errors.currentPassword?.message}>
+          <Field label={t('settings.currentPassword')} error={errors.currentPassword?.message && t.maybe(errors.currentPassword.message)}>
             {({ id, describedBy, invalid }) => (
               <Input id={id} type="password" autoComplete="current-password" aria-describedby={describedBy} invalid={invalid} {...register('currentPassword')} />
             )}
           </Field>
-          <Field label="New password" error={errors.newPassword?.message}>
+          <Field label={t('common.newPassword')} error={errors.newPassword?.message && t.maybe(errors.newPassword.message)}>
             {({ id, describedBy, invalid }) => (
               <Input id={id} type="password" autoComplete="new-password" aria-describedby={describedBy} invalid={invalid} {...register('newPassword')} />
             )}
           </Field>
-          <Field label="Confirm new password" error={errors.confirm?.message}>
+          <Field label={t('common.confirmNewPassword')} error={errors.confirm?.message && t.maybe(errors.confirm.message)}>
             {({ id, describedBy, invalid }) => (
               <Input id={id} type="password" autoComplete="new-password" aria-describedby={describedBy} invalid={invalid} {...register('confirm')} />
             )}
           </Field>
           <Button type="submit" variant="gold" loading={isSubmitting} className="w-fit">
-            Change password
+            {t('common.changePassword')}
           </Button>
         </form>
       </section>
@@ -147,8 +149,8 @@ export function SecuritySettings() {
       <section className="border-t border-line-faint pt-6">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="min-w-0 flex-1 basis-48">
-            <p className="text-[13.5px] font-medium text-ink">Active sessions</p>
-            <p className="mt-1 text-[12px] text-ink-muted">Devices currently signed in to your account.</p>
+            <p className="text-[13.5px] font-medium text-ink">{t('settings.activeSessions')}</p>
+            <p className="mt-1 text-[12px] text-ink-muted">{t('settings.devicesCurrentlySignedInToYour')}</p>
           </div>
           {sessions && sessions.length > 1 && (
             <Button
@@ -158,7 +160,7 @@ export function SecuritySettings() {
               leftIcon={<LogOut className="size-3.5" />}
               onClick={() => setConfirmSignOutAll(true)}
             >
-              Sign out everywhere
+              {t('settings.signOutEverywhere')}
             </Button>
           )}
         </div>
@@ -176,12 +178,12 @@ export function SecuritySettings() {
                   {shortUserAgent(session.userAgent)}
                   {session.isCurrent && (
                     <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-positive">
-                      <ShieldCheck className="size-3" /> This device
+                      <ShieldCheck className="size-3" /> {t('settings.thisDevice')}
                     </span>
                   )}
                 </p>
                 <p className="truncate text-[11px] text-ink-muted">
-                  {session.ipAddress ?? 'Unknown location'}
+                  {session.ipAddress ?? t('security.activity.unknownIp')}
                 </p>
               </div>
               {!session.isCurrent && (
@@ -191,14 +193,14 @@ export function SecuritySettings() {
                   loading={revoking === session.id}
                   onClick={() => void revokeSession(session.id)}
                 >
-                  Sign out
+                  {t('common.signOut')}
                 </Button>
               )}
             </li>
           ))}
 
           {sessions?.length === 0 && (
-            <li className="px-4 py-4 text-[12.5px] text-ink-muted">No other active sessions.</li>
+            <li className="px-4 py-4 text-[12.5px] text-ink-muted">{t('settings.noOtherActiveSessions')}</li>
           )}
         </ul>
       </section>
@@ -211,9 +213,9 @@ export function SecuritySettings() {
         open={confirmSignOutAll}
         onCancel={() => setConfirmSignOutAll(false)}
         onConfirm={signOutEverywhere}
-        title="Sign out everywhere?"
-        description="Every device, including this one, will need to sign in again."
-        confirmLabel="Sign out everywhere"
+        title={t('settings.signOutEverywhere2')}
+        description={t('settings.everyDeviceIncludingThisOneWill')}
+        confirmLabel={t('settings.signOutEverywhere')}
         tone="danger"
         busy={signingOutAll}
       />

@@ -6,7 +6,9 @@ import { Field, Input } from '../../components/ui/Input';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { useToast } from '../../components/ui/Toast';
 import { useAccounts, useInvalidateLedger } from '../../lib/queries';
-import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { ApiRequestError, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 /**
  * Give or take money against a person's ledger (§14, §15).
@@ -26,7 +28,9 @@ export function LendBorrowSheet({
   mode: 'lend' | 'borrow' | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
   const invalidate = useInvalidateLedger();
   const { data: accounts = [] } = useAccounts();
 
@@ -56,7 +60,7 @@ export function LendBorrowSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/people/${personId}/${mode}`, {
+      const created = await createOrQueue(`/people/${personId}/${mode}`, {
         amountMinor,
         accountId,
         date: new Date(`${date}T12:00:00`).toISOString(),
@@ -65,7 +69,7 @@ export function LendBorrowSheet({
         idempotencyKey: `${mode}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       });
       invalidate();
-      toast.success(isLend ? 'Recorded as lent' : 'Recorded as borrowed');
+      if (created) toast.success(isLend ? t('people.recordedAsLent') : t('people.recordedAsBorrowed'));
       onClose();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : errorMessage(err));
@@ -78,18 +82,18 @@ export function LendBorrowSheet({
     <Sheet
       open
       onClose={onClose}
-      title={isLend ? `Give money to ${personName}` : `Borrow from ${personName}`}
+      title={isLend ? t('people.giveMoneyTo', { name: personName }) : t('people.borrowFrom', { name: personName })}
       description={
         isLend
-          ? 'This leaves the account you choose and increases what they owe you.'
-          : 'This enters the account you choose and increases what you owe them.'
+          ? t('people.thisLeavesTheAccountYouChoose')
+          : t('people.thisEntersTheAccountYouChoose')
       }
       size="sm"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="gold"
@@ -97,7 +101,7 @@ export function LendBorrowSheet({
             disabled={!amountMinor || amountMinor <= 0 || !accountId}
             onClick={() => void submit()}
           >
-            {isLend ? 'Record loan' : 'Record borrowing'}
+            {isLend ? t('people.recordLoan') : t('people.recordBorrowing')}
           </Button>
         </div>
       }
@@ -118,11 +122,11 @@ export function LendBorrowSheet({
           </div>
         )}
 
-        <Field label="Amount" required>
+        <Field label={t('reminders.form.amount')} required>
           {({ id }) => <MoneyInput id={id} size="hero" autoFocus value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
-        <Field label={isLend ? 'From account' : 'To account'} required>
+        <Field label={isLend ? t('goals.fromAccount') : t('common.toAccount')} required>
           {({ id }) => (
             <select
               id={id}
@@ -140,7 +144,7 @@ export function LendBorrowSheet({
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Date">
+          <Field label={t('common.date')}>
             {({ id }) => (
               <Input
                 id={id}
@@ -151,18 +155,18 @@ export function LendBorrowSheet({
               />
             )}
           </Field>
-          <Field label="Due date" hint="Optional">
+          <Field label={t('reminders.form.due')} hint={t('common.optional')}>
             {({ id }) => <Input id={id} type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />}
           </Field>
         </div>
 
-        <Field label="Note" hint="Optional">
+        <Field label={t('common.note')} hint={t('common.optional')}>
           {({ id }) => (
             <Input
               id={id}
               value={note}
               maxLength={200}
-              placeholder={isLend ? 'For rent' : 'For tickets'}
+              placeholder={isLend ? t('people.forRent') : t('people.forTickets')}
               onChange={(event) => setNote(event.target.value)}
             />
           )}

@@ -74,3 +74,30 @@ what changed in Phase 1, and the gap Phase 15
   session) stays queued.
 - Never pretend an operation is durably synced when it's still local-only —
   the pending count and any future sync-state indicator must reflect reality.
+
+## Update — exactly-once creates (Phase 15 follow-up)
+
+Creates are no longer limited to Quick Add. The rule above ("safe to replay")
+is now enforced by the server for *every* write, not only by Quick Add's own
+duplicate check:
+
+- **Server** (`middleware/idempotency.ts`, `IdempotencyRecord`): a request
+  carrying an `Idempotency-Key` (8–128 letters, digits, `- _ . :`) is
+  executed once per user and key. The first 2xx response is stored (30-day
+  TTL) and replayed to any repeat, so a response lost on a flaky connection
+  cannot create a second record. A repeat while the first is still running is
+  answered "still being processed" (transient — the client retries); the same
+  key on a *different* method, path, workspace or body is refused. Stored
+  responses are scoped to the user.
+- **Client**: `submitOrQueue` generates a key for a POST, sends it live, and
+  stores the same key with the queued item, so a live attempt that reached the
+  server and an offline replay of it cannot both create. `useOfflineCreate`
+  gives each create form the same behaviour; adopted by Account, Budget, Goal,
+  Recurring, Payee, Project, Product, Invoice, Quotation, Person, Group, group
+  expense, lend/borrow and reminder forms.
+- Browser-verified: a network drop, an account created offline ("saved on this
+  device"), reconnect — exactly one account, still one after reload.
+
+Not yet queueable (still fail while offline): actions that need the server's
+answer before the screen can continue (file uploads, imports, restore, report
+exports, invitations, anything that sends email). Listed in the Phase 15 notes.

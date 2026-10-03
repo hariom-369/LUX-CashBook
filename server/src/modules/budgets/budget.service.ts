@@ -12,22 +12,26 @@ import {
   diffInDays,
   type BudgetDto,
   type BudgetProgressDto,
+  type BudgetSuggestionDto,
 } from '@khata/shared';
-import { Budget, Category, Transaction, type IBudget } from '../../models/index.js';
+import { Account, Budget, Category, Transaction, type IBudget } from '../../models/index.js';
 import { conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { claimRevision } from '../../lib/revision.js';
+import { assertAccountUsable, excludeHiddenTransactions } from '../../services/accountVisibility.js';
 
 export type BudgetDoc = HydratedDocument<IBudget>;
 
-export function toBudgetDto(budget: IBudget, categoryName?: string): BudgetDto {
+export function toBudgetDto(budget: IBudget, categoryName?: string, accountName?: string): BudgetDto {
   return {
     id: String(budget._id),
     rev: budget.rev,
     workspaceId: String(budget.workspaceId),
     categoryId: budget.categoryId ? String(budget.categoryId) : null,
     categoryName,
+    accountId: budget.accountId ? String(budget.accountId) : undefined,
+    accountName,
     name: budget.name,
     amountMinor: budget.amountMinor,
     period: budget.period,
@@ -59,6 +63,8 @@ function daysRemainingIn(period: { to: Date }, now: Date): number {
 export interface CreateBudgetInput {
   name: string;
   categoryId: string | null;
+  /** Optional (Phase 7) — scopes this budget to spending on one account only. */
+  accountId?: string | null;
   amountMinor: number;
   period: 'monthly' | 'weekly' | 'yearly';
   startDate?: Date;
@@ -71,21 +77,24 @@ export async function createBudget(
   input: CreateBudgetInput,
   audit: AuditContext,
 ): Promise<BudgetDoc> {
+  if (input.accountId) await assertAccountUsable(scope, input.accountId);
   const budget = await Budget.create({
     userId: scope.userId,
     workspaceId: scope.workspaceId,
     name: input.name.trim(),
     categoryId: input.categoryId,
+    accountId: input.accountId,
     amountMinor: input.amountMinor,
     period: input.period,
     startDate: input.startDate ?? new Date(),
     rollover: input.rollover ?? false,
     alertThresholds: input.alertThresholds?.length ? input.alertThresholds : [...DEFAULT_BUDGET_THRESHOLDS],
   }).catch((err) => {
-    // The unique index on {workspaceId, categoryId, period} while active is what
-    // stops two competing limits on the same category from existing at once.
+    // The unique index on {workspaceId, categoryId, accountId, period} while
+    // active is what stops two competing limits on the same category (and
+    // account scope) from existing at once.
     if (err?.code === 11000) {
-      throw conflict('An active budget already exists for that category and period.', 'BUDGET_EXISTS');
+      throw conflict('An active budget already exists for that category, account and period.', 'BUDGET_EXISTS');
     }
     throw err;
   });
@@ -110,9 +119,10 @@ export async function updateBudget(
 ): Promise<BudgetDoc> {
   if (!Types.ObjectId.isValid(budgetId)) throw notFound('Budget');
   const budget = await Budget.findOne({ _id: budgetId, workspaceId: scope.workspaceId });
-  if (!budget) throw notFound('Budget');
+  if (!budget || (budget.accountId && scope.hiddenAccountIds.some((h) => h.equals(budget.accountId!)))) throw notFound('Budget');
+  if (input.accountId) await assertAccountUsable(scope, input.accountId);
 
-  for (const key of ['name', 'amountMinor', 'period', 'rollover', 'alertThresholds', 'isActive'] as const) {
+  for (const key of ['name', 'amountMinor', 'period', 'rollover', 'alertThresholds', 'isActive', 'accountId'] as const) {
     if (input[key] !== undefined) (budget as unknown as Record<string, unknown>)[key] = input[key];
   }
   if (input.startDate) budget.startDate = input.startDate;
@@ -155,7 +165,12 @@ export async function listBudgetsWithProgress(
   scope: RequestScope,
   now: Date = new Date(),
 ): Promise<BudgetProgressDto[]> {
-  const budgets = await Budget.find({ workspaceId: scope.workspaceId, isActive: true }).lean();
+  // A budget scoped to another member's private account would reveal that account's spending.
+  const budgets = await Budget.find({
+    workspaceId: scope.workspaceId,
+    isActive: true,
+    ...(scope.hiddenAccountIds.length > 0 ? { accountId: { $nin: scope.hiddenAccountIds } } : {}),
+  }).lean();
   if (budgets.length === 0) return [];
 
   const categoryIds = budgets.map((b) => b.categoryId).filter(Boolean) as Types.ObjectId[];
@@ -163,6 +178,12 @@ export async function listBudgetsWithProgress(
     ? await Category.find({ _id: { $in: categoryIds } }).select('name').lean()
     : [];
   const categoryName = new Map(categories.map((c) => [String(c._id), c.name]));
+
+  const accountIds = budgets.map((b) => b.accountId).filter(Boolean) as Types.ObjectId[];
+  const accounts = accountIds.length
+    ? await Account.find({ _id: { $in: accountIds } }).select('name').lean()
+    : [];
+  const accountName = new Map(accounts.map((a) => [String(a._id), a.name]));
 
   return Promise.all(
     budgets.map(async (budget) => {
@@ -173,9 +194,13 @@ export async function listBudgetsWithProgress(
         deletedAt: null,
         type: 'expense',
         date: { $gte: period.from, $lte: period.to },
+        ...excludeHiddenTransactions(scope),
       };
       if (budget.categoryId) {
         filter.$or = [{ categoryId: budget.categoryId }, { subcategoryId: budget.categoryId }];
+      }
+      if (budget.accountId) {
+        filter['postings.accountId'] = budget.accountId;
       }
 
       const [result] = await Transaction.aggregate<{ total: number }>([
@@ -212,14 +237,25 @@ export async function listBudgetsWithProgress(
       const status: BudgetProgressDto['status'] =
         percentUsed >= 100 ? 'exceeded' : percentUsed >= 90 ? 'critical' : percentUsed >= 50 ? 'warning' : 'safe';
 
+      // A simple linear projection from the rate so far — "if you keep spending
+      // like this" — never a prediction the rest of the app treats as real.
+      const totalDays = Math.max(1, diffInDays(period.to, period.from) + 1);
+      const elapsedDays = Math.max(1, totalDays - daysRemaining);
+      const projectedSpendMinor = Math.round(spentMinor * (totalDays / elapsedDays));
+
       return {
-        ...toBudgetDto(budget, budget.categoryId ? categoryName.get(String(budget.categoryId)) : undefined),
+        ...toBudgetDto(
+          budget,
+          budget.categoryId ? categoryName.get(String(budget.categoryId)) : undefined,
+          budget.accountId ? accountName.get(String(budget.accountId)) : undefined,
+        ),
         spentMinor,
         remainingMinor,
         percentUsed,
         status,
         daysRemaining,
         safeDailyMinor: daysRemaining > 0 ? Math.max(0, Math.floor(remainingMinor / daysRemaining)) : 0,
+        projectedSpendMinor,
       };
     }),
   );
@@ -235,6 +271,46 @@ function previousPeriodOf(budget: Pick<IBudget, 'period'>, current: { from: Date
     default:
       return { from: startOfMonth(addMonths(current.from, -1)), to: new Date(current.from.getTime() - 1) };
   }
+}
+
+/**
+ * "Copy last month" (§Phase 7, Budgets 2.0) — rather than cloning a period
+ * document (budgets here are ongoing, not per-period), this suggests a
+ * starting amount for any expense category that had real spending last
+ * month but no active budget yet. Nothing is created until the user picks
+ * one and calls the ordinary `POST /budgets`.
+ */
+export async function suggestBudgetsFromLastMonth(scope: RequestScope, now: Date = new Date()): Promise<BudgetSuggestionDto[]> {
+  const lastMonthStart = startOfMonth(addMonths(now, -1));
+  const lastMonthEnd = endOfMonth(addMonths(now, -1));
+
+  const budgeted = await Budget.find({ workspaceId: scope.workspaceId, isActive: true, accountId: null })
+    .select('categoryId')
+    .lean();
+  const alreadyBudgeted = new Set(budgeted.map((b) => String(b.categoryId)));
+
+  const rows = await Transaction.aggregate<{ _id: Types.ObjectId | null; total: number }>([
+    {
+      $match: {
+        workspaceId: scope.workspaceId,
+        deletedAt: null,
+        type: 'expense',
+        date: { $gte: lastMonthStart, $lte: lastMonthEnd },
+        ...excludeHiddenTransactions(scope),
+      },
+    },
+    { $group: { _id: '$categoryId', total: { $sum: '$amountMinor' } } },
+  ]);
+
+  const candidates = rows.filter((r) => r._id && r.total > 0 && !alreadyBudgeted.has(String(r._id)));
+  if (candidates.length === 0) return [];
+
+  const categories = await Category.find({ _id: { $in: candidates.map((r) => r._id) } }).select('name').lean();
+  const nameById = new Map(categories.map((c) => [String(c._id), c.name]));
+
+  return candidates
+    .map((r) => ({ categoryId: String(r._id), categoryName: nameById.get(String(r._id)) ?? 'Category', lastMonthSpentMinor: r.total }))
+    .sort((a, b) => b.lastMonthSpentMinor - a.lastMonthSpentMinor);
 }
 
 /**
@@ -259,16 +335,18 @@ export async function checkBudgetAlerts(scope: RequestScope, now: Date = new Dat
 
     const periodKey = `${budget.id}:${now.getFullYear()}-${now.getMonth() + 1}`;
     const dedupeKey = `budget:${periodKey}:${crossed}`;
+    const title = crossed >= 100 ? `${budget.name} budget exceeded` : `${budget.name} budget at ${Math.round(crossed)}%`;
+    const body = `You've spent ${formatMoney(budget.spentMinor, { currency: scope.currency, compactDecimals: true })} of ${formatMoney(budget.amountMinor, { currency: scope.currency, compactDecimals: true })}.`;
 
-    await Notification.updateOne(
+    const result = await Notification.updateOne(
       { userId: scope.userId, dedupeKey },
       {
         $setOnInsert: {
           userId: scope.userId,
           workspaceId: scope.workspaceId,
           type: crossed >= 100 ? 'budget_exceeded' : 'budget_warning',
-          title: crossed >= 100 ? `${budget.name} budget exceeded` : `${budget.name} budget at ${Math.round(crossed)}%`,
-          body: `You've spent ${formatMoney(budget.spentMinor, { currency: scope.currency, compactDecimals: true })} of ${formatMoney(budget.amountMinor, { currency: scope.currency, compactDecimals: true })}.`,
+          title,
+          body,
           icon: 'Target',
           link: '/budgets',
           amountMinor: budget.spentMinor,
@@ -277,5 +355,10 @@ export async function checkBudgetAlerts(scope: RequestScope, now: Date = new Dat
       },
       { upsert: true },
     );
+
+    if (result.upsertedCount > 0) {
+      const { deliverPushToUser } = await import('../../services/pushDelivery.service.js');
+      await deliverPushToUser(scope.userId, { title, body, link: '/budgets' });
+    }
   }
 }

@@ -1,9 +1,11 @@
 import { Workspace } from '../models/index.js';
 import { logger } from '../lib/logger.js';
 import { processDueRecurring, raiseRecurringNotifications } from '../modules/recurring/recurring.service.js';
-import { syncLoanReminders, raiseDueReminderNotifications } from '../modules/reminders/reminder.service.js';
+import { syncLoanReminders, syncDocumentReminders, syncCardDueReminders, raiseDueReminderNotifications } from '../modules/reminders/reminder.service.js';
 import { checkBudgetAlerts } from '../modules/budgets/budget.service.js';
+import { purgeDeletedAttachments } from '../modules/attachments/attachment.service.js';
 import type { RequestScope } from '../middleware/context.js';
+import { getHiddenAccountIds } from './accountVisibility.js';
 
 /**
  * The background scheduler (§21, §18, §29, §41).
@@ -34,6 +36,7 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
     // Recurring transactions are global — they post regardless of which
     // workspace's dashboard happens to be open right now.
     await processDueRecurring(now).catch((err) => logger.error({ err }, 'Recurring sweep failed'));
+    await purgeDeletedAttachments(now).catch((err) => logger.error({ err }, 'Attachment purge failed'));
 
     // Loan reminders and budget alerts are per-workspace, so walk every
     // workspace and isolate failures to the one that caused them.
@@ -45,10 +48,21 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
         workspaceId: workspace._id,
         currency: workspace.currency,
         mode: workspace.mode,
+        // A background sweep acts on the workspace's behalf, not as any one
+        // member — 'owner' is the least-surprising level for system work.
+        role: 'owner',
+        // As the owner would see it: other members' private accounts stay out of reminders and alerts.
+        hiddenAccountIds: await getHiddenAccountIds({ userId: workspace.userId, workspaceId: workspace._id }),
       };
 
       await syncLoanReminders(scope).catch((err) =>
         logger.error({ err, workspaceId: String(workspace._id) }, 'Loan reminder sync failed'),
+      );
+      await syncDocumentReminders(scope).catch((err) =>
+        logger.error({ err, workspaceId: String(workspace._id) }, 'Document reminder sync failed'),
+      );
+      await syncCardDueReminders(scope, now).catch((err) =>
+        logger.error({ err, workspaceId: String(workspace._id) }, 'Card due reminder sync failed'),
       );
       await checkBudgetAlerts(scope, now).catch((err) =>
         logger.error({ err, workspaceId: String(workspace._id) }, 'Budget alert check failed'),

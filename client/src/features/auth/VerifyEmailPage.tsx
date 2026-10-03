@@ -4,15 +4,17 @@ import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { AuthLayout } from '../../layouts/AuthLayout';
 import { api, errorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { useT } from '../../i18n';
 
 type Status = 'verifying' | 'verified' | 'failed';
 
 export function VerifyEmailPage() {
+  const t = useT();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';
 
   const [status, setStatus] = useState<Status>(token ? 'verifying' : 'failed');
-  const [message, setMessage] = useState('This confirmation link is missing its token.');
+  const [message, setMessage] = useState(t('auth.confirmationLinkMissingToken'));
   const setUser = useAuthStore((s) => s.setUser);
   const user = useAuthStore((s) => s.user);
 
@@ -39,10 +41,10 @@ export function VerifyEmailPage() {
 
   if (status === 'verifying') {
     return (
-      <AuthLayout title="Confirming your email" subtitle="This only takes a moment.">
+      <AuthLayout title={t('auth.confirmingYourEmail')} subtitle={t('auth.thisOnlyTakesAMoment')}>
         <div className="flex items-center gap-3 text-ink-muted">
           <Loader2 aria-hidden className="size-5 animate-spin text-gold" />
-          <span className="text-[13.5px]">Checking your confirmation link…</span>
+          <span className="text-[13.5px]">{t('auth.checkingYourConfirmationLink')}</span>
         </div>
       </AuthLayout>
     );
@@ -51,18 +53,18 @@ export function VerifyEmailPage() {
   if (status === 'verified') {
     return (
       <AuthLayout
-        title="Email confirmed"
-        subtitle="Your address is verified, so password recovery is now available."
+        title={t('auth.emailConfirmed')}
+        subtitle={t('auth.yourAddressIsVerifiedSoPassword')}
         footer={
           <Link to="/" className="font-medium text-gold underline-offset-4 hover:underline">
-            Go to your dashboard
+            {t('auth.goToYourDashboard')}
           </Link>
         }
       >
         <div className="flex items-center gap-3.5 rounded-lg border border-positive/25 bg-positive-soft p-4">
           <CheckCircle2 aria-hidden className="size-5 shrink-0 text-positive" />
           <p className="text-[13px] leading-relaxed text-ink-secondary">
-            You’re all set. Nothing else to do here.
+            {t('auth.youReAllSetNothingElse')}
           </p>
         </div>
       </AuthLayout>
@@ -71,11 +73,11 @@ export function VerifyEmailPage() {
 
   return (
     <AuthLayout
-      title="That link didn't work"
-      subtitle="Confirmation links expire after an hour and can only be used once."
+      title={t('auth.thatLinkDidnTWork')}
+      subtitle={t('auth.confirmationLinksExpireAfterAnHour')}
       footer={
         <Link to="/settings" className="font-medium text-gold underline-offset-4 hover:underline">
-          Send a new confirmation email
+          {t('auth.sendANewConfirmationEmail')}
         </Link>
       }
     >

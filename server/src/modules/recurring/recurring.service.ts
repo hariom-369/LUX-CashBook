@@ -4,18 +4,20 @@ import {
   addMonths,
   addYears,
   daysInMonth,
+  type BillKind,
   type PaymentMethod,
   type RecurrenceFrequency,
   type RecurringTransactionDto,
   type TransactionType,
 } from '@khata/shared';
-import { Account, Category, Person, RecurringTransaction, type IRecurringTransaction } from '../../models/index.js';
+import { Account, Category, Payee, Person, RecurringTransaction, type IRecurringTransaction } from '../../models/index.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import { logger } from '../../lib/logger.js';
 import { claimRevision } from '../../lib/revision.js';
+import { visibleAccountIds } from '../../services/accountVisibility.js';
 
 export type RecurringDoc = HydratedDocument<IRecurringTransaction>;
 
@@ -23,6 +25,7 @@ export function toRecurringDto(
   recurring: IRecurringTransaction,
   accountName?: string,
   categoryName?: string,
+  payeeName?: string,
 ): RecurringTransactionDto {
   return {
     id: String(recurring._id),
@@ -37,6 +40,8 @@ export function toRecurringDto(
     categoryId: recurring.categoryId ? String(recurring.categoryId) : undefined,
     categoryName,
     personId: recurring.personId ? String(recurring.personId) : undefined,
+    payeeId: recurring.payeeId ? String(recurring.payeeId) : undefined,
+    payeeName,
     description: recurring.description,
     frequency: recurring.frequency,
     intervalDays: recurring.intervalDays ?? undefined,
@@ -52,6 +57,7 @@ export function toRecurringDto(
     isActive: recurring.isActive && !recurring.isPaused,
     occurrencesCreated: recurring.occurrencesCreated,
     maxOccurrences: recurring.maxOccurrences ?? undefined,
+    billKind: recurring.billKind ?? undefined,
   };
 }
 
@@ -101,6 +107,7 @@ export interface CreateRecurringInput {
   toAccountId?: string;
   categoryId?: string | null;
   personId?: string | null;
+  payeeId?: string | null;
   description?: string;
   paymentMethod?: PaymentMethod;
   frequency: RecurrenceFrequency;
@@ -113,11 +120,12 @@ export interface CreateRecurringInput {
   autoPost?: boolean;
   reminderDaysBefore?: number;
   maxOccurrences?: number | null;
+  billKind?: BillKind | null;
 }
 
 async function assertAccount(scope: RequestScope, accountId: string) {
   if (!Types.ObjectId.isValid(accountId)) throw notFound('Account');
-  const account = await Account.findOne({ _id: accountId, workspaceId: scope.workspaceId, deletedAt: null }).lean();
+  const account = await Account.findOne({ _id: visibleAccountIds(scope, accountId), workspaceId: scope.workspaceId, deletedAt: null }).lean();
   if (!account) throw notFound('Account');
   return account;
 }
@@ -140,6 +148,11 @@ export async function createRecurring(
     const person = await Person.findOne({ _id: input.personId, workspaceId: scope.workspaceId, deletedAt: null }).lean();
     if (!person) throw notFound('Person');
   }
+  if (input.payeeId) {
+    if (!Types.ObjectId.isValid(input.payeeId)) throw notFound('Payee');
+    const payee = await Payee.findOne({ _id: input.payeeId, workspaceId: scope.workspaceId }).lean();
+    if (!payee) throw notFound('Payee');
+  }
 
   const recurring = await RecurringTransaction.create({
     userId: scope.userId,
@@ -151,6 +164,7 @@ export async function createRecurring(
     toAccountId: input.toAccountId,
     categoryId: input.categoryId,
     personId: input.personId,
+    payeeId: input.payeeId,
     description: input.description?.trim() ?? '',
     paymentMethod: input.paymentMethod,
     frequency: input.frequency,
@@ -164,6 +178,7 @@ export async function createRecurring(
     autoPost: input.autoPost ?? true,
     reminderDaysBefore: input.reminderDaysBefore ?? 1,
     maxOccurrences: input.maxOccurrences,
+    billKind: input.billKind,
   });
 
   await recordAudit(audit, {
@@ -179,7 +194,10 @@ export async function createRecurring(
 async function getRecurringDoc(scope: RequestScope, id: string): Promise<RecurringDoc> {
   if (!Types.ObjectId.isValid(id)) throw notFound('Recurring transaction');
   const recurring = await RecurringTransaction.findOne({ _id: id, workspaceId: scope.workspaceId });
-  if (!recurring) throw notFound('Recurring transaction');
+  const hidden = scope.hiddenAccountIds;
+  if (!recurring || hidden.some((h) => h.equals(recurring.accountId) || (recurring.toAccountId && h.equals(recurring.toAccountId)))) {
+    throw notFound('Recurring transaction');
+  }
   return recurring;
 }
 
@@ -194,9 +212,9 @@ export async function updateRecurring(
   const recurring = await getRecurringDoc(scope, id);
 
   for (const key of [
-    'name', 'amountMinor', 'accountId', 'toAccountId', 'categoryId', 'personId', 'description',
+    'name', 'amountMinor', 'accountId', 'toAccountId', 'categoryId', 'personId', 'payeeId', 'description',
     'paymentMethod', 'frequency', 'intervalDays', 'dayOfWeek', 'dayOfMonth', 'monthOfYear',
-    'endDate', 'autoPost', 'reminderDaysBefore', 'maxOccurrences', 'isPaused',
+    'endDate', 'autoPost', 'reminderDaysBefore', 'maxOccurrences', 'isPaused', 'billKind',
   ] as const) {
     if (input[key] !== undefined) (recurring as unknown as Record<string, unknown>)[key] = input[key];
   }
@@ -228,23 +246,37 @@ export async function deleteRecurring(scope: RequestScope, id: string, audit: Au
 }
 
 export async function listRecurring(scope: RequestScope): Promise<RecurringTransactionDto[]> {
-  const rows = await RecurringTransaction.find({ workspaceId: scope.workspaceId, isActive: true })
+  const rows = await RecurringTransaction.find({
+    workspaceId: scope.workspaceId,
+    isActive: true,
+    ...(scope.hiddenAccountIds.length > 0
+      ? { accountId: { $nin: scope.hiddenAccountIds }, toAccountId: { $nin: scope.hiddenAccountIds } }
+      : {}),
+  })
     .sort({ nextRunDate: 1 })
     .lean();
   if (rows.length === 0) return [];
 
   const accountIds = new Set(rows.map((r) => String(r.accountId)));
   const categoryIds = new Set(rows.map((r) => r.categoryId).filter(Boolean).map(String));
+  const payeeIds = new Set(rows.map((r) => r.payeeId).filter(Boolean).map(String));
 
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, payees] = await Promise.all([
     Account.find({ _id: { $in: [...accountIds] } }).select('name').lean(),
     categoryIds.size ? Category.find({ _id: { $in: [...categoryIds] } }).select('name').lean() : [],
+    payeeIds.size ? Payee.find({ _id: { $in: [...payeeIds] } }).select('name').lean() : [],
   ]);
   const accountName = new Map(accounts.map((a) => [String(a._id), a.name]));
   const categoryName = new Map(categories.map((c) => [String(c._id), c.name]));
+  const payeeName = new Map(payees.map((p) => [String(p._id), p.name]));
 
   return rows.map((r) =>
-    toRecurringDto(r, accountName.get(String(r.accountId)), r.categoryId ? categoryName.get(String(r.categoryId)) : undefined),
+    toRecurringDto(
+      r,
+      accountName.get(String(r.accountId)),
+      r.categoryId ? categoryName.get(String(r.categoryId)) : undefined,
+      r.payeeId ? payeeName.get(String(r.payeeId)) : undefined,
+    ),
   );
 }
 
@@ -300,6 +332,7 @@ async function postOccurrence(recurring: RecurringDoc, scope: RequestScope): Pro
       toAccountId: recurring.toAccountId ? String(recurring.toAccountId) : undefined,
       categoryId: recurring.categoryId ? String(recurring.categoryId) : undefined,
       personId: recurring.personId ? String(recurring.personId) : undefined,
+      payeeId: recurring.payeeId ? String(recurring.payeeId) : undefined,
       description: recurring.description || recurring.name,
       paymentMethod: recurring.paymentMethod,
       recurringId: String(recurring._id),
@@ -363,6 +396,9 @@ export async function processDueRecurring(now: Date = new Date()): Promise<{ pos
         workspaceId: template.workspaceId,
         currency: 'INR',
         mode: 'personal' as const,
+        role: 'owner' as const,
+        // Posting an occurrence writes the template owner's own entry; nothing is totalled or listed here.
+        hiddenAccountIds: [] as Types.ObjectId[],
       };
       // Currency comes from the account, not a hardcoded default — resolve it.
       const account = await Account.findById(template.accountId).select('currency').lean();
@@ -465,7 +501,11 @@ export async function raiseRecurringNotifications(now: Date = new Date()): Promi
       },
       { upsert: true },
     );
-    if (result.upsertedCount > 0) raised++;
+    if (result.upsertedCount > 0) {
+      raised++;
+      const { deliverPushToUser } = await import('../../services/pushDelivery.service.js');
+      await deliverPushToUser(item.userId, { ...content, link: '/recurring' });
+    }
   }
 
   return raised;

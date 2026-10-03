@@ -1,5 +1,6 @@
 import { Schema, type Types } from 'mongoose';
-import { defineModel, baseOptions, scopeFields, softDeleteFields } from './shared.js';
+import { DOCUMENT_TYPES, type DocumentType } from '@khata/shared';
+import { defineModel, baseOptions, moneyField, scopeFields, softDeleteFields, tagsField } from './shared.js';
 
 /**
  * A receipt, bill photo or document attached to a transaction (§26).
@@ -27,6 +28,15 @@ export interface IAttachment {
   checksum?: string;
   width?: number;
   height?: number;
+
+  /** Vault fields (Phase 6) — set when uploaded as a standalone document, not just a transaction receipt. */
+  docType?: DocumentType | null;
+  title?: string;
+  expiryDate?: Date | null;
+  tags: string[];
+  amountMinor?: number;
+  accountId?: Types.ObjectId | null;
+
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
   createdAt: Date;
@@ -46,6 +56,14 @@ const attachmentSchema = new Schema<IAttachment>(
     checksum: { type: String, maxlength: 64 },
     width: { type: Number, min: 0 },
     height: { type: Number, min: 0 },
+
+    docType: { type: String, enum: DOCUMENT_TYPES, default: null },
+    title: { type: String, trim: true, maxlength: 120 },
+    expiryDate: { type: Date, default: null },
+    tags: tagsField,
+    amountMinor: moneyField({ signed: false }),
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account', default: null },
+
     ...softDeleteFields,
   },
   baseOptions,
@@ -53,5 +71,7 @@ const attachmentSchema = new Schema<IAttachment>(
 
 attachmentSchema.index({ workspaceId: 1, transactionId: 1, deletedAt: 1 });
 attachmentSchema.index({ workspaceId: 1, checksum: 1 }, { sparse: true });
+attachmentSchema.index({ workspaceId: 1, docType: 1, deletedAt: 1 });
+attachmentSchema.index({ workspaceId: 1, expiryDate: 1 }, { sparse: true });
 
 export const Attachment = defineModel<IAttachment>('Attachment', attachmentSchema);

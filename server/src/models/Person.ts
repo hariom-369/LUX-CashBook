@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { PERSON_RELATIONSHIPS, type PersonRelationship } from '@khata/shared';
+import { INDIAN_STATES, PERSON_RELATIONSHIPS, type IndianState, type PersonRelationship } from '@khata/shared';
 import { defineModel, baseOptions, moneyField, scopeFields, softDeleteFields, tagsField } from './shared.js';
 
 /**
@@ -23,6 +23,9 @@ export interface IPerson {
   avatarUrl?: string;
   relationship: PersonRelationship;
   notes?: string;
+  /** §Phase 13 — a customer/supplier's own GST registration and state, if any. */
+  gstin?: string;
+  state?: IndianState;
   tags: string[];
   /** Balance carried in from before the app was used. Same sign convention. */
   openingBalanceMinor: number;
@@ -48,6 +51,8 @@ const personSchema = new Schema<IPerson>(
     avatarUrl: { type: String, maxlength: 512 },
     relationship: { type: String, enum: PERSON_RELATIONSHIPS, default: 'friend' },
     notes: { type: String, trim: true, maxlength: 1000 },
+    gstin: { type: String, trim: true, uppercase: true, maxlength: 15 },
+    state: { type: String, enum: INDIAN_STATES },
     tags: tagsField,
     // Signed on purpose: a person can start out owing you or being owed.
     openingBalanceMinor: moneyField({ default: 0 }),

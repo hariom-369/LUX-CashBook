@@ -9,12 +9,15 @@ import {
   Account,
   Category,
   MonthClosing,
+  Payee,
   Person,
+  Project,
   Transaction,
   type IPosting,
   type ITransaction,
 } from '../../models/index.js';
 import {
+  AppError,
   badRequest,
   conflict,
   invalidAmount,
@@ -32,6 +35,19 @@ import {
 } from '../../services/balance.service.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { claimRevision } from '../../lib/revision.js';
+import { touchesHiddenAccount } from '../../services/accountVisibility.js';
+import type { ReimbursementStatus, ReimbursementSummaryDto } from '@khata/shared';
+import { excludeHiddenTransactions } from '../../services/accountVisibility.js';
+
+/**
+ * A transaction with any leg on another member's private account is not theirs to change,
+ * delete or restore - not even the visible half of a transfer, and not by a guessed id.
+ * Answers exactly like a transaction that does not exist.
+ */
+function assertNotHidden(scope: RequestScope, transaction: { postings: Array<{ accountId: Types.ObjectId }> }): void {
+  if (touchesHiddenAccount(transaction.postings, scope.hiddenAccountIds)) throw notFound('Transaction');
+}
+
 
 export type TransactionDoc = HydratedDocument<ITransaction>;
 
@@ -46,6 +62,9 @@ export interface CreateTransactionInput {
   categoryId?: string | null;
   subcategoryId?: string | null;
   personId?: string | null;
+  payeeId?: string | null;
+  /** Billable expense attribution (§Phase 11). */
+  projectId?: string | null;
   description?: string;
   notes?: string;
   paymentMethod?: PaymentMethod;
@@ -61,6 +80,11 @@ export interface CreateTransactionInput {
   direction?: 'in' | 'out';
   idempotencyKey?: string;
   importBatchId?: string;
+  /** Bank import only — the statement row this was created from (§Phase 5). */
+  statementRef?: string;
+  /** Shared by every row one split payment creates (§Phase 8). */
+  splitGroupId?: string;
+  groupExpenseId?: string;
   recurringId?: string;
   isSettlement?: boolean;
 }
@@ -144,6 +168,12 @@ async function resolveAccount(
     .session(uow?.session ?? null)
     .lean();
   if (!account) throw notFound('Account');
+  // A private account is invisible to every other member (§Phase 9, decision
+  // 4) — that has to hold for writes too, not just listing/reading, or any
+  // member could post transactions against a balance they can't even see.
+  if (account.visibility === 'private' && String(account.userId) !== String(scope.userId)) {
+    throw notFound('Account');
+  }
   return account;
 }
 
@@ -185,12 +215,49 @@ async function assertPersonBelongs(
   return person._id;
 }
 
+async function assertPayeeBelongs(
+  scope: RequestScope,
+  payeeId: string | null | undefined,
+  uow?: UnitOfWork,
+): Promise<Types.ObjectId | null> {
+  if (!payeeId) return null;
+  if (!Types.ObjectId.isValid(payeeId)) throw notFound('Payee');
+
+  const payee = await Payee.findOne({ _id: payeeId, workspaceId: scope.workspaceId })
+    .session(uow?.session ?? null)
+    .lean();
+  if (!payee) throw notFound('Payee');
+  return payee._id;
+}
+
+async function assertProjectBelongs(
+  scope: RequestScope,
+  projectId: string | null | undefined,
+  uow?: UnitOfWork,
+): Promise<Types.ObjectId | null> {
+  if (!projectId) return null;
+  if (!Types.ObjectId.isValid(projectId)) throw notFound('Project');
+
+  const project = await Project.findOne({ _id: projectId, workspaceId: scope.workspaceId, deletedAt: null })
+    .session(uow?.session ?? null)
+    .lean();
+  if (!project) throw notFound('Project');
+  return project._id;
+}
+
 // ─────────────────────────────────────────────── Create
 
 export async function createTransaction(
   scope: RequestScope,
   input: CreateTransactionInput,
   audit: AuditContext,
+  /**
+   * Joins the caller's own transaction instead of starting a new one — used
+   * when several transactions must be created atomically together (splits,
+   * group expenses). Every existing call site omits this and gets exactly
+   * today's behaviour: its own independent `withTransaction`.
+   */
+  externalUow?: UnitOfWork,
 ): Promise<TransactionDoc> {
   if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0) {
     throw invalidAmount();
@@ -209,7 +276,7 @@ export async function createTransaction(
     if (existing) return existing;
   }
 
-  return withTransaction(async (uow) => {
+  const run = async (uow: UnitOfWork) => {
     await assertPeriodOpen(scope, input.date, uow);
 
     const account = await resolveAccount(scope, input.accountId, uow);
@@ -244,6 +311,8 @@ export async function createTransaction(
     if (meta.isPersonal && !personId) {
       throw badRequest(`Choose who this ${meta.label.toLowerCase()} involves.`);
     }
+    const payeeId = await assertPayeeBelongs(scope, input.payeeId, uow);
+    const projectId = await assertProjectBelongs(scope, input.projectId, uow);
 
     const deltas: BalanceDelta[] = postings.map((p) => ({
       accountId: p.accountId,
@@ -281,6 +350,8 @@ export async function createTransaction(
           categoryId,
           subcategoryId: input.subcategoryId ?? null,
           personId,
+          payeeId,
+          projectId,
           personDeltaMinor,
           description: input.description?.trim() ?? '',
           notes: input.notes,
@@ -295,6 +366,9 @@ export async function createTransaction(
           recurringId: input.recurringId ?? null,
           isRecurringInstance: Boolean(input.recurringId),
           importBatchId: input.importBatchId ?? null,
+          statementRef: input.statementRef ?? null,
+          splitGroupId: input.splitGroupId ?? null,
+          groupExpenseId: input.groupExpenseId ?? null,
           idempotencyKey: input.idempotencyKey ?? null,
         },
       ],
@@ -317,6 +391,13 @@ export async function createTransaction(
     if (personId && personDeltaMinor !== 0) {
       await applyPersonDelta(scope.workspaceId, personId, personDeltaMinor, input.date, uow);
     }
+    if (payeeId) {
+      await Payee.updateOne(
+        { _id: payeeId },
+        { $set: { lastUsedAt: input.date } },
+        { session: uow.session },
+      );
+    }
 
     await recordAudit(audit, {
       action: 'created',
@@ -326,6 +407,56 @@ export async function createTransaction(
     });
 
     return transaction;
+  };
+
+  return externalUow ? run(externalUow) : withTransaction(run);
+}
+
+export interface CreateSplitInput {
+  type: 'income' | 'expense';
+  accountId: string;
+  date: Date;
+  description?: string;
+  paymentMethod?: PaymentMethod;
+  parts: Array<{ categoryId: string | null; amountMinor: number; description?: string }>;
+}
+
+/**
+ * Split one payment across categories (§Phase 8) — several ordinary
+ * transactions sharing a `splitGroupId`, created atomically (invariant I9):
+ * either every part is posted, or none are. Each part goes through the same
+ * `createTransaction` validation every other transaction does; the only
+ * thing special here is that they join one caller-held `uow` instead of each
+ * opening its own.
+ */
+export async function createSplitTransaction(
+  scope: RequestScope,
+  input: CreateSplitInput,
+  audit: AuditContext,
+): Promise<TransactionDoc[]> {
+  const splitGroupId = new Types.ObjectId().toString();
+
+  return withTransaction(async (uow) => {
+    const created: TransactionDoc[] = [];
+    for (const part of input.parts) {
+      const txn = await createTransaction(
+        scope,
+        {
+          type: input.type,
+          amountMinor: part.amountMinor,
+          date: input.date,
+          accountId: input.accountId,
+          categoryId: part.categoryId,
+          description: part.description?.trim() || input.description,
+          paymentMethod: input.paymentMethod,
+          splitGroupId,
+        },
+        audit,
+        uow,
+      );
+      created.push(txn);
+    }
+    return created;
   });
 }
 
@@ -476,6 +607,7 @@ export async function deleteTransaction(
     }).session(uow.session ?? null);
 
     if (!transaction) throw notFound('Transaction');
+    assertNotHidden(scope, transaction);
     await assertPeriodOpen(scope, transaction.date, uow);
 
     // A loan that has been partly repaid cannot be removed without orphaning the
@@ -544,6 +676,7 @@ export async function restoreTransaction(
     }).session(uow.session ?? null);
 
     if (!transaction) throw notFound('Transaction');
+    assertNotHidden(scope, transaction);
     await assertPeriodOpen(scope, transaction.date, uow);
 
     const deltas = transaction.postings.map((p) => ({
@@ -629,6 +762,8 @@ export interface UpdateTransactionInput {
   toAccountId?: string;
   categoryId?: string | null;
   subcategoryId?: string | null;
+  payeeId?: string | null;
+  projectId?: string | null;
   description?: string;
   notes?: string;
   paymentMethod?: PaymentMethod;
@@ -666,6 +801,7 @@ export async function updateTransaction(
     }).session(uow.session ?? null);
 
     if (!transaction) throw notFound('Transaction');
+    assertNotHidden(scope, transaction);
 
     const meta = TRANSACTION_META[transaction.type];
     await assertPeriodOpen(scope, transaction.date, uow);
@@ -729,6 +865,14 @@ export async function updateTransaction(
     if (input.subcategoryId !== undefined) {
       transaction.subcategoryId = input.subcategoryId ? new Types.ObjectId(input.subcategoryId) : null;
     }
+    let newPayeeId: Types.ObjectId | null | undefined;
+    if (input.payeeId !== undefined) {
+      newPayeeId = await assertPayeeBelongs(scope, input.payeeId, uow);
+      transaction.payeeId = newPayeeId;
+    }
+    if (input.projectId !== undefined) {
+      transaction.projectId = await assertProjectBelongs(scope, input.projectId, uow);
+    }
 
     transaction.amountMinor = nextAmount;
     transaction.postings = postings;
@@ -750,6 +894,14 @@ export async function updateTransaction(
 
     await claimRevision(Transaction, transaction, expectedRev, uow.session);
     await transaction.save({ session: uow.session });
+
+    if (newPayeeId) {
+      await Payee.updateOne(
+        { _id: newPayeeId },
+        { $set: { lastUsedAt: transaction.date } },
+        { session: uow.session },
+      );
+    }
 
     // Reverse the old effect, then apply the new one.
     await applyBalanceDeltas(scope.workspaceId, [...oldDeltas, ...newDeltas], uow);
@@ -776,4 +928,98 @@ export async function updateTransaction(
 
     return transaction;
   });
+}
+
+
+// ─────────────────────────────────────────────── Reimbursements (§Phase 7)
+
+export type ReimbursementInput = {
+  /** `none` stops tracking - allowed from any stage, and the way to undo a mistake. */
+  status: 'none' | ReimbursementStatus;
+  /** Only with `paid`: the income entry the payout arrived as. Optional - a claim can be marked paid without linking one. */
+  payoutTransactionId?: string | null;
+};
+
+const STAGES = ['pending', 'submitted', 'approved', 'paid'] as const;
+
+/**
+ * Track an expense through a reimbursement claim: pending -> submitted -> approved -> paid.
+ *
+ * This is bookkeeping about a claim, not an accounting entry: the expense, every balance and the
+ * income/expense totals are untouched. When the money arrives the user records it as an ordinary
+ * income entry and links it here (`payoutTransactionId`); the link is only a pointer, and the
+ * payout can be linked to at most one claim. Movement is one step forward or one step back at a
+ * time (to fix a slip), or `none` to stop tracking; a jump is refused.
+ */
+export async function setReimbursement(
+  scope: RequestScope,
+  transactionId: string,
+  input: ReimbursementInput,
+  audit: AuditContext,
+  expectedRev?: number,
+): Promise<TransactionDoc> {
+  return withTransaction(async (uow) => {
+    const transaction = await Transaction.findOne({ _id: transactionId, workspaceId: scope.workspaceId, deletedAt: null }).session(uow.session ?? null);
+    if (!transaction) throw notFound('Transaction');
+    assertNotHidden(scope, transaction);
+    if (transaction.type !== 'expense') {
+      throw badRequest('Only an expense can be tracked for reimbursement.');
+    }
+
+    const current = transaction.reimbursement?.status ?? null;
+    const next = input.status === 'none' ? null : input.status;
+
+    if (next !== null) {
+      const from = current === null ? -1 : STAGES.indexOf(current);
+      const to = STAGES.indexOf(next);
+      // Start at `pending`; otherwise exactly one step forward or back. Re-sending the same stage is a no-op.
+      const allowed = from === -1 ? to === 0 : Math.abs(to - from) <= 1;
+      if (!allowed) {
+        throw new AppError(422, 'INVALID_REIMBURSEMENT_STEP', current === null ? 'Start a claim as pending first.' : `A claim moves one stage at a time - it is ${current} now.`);
+      }
+    }
+
+    let payout: Types.ObjectId | null = null;
+    if (next === 'paid' && input.payoutTransactionId) {
+      if (!Types.ObjectId.isValid(input.payoutTransactionId)) throw notFound('Transaction');
+      const income = await Transaction.findOne({ _id: input.payoutTransactionId, workspaceId: scope.workspaceId, deletedAt: null }).session(uow.session ?? null);
+      if (!income || touchesHiddenAccount(income.postings, scope.hiddenAccountIds)) throw notFound('Transaction');
+      if (income.type !== 'income') throw badRequest('The payout has to be an income entry - record the money you received first.');
+      const taken = await Transaction.exists({
+        workspaceId: scope.workspaceId,
+        _id: { $ne: transaction._id },
+        'reimbursement.payoutTransactionId': income._id,
+      }).session(uow.session ?? null);
+      if (taken) throw conflict('That payout is already linked to another reimbursement.', 'PAYOUT_ALREADY_LINKED');
+      payout = income._id;
+    }
+
+    transaction.reimbursement = next === null ? null : { status: next, payoutTransactionId: payout, updatedAt: new Date() };
+    await claimRevision(Transaction, transaction, expectedRev, uow.session);
+    await transaction.save({ session: uow.session });
+
+    await recordAudit(audit, {
+      action: 'updated',
+      entityType: 'Transaction',
+      entityId: transaction._id,
+      summary: next === null ? `Stopped tracking reimbursement for "${transaction.description || 'expense'}"` : `Reimbursement ${next}: "${transaction.description || 'expense'}"`,
+      before: { reimbursement: current },
+      after: { reimbursement: next },
+    });
+
+    return transaction;
+  });
+}
+
+/** What is still owed to you across the expenses being tracked (§Phase 7). */
+export async function getReimbursementSummary(scope: RequestScope): Promise<ReimbursementSummaryDto> {
+  const rows = await Transaction.aggregate<{ _id: ReimbursementStatus; count: number; total: number }>([
+    { $match: { workspaceId: scope.workspaceId, deletedAt: null, type: 'expense', 'reimbursement.status': { $exists: true, $ne: null }, ...excludeHiddenTransactions(scope) } },
+    { $group: { _id: '$reimbursement.status', count: { $sum: 1 }, total: { $sum: '$amountMinor' } } },
+  ]);
+  const byStatus = STAGES.map((status) => {
+    const row = rows.find((r) => r._id === status);
+    return { status, count: row?.count ?? 0, amountMinor: row?.total ?? 0 };
+  });
+  return { byStatus, outstandingMinor: byStatus.filter((b) => b.status !== 'paid').reduce((sum, b) => sum + b.amountMinor, 0) };
 }

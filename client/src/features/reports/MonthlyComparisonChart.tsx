@@ -4,6 +4,7 @@ import { useCurrency } from '../../hooks/useCurrency';
 import { useChartColors } from '../../hooks/useChartColors';
 import { useUiStore } from '../../stores/ui.store';
 import type { MonthSummaryRow } from '../../lib/reportTypes';
+import { useT } from '../../i18n';
 
 /**
  * Twelve months of income vs expense, grouped bars.
@@ -21,7 +22,8 @@ export function MonthlyComparisonChart({ rows }: { rows: MonthSummaryRow[] }) {
   const data = rows.map((row) => ({ ...row, income: row.incomeMinor / 100, expense: row.expenseMinor / 100 }));
 
   return (
-    <div className="h-[240px] w-full px-2 pb-4 pt-4 sm:h-[280px] sm:px-4">
+    // Hidden from assistive tech: the same twelve months are in the table that follows it on the Reports page.
+    <div aria-hidden className="h-[240px] w-full px-2 pb-4 pt-4 sm:h-[280px] sm:px-4">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
           <CartesianGrid stroke={colors.grid} vertical={false} />
@@ -68,6 +70,7 @@ function MonthTooltip({
   currency: string;
   masked: boolean;
 }) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload;
   if (!row) return null;
@@ -79,11 +82,11 @@ function MonthTooltip({
       <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{row.label}</p>
       <dl className="mt-2 flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-6">
-          <dt className="text-[12px] text-ink-secondary">Income</dt>
+          <dt className="text-[12px] text-ink-secondary">{t('common.income')}</dt>
           <dd className="tabular text-[12.5px] font-semibold text-ink">{money(row.incomeMinor)}</dd>
         </div>
         <div className="flex items-center justify-between gap-6">
-          <dt className="text-[12px] text-ink-secondary">Expenses</dt>
+          <dt className="text-[12px] text-ink-secondary">{t('common.expenses')}</dt>
           <dd className="tabular text-[12.5px] font-semibold text-ink">{money(row.expenseMinor)}</dd>
         </div>
       </dl>

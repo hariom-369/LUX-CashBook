@@ -8,9 +8,10 @@ import {
   type CategoryReportRowDto,
   type NetWorthDto,
 } from '@khata/shared';
-import { Account, Category, Person, Transaction } from '../../models/index.js';
+import { Account, Category, Invoice, Person, Transaction } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { getWorkspaceTotals } from '../../services/balance.service.js';
+import { excludeHiddenAccounts, excludeHiddenTransactions, getHiddenPersonDeltas } from '../../services/accountVisibility.js';
 
 /**
  * Reports (§27).
@@ -71,6 +72,7 @@ async function aggregateByCategory(
         deletedAt: null,
         type: kind,
         date: { $gte: from, $lte: to },
+        ...excludeHiddenTransactions(scope),
       },
     },
     { $group: { _id: '$categoryId', total: { $sum: '$amountMinor' }, count: { $sum: 1 } } },
@@ -94,8 +96,9 @@ function shiftRangeBack(from: Date, to: Date): { from: Date; to: Date } {
  * worth rather than just account balances.
  */
 export async function getNetWorth(scope: RequestScope, months = 6): Promise<NetWorthDto> {
-  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null }).lean();
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null, ...excludeHiddenAccounts(scope) }).lean();
   const people = await Person.find({ workspaceId: scope.workspaceId, deletedAt: null, isArchived: false }).lean();
+  const hiddenDeltas = await getHiddenPersonDeltas(scope);
 
   const breakdown = { cashMinor: 0, bankMinor: 0, savingsMinor: 0, investmentMinor: 0, receivablesMinor: 0, creditCardMinor: 0, borrowingsMinor: 0, payablesMinor: 0 };
 
@@ -111,8 +114,9 @@ export async function getNetWorth(scope: RequestScope, months = 6): Promise<NetW
   }
 
   for (const person of people) {
-    if (person.cachedBalanceMinor > 0) breakdown.receivablesMinor += person.cachedBalanceMinor;
-    else breakdown.payablesMinor += Math.abs(person.cachedBalanceMinor);
+    const balance = person.cachedBalanceMinor - (hiddenDeltas.get(String(person._id)) ?? 0);
+    if (balance > 0) breakdown.receivablesMinor += balance;
+    else breakdown.payablesMinor += Math.abs(balance);
   }
 
   const assetsMinor =
@@ -140,7 +144,7 @@ async function buildNetWorthHistory(
   const now = new Date();
   const points: NetWorthDto['history'] = [];
 
-  const accounts = await Account.find({ workspaceId: scope.workspaceId, excludeFromTotals: false })
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, excludeFromTotals: false, ...excludeHiddenAccounts(scope) })
     .select('openingBalanceMinor isLiability')
     .lean();
 
@@ -167,7 +171,7 @@ async function buildNetWorthHistory(
     }
 
     const personTotals = await Transaction.aggregate<{ total: number }>([
-      { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $lte: monthEnd }, personId: { $ne: null } } },
+      { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $lte: monthEnd }, personId: { $ne: null }, ...excludeHiddenTransactions(scope) } },
       { $group: { _id: '$personId', total: { $sum: '$personDeltaMinor' } } },
     ]);
     for (const row of personTotals) {
@@ -206,7 +210,7 @@ export async function getMonthlyComparison(scope: RequestScope, monthsBack = 12)
     _id: { year: number; month: number; type: string };
     total: number;
   }>([
-    { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from } } },
+    { $match: { workspaceId: scope.workspaceId, deletedAt: null, date: { $gte: from }, ...excludeHiddenTransactions(scope) } },
     {
       $group: {
         _id: { year: { $year: '$date' }, month: { $month: '$date' }, type: '$type' },
@@ -260,6 +264,7 @@ export interface BorrowLendRow {
 export async function getBorrowLendReport(scope: RequestScope): Promise<BorrowLendRow[]> {
   const people = await Person.find({ workspaceId: scope.workspaceId, deletedAt: null }).lean();
   if (people.length === 0) return [];
+  const hiddenDeltas = await getHiddenPersonDeltas(scope);
 
   const rows = await Transaction.aggregate<{ _id: { personId: Types.ObjectId; type: string }; total: number }>([
     {
@@ -267,6 +272,7 @@ export async function getBorrowLendReport(scope: RequestScope): Promise<BorrowLe
         workspaceId: scope.workspaceId,
         deletedAt: null,
         type: { $in: ['lend', 'borrow', 'repayment_given', 'repayment_received'] },
+        ...excludeHiddenTransactions(scope),
       },
     },
     { $group: { _id: { personId: '$personId', type: '$type' }, total: { $sum: '$amountMinor' } } },
@@ -287,7 +293,7 @@ export async function getBorrowLendReport(scope: RequestScope): Promise<BorrowLe
       const borrowed = totals.borrow ?? 0;
       const repaidToYou = totals.repayment_received ?? 0;
       const repaidByYou = totals.repayment_given ?? 0;
-      const outstanding = person.cachedBalanceMinor;
+      const outstanding = person.cachedBalanceMinor - (hiddenDeltas.get(String(person._id)) ?? 0);
 
       return {
         personId: String(person._id),
@@ -335,11 +341,241 @@ export async function getIncomeExpenseStatement(
   return { rows: statement, totalMinor: statement.reduce((sum, r) => sum + r.amountMinor, 0) };
 }
 
+/**
+ * Profit & loss (§Phase 12) — composes the same income/expense statement
+ * above for both sides plus a net line, rather than a parallel aggregation.
+ * Revenue and expense are both "whatever the ordinary ledger already
+ * categorises as income/expense" — there is no separate COGS concept yet
+ * (see `docs/ROADMAP_PHASE12_NOTES.md` for why that's deferred).
+ */
+export async function getProfitAndLoss(
+  scope: RequestScope,
+  from: Date,
+  to: Date,
+): Promise<{
+  from: string;
+  to: string;
+  income: { rows: StatementRow[]; totalMinor: number };
+  expense: { rows: StatementRow[]; totalMinor: number };
+  netProfitMinor: number;
+}> {
+  const [income, expense] = await Promise.all([
+    getIncomeExpenseStatement(scope, 'income', from, to),
+    getIncomeExpenseStatement(scope, 'expense', from, to),
+  ]);
+
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    income,
+    expense,
+    netProfitMinor: income.totalMinor - expense.totalMinor,
+  };
+}
+
+// ─────────────────────────────────────────────── Receivables/payables ageing
+
+export interface AgeingRow {
+  personId: string;
+  personName: string;
+  source: 'invoice' | 'loan';
+  referenceId: string;
+  referenceLabel: string;
+  dueDate: string;
+  daysPastDue: number;
+  bucket: 'not_due' | '0_30' | '31_60' | '61_90' | 'over_90';
+  amountMinor: number;
+}
+
+function ageingBucket(daysPastDue: number): AgeingRow['bucket'] {
+  if (daysPastDue <= 0) return 'not_due';
+  if (daysPastDue <= 30) return '0_30';
+  if (daysPastDue <= 60) return '31_60';
+  if (daysPastDue <= 90) return '61_90';
+  return 'over_90';
+}
+
+/**
+ * Receivables (what customers/people owe you) or payables (what you owe
+ * them) aged by days past due, combining two sources that otherwise live in
+ * separate models: unpaid invoices (Phase 11's `dueDate`) and outstanding
+ * `lend`/`borrow` transactions (Phase 9's `dueDate`). Both are bucketed by
+ * the same rule, so a single ageing view covers "the household owes this
+ * person" and "a customer hasn't paid this invoice" side by side.
+ */
+export async function getAgeingReport(
+  scope: RequestScope,
+  direction: 'receivable' | 'payable',
+): Promise<{ asOf: string; direction: 'receivable' | 'payable'; rows: AgeingRow[]; totalsByBucket: Record<AgeingRow['bucket'], number>; totalMinor: number }> {
+  const now = new Date();
+  const rows: AgeingRow[] = [];
+
+  if (direction === 'receivable') {
+    const invoices = await Invoice.find({
+      workspaceId: scope.workspaceId,
+      deletedAt: null,
+      status: 'sent',
+    })
+      .select('personId dueDate totalMinor number')
+      .lean();
+
+    const personIds = new Set(invoices.map((i) => String(i.personId)));
+    const outstandingLoans = await Transaction.find({
+      workspaceId: scope.workspaceId,
+      deletedAt: null,
+      type: 'lend',
+      dueDate: { $ne: null },
+      ...excludeHiddenTransactions(scope),
+      $expr: { $lt: ['$settledMinor', '$amountMinor'] },
+    })
+      .select('personId dueDate amountMinor settledMinor')
+      .lean();
+    for (const loan of outstandingLoans) if (loan.personId) personIds.add(String(loan.personId));
+
+    const people = personIds.size
+      ? await Person.find({ _id: { $in: [...personIds] }, workspaceId: scope.workspaceId }).select('name').lean()
+      : [];
+    const nameById = new Map(people.map((p) => [String(p._id), p.name]));
+
+    for (const invoice of invoices) {
+      const daysPastDue = Math.floor((now.getTime() - invoice.dueDate.getTime()) / 86_400_000);
+      rows.push({
+        personId: String(invoice.personId),
+        personName: nameById.get(String(invoice.personId)) ?? 'Unknown',
+        source: 'invoice',
+        referenceId: String(invoice._id),
+        referenceLabel: invoice.number,
+        dueDate: invoice.dueDate.toISOString(),
+        daysPastDue,
+        bucket: ageingBucket(daysPastDue),
+        amountMinor: invoice.totalMinor,
+      });
+    }
+    for (const loan of outstandingLoans) {
+      if (!loan.personId || !loan.dueDate) continue;
+      const daysPastDue = Math.floor((now.getTime() - loan.dueDate.getTime()) / 86_400_000);
+      rows.push({
+        personId: String(loan.personId),
+        personName: nameById.get(String(loan.personId)) ?? 'Unknown',
+        source: 'loan',
+        referenceId: String(loan._id),
+        referenceLabel: 'Loan',
+        dueDate: loan.dueDate.toISOString(),
+        daysPastDue,
+        bucket: ageingBucket(daysPastDue),
+        amountMinor: loan.amountMinor - loan.settledMinor,
+      });
+    }
+  } else {
+    const outstandingBorrows = await Transaction.find({
+      workspaceId: scope.workspaceId,
+      deletedAt: null,
+      type: 'borrow',
+      dueDate: { $ne: null },
+      ...excludeHiddenTransactions(scope),
+      $expr: { $lt: ['$settledMinor', '$amountMinor'] },
+    })
+      .select('personId dueDate amountMinor settledMinor')
+      .lean();
+
+    const personIds = new Set(outstandingBorrows.filter((b) => b.personId).map((b) => String(b.personId)));
+    const people = personIds.size
+      ? await Person.find({ _id: { $in: [...personIds] }, workspaceId: scope.workspaceId }).select('name').lean()
+      : [];
+    const nameById = new Map(people.map((p) => [String(p._id), p.name]));
+
+    for (const loan of outstandingBorrows) {
+      if (!loan.personId || !loan.dueDate) continue;
+      const daysPastDue = Math.floor((now.getTime() - loan.dueDate.getTime()) / 86_400_000);
+      rows.push({
+        personId: String(loan.personId),
+        personName: nameById.get(String(loan.personId)) ?? 'Unknown',
+        source: 'loan',
+        referenceId: String(loan._id),
+        referenceLabel: 'Loan',
+        dueDate: loan.dueDate.toISOString(),
+        daysPastDue,
+        bucket: ageingBucket(daysPastDue),
+        amountMinor: loan.amountMinor - loan.settledMinor,
+      });
+    }
+  }
+
+  rows.sort((a, b) => b.daysPastDue - a.daysPastDue);
+
+  const totalsByBucket: Record<AgeingRow['bucket'], number> = { not_due: 0, '0_30': 0, '31_60': 0, '61_90': 0, over_90: 0 };
+  for (const row of rows) totalsByBucket[row.bucket] += row.amountMinor;
+
+  return {
+    asOf: now.toISOString(),
+    direction,
+    rows,
+    totalsByBucket,
+    totalMinor: rows.reduce((sum, r) => sum + r.amountMinor, 0),
+  };
+}
+
+// ─────────────────────────────────────────────── GST summary (Phase 13)
+
+export interface GstSummaryRow {
+  taxPercent: number;
+  taxableMinor: number;
+  cgstMinor: number;
+  sgstMinor: number;
+  igstMinor: number;
+  invoiceCount: number;
+}
+
+/**
+ * GST collected on issued invoices (`sent`, `overdue` or `paid` — anything
+ * actually handed to a customer, never a `draft`), grouped by tax rate. No
+ * filing or return claims are made anywhere in this app — this is a
+ * summary to hand to an accountant, not a GSTR submission.
+ */
+export async function getGstSummary(
+  scope: RequestScope,
+  from: Date,
+  to: Date,
+): Promise<{ from: string; to: string; rows: GstSummaryRow[]; totalTaxableMinor: number; totalCgstMinor: number; totalSgstMinor: number; totalIgstMinor: number }> {
+  const invoices = await Invoice.find({
+    workspaceId: scope.workspaceId,
+    deletedAt: null,
+    status: { $ne: 'draft' },
+    issueDate: { $gte: from, $lte: to },
+  })
+    .select('taxPercent subtotalMinor discountMinor gst')
+    .lean();
+
+  const byRate = new Map<number, GstSummaryRow>();
+  for (const invoice of invoices) {
+    const key = invoice.taxPercent;
+    const row = byRate.get(key) ?? { taxPercent: key, taxableMinor: 0, cgstMinor: 0, sgstMinor: 0, igstMinor: 0, invoiceCount: 0 };
+    row.taxableMinor += invoice.subtotalMinor - invoice.discountMinor;
+    row.cgstMinor += invoice.gst?.cgstMinor ?? 0;
+    row.sgstMinor += invoice.gst?.sgstMinor ?? 0;
+    row.igstMinor += invoice.gst?.igstMinor ?? 0;
+    row.invoiceCount += 1;
+    byRate.set(key, row);
+  }
+
+  const rows = [...byRate.values()].sort((a, b) => a.taxPercent - b.taxPercent);
+
+  return {
+    from: from.toISOString(),
+    to: to.toISOString(),
+    rows,
+    totalTaxableMinor: rows.reduce((sum, r) => sum + r.taxableMinor, 0),
+    totalCgstMinor: rows.reduce((sum, r) => sum + r.cgstMinor, 0),
+    totalSgstMinor: rows.reduce((sum, r) => sum + r.sgstMinor, 0),
+    totalIgstMinor: rows.reduce((sum, r) => sum + r.igstMinor, 0),
+  };
+}
+
 // ─────────────────────────────────────────────── Account summary report
 
 export async function getAccountSummary(scope: RequestScope) {
   const totals = await getWorkspaceTotals(scope);
-  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null })
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null, ...excludeHiddenAccounts(scope) })
     .select('name type cachedBalanceMinor isLiability isActive')
     .sort({ sortOrder: 1 })
     .lean();

@@ -6,6 +6,9 @@ import { BottomNav } from './BottomNav';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { LoadingState } from '../components/ui/States';
 import { CommandPalette } from '../components/CommandPalette';
+import { KeyboardShortcuts } from '../components/KeyboardShortcuts';
+import { RouteAnnouncer } from '../components/RouteAnnouncer';
+import { useT } from '../i18n';
 
 /**
  * The authenticated application frame.
@@ -18,6 +21,7 @@ import { CommandPalette } from '../components/CommandPalette';
  * notice.
  */
 export function AppShell() {
+  const t = useT();
   return (
     <div className="flex min-h-dvh bg-canvas px-safe">
       {/* Visually hidden until focused — the first tab stop for a keyboard user,
@@ -26,7 +30,7 @@ export function AppShell() {
         href="#main-content"
         className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-[80] focus-visible:rounded-md focus-visible:bg-ink focus-visible:px-4 focus-visible:py-2.5 focus-visible:text-sm focus-visible:font-medium focus-visible:text-ink-inverse"
       >
-        Skip to content
+        {t('layout.skipToContent')}
       </a>
 
       <Sidebar />
@@ -48,6 +52,8 @@ export function AppShell() {
 
       <BottomNav />
       <CommandPalette />
+      <KeyboardShortcuts />
+      <RouteAnnouncer />
     </div>
   );
 }

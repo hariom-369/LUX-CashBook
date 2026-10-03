@@ -277,6 +277,8 @@ describe('loan reminders', () => {
       workspaceId: (await import('mongoose')).Types.ObjectId.createFromHexString(user.workspaceId),
       currency: 'INR',
       mode: 'personal' as const,
+      role: 'owner' as const,
+      hiddenAccountIds: [],
     };
     await syncLoanReminders(scope);
 

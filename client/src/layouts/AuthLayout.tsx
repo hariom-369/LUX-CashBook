@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/brand/Logo';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
+import { useT } from '../i18n';
+import { useDocumentTitle } from '../hooks/useDocumentMeta';
 
 /**
  * The signed-out frame.
@@ -18,16 +21,19 @@ export interface AuthLayoutProps {
 }
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
+  useDocumentTitle(title);
+  const t = useT();
   return (
     <div className="flex min-h-dvh bg-canvas px-safe">
       <div className="flex w-full flex-col px-5 pb-10 pt-safe sm:px-8 lg:w-[54%] lg:px-16">
-        <header className="flex h-20 shrink-0 items-center">
-          <Link to="/login" aria-label="Khata home">
+        <header className="flex h-20 shrink-0 items-center justify-between gap-4">
+          <Link to="/login" aria-label={t('layout.khataHome')}>
             <Logo />
           </Link>
+          <LanguageSwitcher />
         </header>
 
-        <div className="flex flex-1 items-center">
+        <main className="flex flex-1 items-center">
           <div className="mx-auto w-full max-w-[400px] py-8">
             <h1 className="text-balance text-[28px] font-semibold leading-tight tracking-[-0.02em] text-ink">
               {title}
@@ -40,7 +46,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
 
             {footer && <div className="mt-7 text-[13.5px] text-ink-muted">{footer}</div>}
           </div>
-        </div>
+        </main>
       </div>
 
       <aside
@@ -61,22 +67,20 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           <div />
 
           <div className="max-w-md">
-            <p className="label-eyebrow mb-6 text-gold">Built for daily use</p>
+            <p className="label-eyebrow mb-6 text-gold">{t('layout.builtForDailyUse')}</p>
             <p className="text-balance font-display text-[34px] font-medium leading-[1.25] tracking-[-0.02em] text-ink">
-              Every balance you see traces back to a transaction you recorded.
+              {t('layout.everyBalanceYouSeeTracesBack')}
             </p>
             <p className="mt-6 text-[14.5px] leading-relaxed text-ink-muted">
-              A cash book, a personal ledger and a household budget in one place. Lending and
-              borrowing stay separate from income and expenses, transfers never inflate your totals,
-              and nothing is ever quietly rewritten.
+              {t('layout.aCashBookAPersonalLedger')}
             </p>
           </div>
 
           <dl className="grid grid-cols-3 gap-8 border-t border-line pt-8">
             {[
-              ['Ledger', 'Double-entry accurate'],
-              ['Offline', 'Works without signal'],
-              ['Yours', 'Export everything, anytime'],
+              [t('layout.ledger'), t('layout.doubleEntryAccurate')],
+              [t('layout.offline'), t('layout.worksWithoutSignal')],
+              [t('layout.yours'), t('layout.exportEverythingAnytime')],
             ].map(([term, detail]) => (
               <div key={term}>
                 <dt className="text-[13px] font-semibold text-ink">{term}</dt>

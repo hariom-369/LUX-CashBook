@@ -7,6 +7,8 @@ import { NAV_GROUPS, navItemsFor } from '../config/navigation';
 import { useUiStore } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { useNavLabels } from '../i18n/nav';
+import { useT } from '../i18n';
 
 /**
  * Desktop navigation.
@@ -16,6 +18,8 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
  * page, while a 2px rule reads as precise.
  */
 export function Sidebar() {
+  const t = useT();
+  const navLabels = useNavLabels();
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggle = useUiStore((s) => s.toggleSidebar);
   const mode = useAuthStore(
@@ -40,7 +44,7 @@ export function Sidebar() {
         <WorkspaceSwitcher collapsed={collapsed} />
       </div>
 
-      <nav aria-label="Main" className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <nav aria-label={t('layout.main')} className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {NAV_GROUPS.map((group) => {
           const groupItems = items.filter((item) => item.group === group.id);
           if (groupItems.length === 0) return null;
@@ -48,7 +52,7 @@ export function Sidebar() {
           return (
             <div key={group.id} className="mb-1">
               {group.label && !collapsed && (
-                <div className="label-eyebrow px-3 pb-1.5 pt-4">{group.label}</div>
+                <div className="label-eyebrow px-3 pb-1.5 pt-4">{navLabels.group(group.id, group.label)}</div>
               )}
               {group.label && collapsed && <div aria-hidden className="mx-3 my-3 border-t border-line-faint" />}
 
@@ -59,7 +63,7 @@ export function Sidebar() {
                       to={item.to}
                       // `end` only on the dashboard, or every route would match "/".
                       end={item.to === '/'}
-                      title={collapsed ? item.label : undefined}
+                      title={collapsed ? navLabels.item(item) : undefined}
                       className={({ isActive }) =>
                         cn(
                           'group relative flex items-center rounded-md text-[13.5px] font-medium',
@@ -79,8 +83,8 @@ export function Sidebar() {
                             className={cn('size-[18px] shrink-0', isActive && 'text-gold')}
                             strokeWidth={isActive ? 2.1 : 1.8}
                           />
-                          {!collapsed && <span className="truncate">{item.label}</span>}
-                          {collapsed && <span className="sr-only">{item.label}</span>}
+                          {!collapsed && <span className="truncate">{navLabels.item(item)}</span>}
+                          {collapsed && <span className="sr-only">{navLabels.item(item)}</span>}
                         </>
                       )}
                     </NavLink>
@@ -95,7 +99,7 @@ export function Sidebar() {
       <button
         type="button"
         onClick={toggle}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? t('layout.expandSidebar') : t('layout.collapseSidebar')}
         className={cn(
           'flex h-12 shrink-0 items-center gap-2.5 border-t border-line text-[12.5px] font-medium text-ink-faint',
           'transition-colors hover:bg-sunken hover:text-ink-secondary',
@@ -106,7 +110,7 @@ export function Sidebar() {
           aria-hidden
           className={cn('size-4 transition-transform duration-200', collapsed && 'rotate-180')}
         />
-        {!collapsed && <span>Collapse</span>}
+        {!collapsed && <span>{t('layout.collapse')}</span>}
       </button>
     </aside>
   );

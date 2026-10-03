@@ -1,6 +1,7 @@
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { useT } from '../../i18n';
 
 /**
  * Form field shell.
@@ -20,6 +21,7 @@ export interface FieldProps {
 }
 
 export function Field({ label, hint, error, required, className, children }: FieldProps) {
+  const t = useT();
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -31,9 +33,13 @@ export function Field({ label, hint, error, required, className, children }: Fie
         <label htmlFor={id} className="text-[13px] font-medium text-ink-secondary">
           {label}
           {required && (
-            <span aria-hidden className="ml-0.5 text-gold">
-              *
-            </span>
+            <>
+              <span aria-hidden className="ml-0.5 text-gold">
+                *
+              </span>
+              {/* The asterisk is visual; this is what a screen reader hears. */}
+              <span className="sr-only"> ({t('common.required')})</span>
+            </>
           )}
         </label>
       )}

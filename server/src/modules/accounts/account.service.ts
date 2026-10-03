@@ -1,9 +1,21 @@
 import { Types, type HydratedDocument } from 'mongoose';
-import { ACCOUNT_TYPE_META, type AccountDto, type AccountType } from '@khata/shared';
+import {
+  ACCOUNT_TYPE_META,
+  addMonths,
+  daysInMonth,
+  diffInDays,
+  type AccountDto,
+  type AccountReconcilePreviewDto,
+  type AccountReconcileResultDto,
+  type AccountType,
+  type AccountVisibility,
+  type CardSummaryDto,
+} from '@khata/shared';
 import { Account, Transaction, type IAccount } from '../../models/index.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recomputeAccountBalance } from '../../services/balance.service.js';
+import { accountVisibilityFilter } from '../../services/accountVisibility.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { claimRevision } from '../../lib/revision.js';
 
@@ -26,8 +38,12 @@ export function toAccountDto(account: IAccount): AccountDto {
     icon: account.icon,
     isActive: account.isActive,
     isLiability: account.isLiability,
+    visibility: account.visibility,
     blockNegativeBalance: account.blockNegativeBalance,
     creditLimitMinor: account.creditLimitMinor,
+    statementDay: account.statementDay,
+    dueDay: account.dueDay,
+    minimumDueMinor: account.minimumDueMinor,
     excludeFromTotals: account.excludeFromTotals,
     notes: account.notes,
     sortOrder: account.sortOrder,
@@ -46,8 +62,12 @@ export interface CreateAccountInput {
   color?: string;
   icon?: string;
   isLiability?: boolean;
+  visibility?: AccountVisibility;
   blockNegativeBalance?: boolean;
   creditLimitMinor?: number;
+  statementDay?: number;
+  dueDay?: number;
+  minimumDueMinor?: number;
   excludeFromTotals?: boolean;
   notes?: string;
   isPettyCash?: boolean;
@@ -57,7 +77,11 @@ export async function listAccounts(
   scope: RequestScope,
   options: { includeInactive?: boolean } = {},
 ): Promise<AccountDto[]> {
-  const filter: Record<string, unknown> = { workspaceId: scope.workspaceId, deletedAt: null };
+  const filter: Record<string, unknown> = {
+    workspaceId: scope.workspaceId,
+    deletedAt: null,
+    ...accountVisibilityFilter(scope),
+  };
   if (!options.includeInactive) filter.isActive = true;
 
   const accounts = await Account.find(filter).sort({ sortOrder: 1, createdAt: 1 }).lean();
@@ -71,7 +95,12 @@ export async function getAccount(scope: RequestScope, accountId: string): Promis
     workspaceId: scope.workspaceId,
     deletedAt: null,
   });
-  if (!account) throw notFound('Account');
+  // Same response as "doesn't exist" — a private account's existence is not
+  // confirmed to a member who isn't its owner (§Phase 9), mirroring how a
+  // workspace that belongs to someone else is already treated.
+  if (!account || (account.visibility === 'private' && String(account.userId) !== String(scope.userId))) {
+    throw notFound('Account');
+  }
   return account;
 }
 
@@ -115,10 +144,14 @@ export async function createAccount(
     color: input.color ?? '#B08D4F',
     icon: input.icon ?? typeMeta.icon,
     isLiability: input.isLiability ?? typeMeta.liability,
+    visibility: input.visibility ?? 'shared',
     // A cash drawer cannot hold less than nothing, so guard it by default; a card
     // is meant to go negative, so never guard that.
     blockNegativeBalance: input.blockNegativeBalance ?? input.type === 'cash',
     creditLimitMinor: input.creditLimitMinor,
+    statementDay: input.statementDay,
+    dueDay: input.dueDay,
+    minimumDueMinor: input.minimumDueMinor,
     excludeFromTotals: input.excludeFromTotals ?? false,
     notes: input.notes,
     isPettyCash: input.isPettyCash ?? false,
@@ -138,7 +171,8 @@ export async function createAccount(
 export type UpdateAccountInput = Partial<
   Pick<
     CreateAccountInput,
-    'name' | 'bankName' | 'last4' | 'color' | 'icon' | 'blockNegativeBalance' | 'creditLimitMinor' | 'excludeFromTotals' | 'notes'
+    | 'name' | 'bankName' | 'last4' | 'color' | 'icon' | 'blockNegativeBalance' | 'creditLimitMinor'
+    | 'statementDay' | 'dueDay' | 'minimumDueMinor' | 'excludeFromTotals' | 'notes' | 'visibility'
   >
 > & {
   isActive?: boolean;
@@ -174,7 +208,8 @@ export async function updateAccount(
 
   for (const key of [
     'bankName', 'last4', 'color', 'icon', 'blockNegativeBalance',
-    'creditLimitMinor', 'excludeFromTotals', 'notes', 'isActive', 'sortOrder',
+    'creditLimitMinor', 'statementDay', 'dueDay', 'minimumDueMinor',
+    'excludeFromTotals', 'notes', 'isActive', 'sortOrder', 'visibility',
   ] as const) {
     if (input[key] !== undefined) {
       (account as unknown as Record<string, unknown>)[key] = input[key];
@@ -374,5 +409,96 @@ export async function getAccountLedger(
     closingBalanceMinor: running,
     rows: ledger,
     total,
+  };
+}
+
+/**
+ * Account reconciliation (§Phase 5, D-3): compare Khata's own balance —
+ * `cachedBalanceMinor`, the same figure shown everywhere else for this
+ * account — against what the user read off a real bank statement.
+ */
+export async function previewReconciliation(
+  scope: RequestScope,
+  accountId: string,
+  statementBalanceMinor: number,
+): Promise<AccountReconcilePreviewDto> {
+  const account = await getAccount(scope, accountId);
+  return {
+    ledgerBalanceMinor: account.cachedBalanceMinor,
+    statementBalanceMinor,
+    differenceMinor: statementBalanceMinor - account.cachedBalanceMinor,
+  };
+}
+
+/**
+ * Posts the difference as an `adjustment` transaction — never a silent
+ * change to the cached balance — exactly the mechanism Daily Closing already
+ * uses for the same kind of gap (`closing.service.ts`). A difference of zero
+ * posts nothing; reconciling is still worth recording even when there's
+ * nothing to adjust.
+ */
+export async function reconcileAccount(
+  scope: RequestScope,
+  accountId: string,
+  statementBalanceMinor: number,
+  note: string | undefined,
+  audit: AuditContext,
+): Promise<AccountReconcileResultDto> {
+  const account = await getAccount(scope, accountId);
+  const differenceMinor = statementBalanceMinor - account.cachedBalanceMinor;
+  const reconciledAt = new Date();
+
+  if (differenceMinor === 0) {
+    return { differenceMinor: 0, reconciledAt: reconciledAt.toISOString() };
+  }
+
+  const { createTransaction } = await import('../transactions/transaction.service.js');
+  const transaction = await createTransaction(
+    scope,
+    {
+      type: 'adjustment',
+      amountMinor: Math.abs(differenceMinor),
+      date: reconciledAt,
+      accountId,
+      direction: differenceMinor > 0 ? 'in' : 'out',
+      description: note?.trim() || `Reconciliation adjustment (${differenceMinor > 0 ? 'statement higher' : 'statement lower'})`,
+    },
+    audit,
+  );
+
+  return { differenceMinor, adjustmentTransactionId: String(transaction._id), reconciledAt: reconciledAt.toISOString() };
+}
+
+/**
+ * Credit card centre (§Phase 7): utilisation and the next payment due date,
+ * derived from the account's own balance and limit — never a second figure
+ * that could disagree with what the ledger already says is owed.
+ */
+export async function getCardSummary(scope: RequestScope, accountId: string): Promise<CardSummaryDto> {
+  const account = await getAccount(scope, accountId);
+  const now = new Date();
+  // A credit card's balance goes negative as it's spent on, same as any account
+  // overdrawn — "owed" is just how far below zero it currently sits.
+  const outstandingMinor = Math.max(0, -account.cachedBalanceMinor);
+  const utilizationPercent = account.creditLimitMinor
+    ? Math.round((outstandingMinor / account.creditLimitMinor) * 100)
+    : undefined;
+
+  let nextDueDate: Date | undefined;
+  if (account.dueDay) {
+    const clampedDay = Math.min(account.dueDay, daysInMonth(now.getFullYear(), now.getMonth()));
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), clampedDay, 12);
+    nextDueDate = thisMonth >= now ? thisMonth : addMonths(thisMonth, 1);
+  }
+
+  return {
+    outstandingMinor,
+    creditLimitMinor: account.creditLimitMinor,
+    utilizationPercent,
+    statementDay: account.statementDay,
+    dueDay: account.dueDay,
+    minimumDueMinor: account.minimumDueMinor,
+    nextDueDate: nextDueDate?.toISOString(),
+    daysUntilDue: nextDueDate ? diffInDays(nextDueDate, now) : undefined,
   };
 }

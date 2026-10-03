@@ -1,13 +1,25 @@
 import { Types, type HydratedDocument } from 'mongoose';
-import type { LedgerRowDto, PersonDto, PersonLedgerDto, PersonRelationship } from '@khata/shared';
+import type { IndianState, LedgerRowDto, PersonDto, PersonLedgerDto, PersonRelationship } from '@khata/shared';
 import { Person, Transaction, type IPerson } from '../../models/index.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 import { createTransaction } from '../transactions/transaction.service.js';
 import { claimRevision } from '../../lib/revision.js';
+import { excludeHiddenTransactions, getHiddenPersonDeltas } from '../../services/accountVisibility.js';
 
 export type PersonDoc = HydratedDocument<IPerson>;
+
+/** A person as one viewer may see them: balance net of loans funded from other members' private accounts. */
+export function toViewerPersonDto(person: IPerson, hiddenDeltas: Map<string, number>): PersonDto {
+  const dto = toPersonDto(person);
+  const hidden = hiddenDeltas.get(String(person._id)) ?? 0;
+  return hidden === 0 ? dto : { ...dto, balanceMinor: dto.balanceMinor - hidden };
+}
+
+export async function toScopedPersonDto(scope: RequestScope, person: IPerson): Promise<PersonDto> {
+  return toViewerPersonDto(person, await getHiddenPersonDeltas(scope));
+}
 
 export function toPersonDto(person: IPerson): PersonDto {
   return {
@@ -20,6 +32,8 @@ export function toPersonDto(person: IPerson): PersonDto {
     avatarUrl: person.avatarUrl,
     relationship: person.relationship,
     notes: person.notes,
+    gstin: person.gstin,
+    state: person.state,
     tags: person.tags,
     openingBalanceMinor: person.openingBalanceMinor,
     balanceMinor: person.cachedBalanceMinor,
@@ -37,6 +51,8 @@ export interface CreatePersonInput {
   avatarUrl?: string;
   relationship?: PersonRelationship;
   notes?: string;
+  gstin?: string;
+  state?: IndianState;
   tags?: string[];
   /** Balance carried in from before the app. Positive = they owe you. */
   openingBalanceMinor?: number;
@@ -63,19 +79,34 @@ export async function listPeople(
     filter.$or = [{ name: pattern }, { phone: pattern }, { email: pattern }, { notes: pattern }];
   }
 
-  if (options.status === 'receivable') filter.cachedBalanceMinor = { $gt: 0 };
-  else if (options.status === 'payable') filter.cachedBalanceMinor = { $lt: 0 };
-  else if (options.status === 'settled') filter.cachedBalanceMinor = 0;
+  // When some of a person's balance is hidden from this viewer (other members' private
+  // accounts), the stored balance is the wrong thing to filter or sort by - do both on the
+  // viewer's figure instead. With nothing hidden this stays a plain database query.
+  const hiddenDeltas = await getHiddenPersonDeltas(scope);
+  const viewerSpecific = hiddenDeltas.size > 0;
+
+  if (!viewerSpecific) {
+    if (options.status === 'receivable') filter.cachedBalanceMinor = { $gt: 0 };
+    else if (options.status === 'payable') filter.cachedBalanceMinor = { $lt: 0 };
+    else if (options.status === 'settled') filter.cachedBalanceMinor = 0;
+  }
 
   const sort: Record<string, 1 | -1> =
-    options.sortBy === 'balance'
+    options.sortBy === 'balance' && !viewerSpecific
       ? { cachedBalanceMinor: -1 }
       : options.sortBy === 'recent'
         ? { lastTransactionAt: -1 }
         : { name: 1 };
 
   const people = await Person.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
-  return people.map(toPersonDto);
+  let dtos = people.map((person) => toViewerPersonDto(person, hiddenDeltas));
+  if (viewerSpecific) {
+    if (options.status === 'receivable') dtos = dtos.filter((p) => p.balanceMinor > 0);
+    else if (options.status === 'payable') dtos = dtos.filter((p) => p.balanceMinor < 0);
+    else if (options.status === 'settled') dtos = dtos.filter((p) => p.balanceMinor === 0);
+    if (options.sortBy === 'balance') dtos.sort((a, b) => b.balanceMinor - a.balanceMinor);
+  }
+  return dtos;
 }
 
 export async function getPerson(scope: RequestScope, personId: string): Promise<PersonDoc> {
@@ -114,6 +145,8 @@ export async function createPerson(
     avatarUrl: input.avatarUrl,
     relationship: input.relationship ?? 'friend',
     notes: input.notes,
+    gstin: input.gstin,
+    state: input.state,
     tags: input.tags ?? [],
     openingBalanceMinor: input.openingBalanceMinor ?? 0,
     openingDate: input.openingDate ?? new Date(),
@@ -160,7 +193,7 @@ export async function updatePerson(
     input.openingBalanceMinor !== undefined && input.openingBalanceMinor !== person.openingBalanceMinor;
   if (openingChanged) person.openingBalanceMinor = input.openingBalanceMinor!;
 
-  for (const key of ['phone', 'email', 'avatarUrl', 'relationship', 'notes', 'tags', 'isArchived'] as const) {
+  for (const key of ['phone', 'email', 'avatarUrl', 'relationship', 'notes', 'gstin', 'state', 'tags', 'isArchived'] as const) {
     if (input[key] !== undefined) {
       (person as unknown as Record<string, unknown>)[key] = input[key];
     }
@@ -234,10 +267,12 @@ export async function getPersonLedger(
 ): Promise<PersonLedgerDto> {
   const person = await getPerson(scope, personId);
 
+  const hiddenDeltas = await getHiddenPersonDeltas(scope);
   const filter: Record<string, unknown> = {
     workspaceId: scope.workspaceId,
     personId: person._id,
     deletedAt: null,
+    ...excludeHiddenTransactions(scope),
   };
   if (options.from || options.to) {
     const range: Record<string, Date> = {};
@@ -284,6 +319,7 @@ export async function getPersonLedger(
     workspaceId: scope.workspaceId,
     personId: person._id,
     deletedAt: null,
+    ...excludeHiddenTransactions(scope),
     type: { $in: ['lend', 'borrow'] },
     dueDate: { $ne: null, $lt: new Date() },
     $expr: { $lt: ['$settledMinor', '$amountMinor'] },
@@ -300,6 +336,7 @@ export async function getPersonLedger(
     workspaceId: scope.workspaceId,
     personId: person._id,
     deletedAt: null,
+    ...excludeHiddenTransactions(scope),
     type: { $in: ['lend', 'borrow'] },
     dueDate: { $ne: null, $gte: new Date() },
     $expr: { $lt: ['$settledMinor', '$amountMinor'] },
@@ -309,7 +346,7 @@ export async function getPersonLedger(
     .lean();
 
   return {
-    person: toPersonDto(person),
+    person: toViewerPersonDto(person, hiddenDeltas),
     rows: ledgerRows,
     summary: {
       openingBalanceMinor: person.openingBalanceMinor,
@@ -402,20 +439,19 @@ export async function getReceivablesAndPayables(scope: RequestScope): Promise<{
   receivables: PersonDto[];
   payables: PersonDto[];
 }> {
+  const hiddenDeltas = await getHiddenPersonDeltas(scope);
+  // A person whose stored balance is zero can still have a non-zero viewer balance (and the
+  // reverse), so when anything is hidden, read everyone and decide on the viewer's figure.
   const people = await Person.find({
     workspaceId: scope.workspaceId,
     deletedAt: null,
     isArchived: false,
-    cachedBalanceMinor: { $ne: 0 },
-  })
-    .sort({ cachedBalanceMinor: -1 })
-    .lean();
+    ...(hiddenDeltas.size === 0 ? { cachedBalanceMinor: { $ne: 0 } } : {}),
+  }).lean();
 
-  const receivables = people.filter((p) => p.cachedBalanceMinor > 0).map(toPersonDto);
-  const payables = people
-    .filter((p) => p.cachedBalanceMinor < 0)
-    .map(toPersonDto)
-    .sort((a, b) => a.balanceMinor - b.balanceMinor);
+  const dtos = people.map((p) => toViewerPersonDto(p, hiddenDeltas)).filter((p) => p.balanceMinor !== 0);
+  const receivables = dtos.filter((p) => p.balanceMinor > 0).sort((a, b) => b.balanceMinor - a.balanceMinor);
+  const payables = dtos.filter((p) => p.balanceMinor < 0).sort((a, b) => a.balanceMinor - b.balanceMinor);
 
   return {
     receivableMinor: receivables.reduce((sum, p) => sum + p.balanceMinor, 0),

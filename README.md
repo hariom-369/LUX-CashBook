@@ -50,8 +50,11 @@ businesses.
 - **Recurring transactions & reminders** for bills and due dates
 - **Reports** — category breakdowns, monthly comparison, net worth trend,
   borrow/lend summary, an annual summary, and more
-- **Natural-language quick entry** — type "Paid 250 for lunch yesterday" and
-  review a pre-filled entry before saving
+- **Natural-language quick entry** — type "Paid 250 for lunch from HDFC" or
+  "Rahul owes me 1200" and review a pre-filled entry before saving; whatever
+  it could not work out is asked, never guessed
+- **Daily Money** — an optional simple start screen: balance, today's spend,
+  what is safe to spend, what is due, who owes whom
 - **Personalizable dashboard** — reorder, hide, and restore widgets
 - **CSV import/export, PDF statements, and full backup/restore**
 - **Offline-first** — a service worker precaches the app shell and queues
@@ -211,6 +214,8 @@ The test database is always that in-process replica set, but a local
 `server/.env` is still loaded into the test process. If it sets
 `COOKIE_CROSS_SITE` or `MONGODB_URI`, three tests that assert the defaults
 (in `tests/auth.test.ts` and `tests/env.test.ts`) fail for that reason alone.
+(The production-configuration tests in `tests/env.test.ts` set their own
+complete baseline, so they are not affected.)
 
 ## Building for production
 
@@ -222,7 +227,12 @@ Builds `shared` (typecheck only — it ships source, compiled inline by the
 other two builds), then `server` → `server/dist/index.js`, then `client` →
 `client/dist/`. The server refuses to start in production
 (`NODE_ENV=production`) without a real `MONGODB_URI` and real JWT secrets —
-it will not silently fall back to the development in-memory database.
+it will not silently fall back to the development in-memory database. It also
+refuses a configuration that would only fail later for real users: local file
+storage (use S3), no `SMTP_HOST` or a placeholder `MAIL_FROM`, `localhost` or
+non-https `APP_URL`/`API_URL`, or insecure cookies. Before deploying the
+frontend, run `npm run check:deploy --workspace client` (it fails while
+`client/vercel.json` still names the placeholder API origin in its CSP).
 
 ## Deployment
 
@@ -235,10 +245,13 @@ supported target architecture is:
 - **Database** → MongoDB Atlas
 - **Attachment storage** → Amazon S3 (local disk in development only)
 
-If your frontend and API end up on different domains (the setup above), read
-the "Cross-domain authentication" section of that guide before deploying —
-one environment variable (`COOKIE_CROSS_SITE`) needs to be set correctly or
-sessions will not persist.
+Serve the frontend and the API from one parent domain (`app.example.com` +
+`api.example.com`) and leave `COOKIE_CROSS_SITE=false` — that is the supported
+setup (see "Recommended: one parent domain" in the guide). A Vercel-domain +
+Render-domain split needs `COOKIE_CROSS_SITE=true` and depends on third-party
+cookies, which some browsers block; read "Cross-domain authentication" first.
+The guide also lists the manual steps that cannot be done from this repository
+(real S3, SMTP provider, Atlas user/network/backups).
 
 ## Core invariants
 
@@ -270,8 +283,15 @@ Full detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   `localStorage`), paired with an opaque, rotating, httpOnly refresh token.
   Refresh-token reuse revokes the entire session family.
 - Every workspace-scoped request re-verifies ownership against the database.
-- Rate limiting, keyed by user id where authenticated so it can't be dodged
-  by rotating IPs.
+- Rate limiting, keyed by the verified user where authenticated (people behind
+  one NAT do not share a bucket, and rotating IPs does not dodge it).
+- Writes carry an `Idempotency-Key`, so a retried or offline-queued create can
+  never produce a duplicate.
+- Uploaded images are decoded and re-encoded or refused — never stored as
+  received (HEIC, corrupt and non-image files are rejected).
+- Production serves a strict Content-Security-Policy and the usual hardening
+  headers (`client/vercel.json`); mail requires TLS; production dependencies
+  have no known advisories (`npm audit --omit=dev`).
 - Attachments are never publicly accessible — every download is
   authenticated and re-checked against workspace ownership, whether the file
   lives on local disk or in S3.
@@ -286,14 +306,30 @@ public issue.
 | Document | Covers |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, the transaction engine, and every core invariant in detail |
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment: every environment variable, per platform, and why |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Production deployment: every environment variable, per platform, and why — plus the recommended same-parent-domain setup, boot-time checks, and the manual steps (S3, SMTP, Atlas) still to do |
 | [`docs/PHASE2_NOTES.md`](docs/PHASE2_NOTES.md) – [`PHASE5_NOTES.md`](docs/PHASE5_NOTES.md) | Development history and what was verified at each stage |
 | [`docs/RESPONSIVE_NOTES.md`](docs/RESPONSIVE_NOTES.md) | The responsive / device-compatibility pass: what changed, layout conventions for new screens, what was verified, and known follow-ups |
 | [`docs/PRODUCT_AUDIT.md`](docs/PRODUCT_AUDIT.md) | Product audit: feature inventory, user journeys, and findings (security, product integrity, data model, UX, accessibility) with evidence |
 | [`docs/FEATURE_ROADMAP.md`](docs/FEATURE_ROADMAP.md) | Roadmap: decisions, phase order and per-phase impact, every feature rated by priority, complexity and value |
-| [`docs/PHASE1_NOTES.md`](docs/PHASE1_NOTES.md) | What Phase 1 (truth, safety, foundations) shipped, the bugs it caught, and what was verified |
+| [`docs/ROADMAP_PHASE1_NOTES.md`](docs/ROADMAP_PHASE1_NOTES.md) | What Phase 1 (truth, safety, foundations) shipped, the bugs it caught, and what was verified |
+| [`docs/ROADMAP_PHASE2_NOTES.md`](docs/ROADMAP_PHASE2_NOTES.md) | What Phase 2 (everyday entry) shipped — transaction edit UI, payees, tags, category rules, Quick Entry 2.0, structured global search, the Daily Money home — and what was verified |
+| [`docs/ROADMAP_PHASE3_NOTES.md`](docs/ROADMAP_PHASE3_NOTES.md) | What Phase 3 (bills, subscriptions, reminders) shipped — bills centre, subscription detector, calendar, browser push — and what was verified |
+| [`docs/ROADMAP_PHASE4_NOTES.md`](docs/ROADMAP_PHASE4_NOTES.md) | What Phase 4 (lending 2.0) shipped — per-loan timeline, installment schedules — and what was already built before the phase started |
+| [`docs/ROADMAP_PHASE5_NOTES.md`](docs/ROADMAP_PHASE5_NOTES.md) | What Phase 5 (bank import & reconciliation) shipped — column-mapping import, duplicate classification, account reconciliation — and what was verified |
+| [`docs/ROADMAP_PHASE6_NOTES.md`](docs/ROADMAP_PHASE6_NOTES.md) | What Phase 6 (receipts & documents) shipped — receipt capture, document vault, expiry reminders — and the deliberate delete/restore behaviour change |
+| [`docs/ROADMAP_PHASE7_NOTES.md`](docs/ROADMAP_PHASE7_NOTES.md) | What Phase 7 (planning & insight) shipped — credit card centre, forecast, budgets/goals 2.0 — report builder and reimbursements (added later), and what remains deferred |
+| [`docs/ROADMAP_PHASE8_NOTES.md`](docs/ROADMAP_PHASE8_NOTES.md) | What Phase 8 (splits & groups) shipped, and a test-infrastructure bug it found and fixed — the suite had never exercised a real multi-document transaction |
+| [`docs/ROADMAP_PHASE9_NOTES.md`](docs/ROADMAP_PHASE9_NOTES.md) | What Phase 9 (household workspaces) shipped — membership/roles, invitations, private accounts — a named gap in private-account coverage, and this phase's security review status |
+| [`docs/ROADMAP_PHASE10_NOTES.md`](docs/ROADMAP_PHASE10_NOTES.md) | What Phase 10 (AI assistant) shipped — read-only tool-use for questions, draft extraction from text/receipts that always reviews through Quick Add — and why it ships untested against a real model (no provider key in this environment) |
+| [`docs/ROADMAP_PHASE11_NOTES.md`](docs/ROADMAP_PHASE11_NOTES.md) | What Phase 11 (freelancer mode) shipped — invoices/quotations/projects built around the existing ledger, atomic number sequencing, and why "overdue" is derived rather than stored |
+| [`docs/ROADMAP_PHASE12_NOTES.md`](docs/ROADMAP_PHASE12_NOTES.md) | What Phase 12 (business operations) shipped — combined invoice+loan receivables ageing, petty cash cash-counts, basic inventory with oversell protection, and a P&L composed from the existing category statement |
+| [`docs/ROADMAP_PHASE13_NOTES.md`](docs/ROADMAP_PHASE13_NOTES.md) | What Phase 13 (GST-ready data) shipped — place-of-supply CGST/SGST vs IGST splitting, inclusive/exclusive pricing, HSN/SAC, and a GST summary report — no filing claims |
+| [`docs/ROADMAP_PHASE14_NOTES.md`](docs/ROADMAP_PHASE14_NOTES.md) | What Phase 14 (Hindi/localisation) shipped — the language switcher, the completed UI string migration (with a CI guard) and server messages, month names and the signed-out screens (added in Update 4), and what is still English |
+| [`docs/ROADMAP_PHASE15_NOTES.md`](docs/ROADMAP_PHASE15_NOTES.md) | What Phase 15 (offline sync 2.0) shipped — queueable edits/deletes, conflict dialog, back-off, server-side idempotency and queued creates — and which mutations still don't queue |
+| [`docs/ROADMAP_PHASE16_NOTES.md`](docs/ROADMAP_PHASE16_NOTES.md) | Phase 16 (final polish) — shortcuts, bulk actions, demo workspace and a11y lint shipped; report caching and analytics deferred pending named decisions; the rest listed as open |
+| [`docs/LOCALIZATION.md`](docs/LOCALIZATION.md) | How the in-house translation catalogue works, and the exact steps to add another language |
 | [`docs/FINANCIAL_MODEL.md`](docs/FINANCIAL_MODEL.md) | The financial invariants and how a new feature must move money |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | Authentication, authorization, data protection, auditability and account lifecycle |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Authentication, authorization, data protection, image-upload rules, production headers, dependency advisories, auditability and account lifecycle |
 | [`docs/OFFLINE_SYNC.md`](docs/OFFLINE_SYNC.md) | What works offline today, what changed in Phase 1, and what Phase 15 adds |
 
 ## License

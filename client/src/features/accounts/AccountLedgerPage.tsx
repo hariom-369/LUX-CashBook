@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, FileDown, RefreshCw, Wallet } from 'lucide-react';
+import { ArrowLeft, FileDown, RefreshCw, Scale, Upload, Wallet } from 'lucide-react';
 import {
+  PRIVATE_TRANSFER_LABEL,
   RANGE_PRESET_LABELS,
   TRANSACTION_META,
   formatDate,
@@ -18,9 +19,14 @@ import { Icon } from '../../components/ui/Icon';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { useToast } from '../../components/ui/Toast';
 import { useAccountLedger, useInvalidateLedger } from '../../lib/queries';
+import { useCardSummary } from '../../lib/queries3';
 import { api, errorMessage } from '../../lib/api';
 import { downloadFile } from '../../lib/download';
 import { useAuthStore } from '../../stores/auth.store';
+import { ImportWizard } from './ImportWizard';
+import { ReconcileDialog } from './ReconcileDialog';
+import { useT } from '../../i18n';
+import { ScrollRegion } from '../../components/ui/ScrollRegion';
 
 const RANGE_OPTIONS: RangePreset[] = [
   'this_month', 'last_month', 'last_30_days', 'last_3_months', 'this_year', 'all_time',
@@ -35,10 +41,13 @@ const RANGE_OPTIONS: RangePreset[] = [
  * exactly the promise §72 makes.
  */
 export function AccountLedgerPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const [range, setRange] = useState<RangePreset>('this_month');
   const [busy, setBusy] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
 
   const toast = useToast();
   const invalidate = useInvalidateLedger();
@@ -69,13 +78,13 @@ export function AccountLedgerPage() {
       );
       invalidate();
       toast.success(
-        result.changed ? 'Balance corrected' : 'Balance verified',
+        result.changed ? t('accounts.balanceCorrected') : t('accounts.balanceVerified'),
         result.changed
-          ? 'The stored balance disagreed with the transactions and has been rebuilt from them.'
-          : 'The balance matches the sum of every transaction on this account.',
+          ? t('accounts.theStoredBalanceDisagreedWithThe')
+          : t('accounts.theBalanceMatchesTheSumOf'),
       );
     } catch (err) {
-      toast.error('Could not verify the balance', errorMessage(err));
+      toast.error(t('accounts.couldNotVerifyTheBalance'), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -87,7 +96,7 @@ export function AccountLedgerPage() {
     try {
       await downloadFile(`/pdf/accounts/${id}`, range === 'all_time' ? {} : { from: dateRange.from.toISOString(), to: dateRange.to.toISOString() });
     } catch (err) {
-      toast.error('Could not generate the PDF', errorMessage(err));
+      toast.error(t('common.couldNotGenerateThePdf'), errorMessage(err));
     } finally {
       setPdfBusy(false);
     }
@@ -104,7 +113,7 @@ export function AccountLedgerPage() {
   if (isError) {
     return (
       <Card>
-        <ErrorState error={error} onRetry={() => void refetch()} />
+        <ErrorState titleAs="h1" error={error} onRetry={() => void refetch()} />
       </Card>
     );
   }
@@ -122,7 +131,7 @@ export function AccountLedgerPage() {
         className="flex w-fit items-center gap-1.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft aria-hidden className="size-3.5" />
-        All accounts
+        {t('common.allAccounts')}
       </Link>
 
       <Card>
@@ -139,11 +148,11 @@ export function AccountLedgerPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="min-w-0 break-words text-lg font-semibold tracking-[-0.01em] text-ink">{account.name}</h1>
-                {!account.isActive && <Badge tone="outline" eyebrow>Inactive</Badge>}
+                {!account.isActive && <Badge tone="outline" eyebrow>{t('accounts.inactive')}</Badge>}
               </div>
               <p className="mt-0.5 text-[12.5px] text-ink-muted">
                 {[account.bankName, account.last4 && `•••• ${account.last4}`].filter(Boolean).join(' · ') ||
-                  'Current balance'}
+                  t('onboarding.currentBalance')}
               </p>
               <div className="mt-2">
                 <Money
@@ -161,12 +170,12 @@ export function AccountLedgerPage() {
             <Select
               value={range}
               onChange={(event) => setRange(event.target.value as RangePreset)}
-              aria-label="Date range"
+              aria-label={t('common.dateRange')}
               className="w-auto min-w-[150px]"
             >
               {RANGE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
-                  {RANGE_PRESET_LABELS[option]}
+                  {t.label('range', option, RANGE_PRESET_LABELS[option])}
                 </option>
               ))}
             </Select>
@@ -176,24 +185,41 @@ export function AccountLedgerPage() {
               leftIcon={<RefreshCw className="size-3.5" />}
               loading={busy}
               onClick={() => void recompute()}
-              title="Recalculate this balance from every transaction on the account"
+              title={t('accounts.recalculateThisBalanceFromEveryTransacti')}
             >
-              Verify balance
+              {t('accounts.verifyBalance')}
             </Button>
 
             <Button variant="secondary" leftIcon={<FileDown className="size-3.5" />} loading={pdfBusy} onClick={() => void exportPdf()}>
-              PDF statement
+              {t('accounts.pdfStatement')}
+            </Button>
+
+            <Button variant="secondary" leftIcon={<Upload className="size-3.5" />} onClick={() => setImporting(true)}>
+              {t('accounts.importStatement')}
+            </Button>
+
+            <Button variant="secondary" leftIcon={<Scale className="size-3.5" />} onClick={() => setReconciling(true)}>
+              {t('accounts.reconcile')}
             </Button>
           </div>
         </div>
       </Card>
 
+      {id && (
+        <>
+          <ImportWizard accountId={id} open={importing} onClose={() => setImporting(false)} />
+          <ReconcileDialog accountId={id} accountName={account.name} open={reconciling} onClose={() => setReconciling(false)} />
+        </>
+      )}
+
+      {id && account.type === 'credit_card' && <CreditCardSummary accountId={id} />}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        <StatementTile label={accountingView ? 'Balance b/d' : 'Opening'} amountMinor={openingBalanceMinor} />
-        <StatementTile label={accountingView ? 'Debit' : 'Money in'} amountMinor={totalIn} tone="positive" />
-        <StatementTile label={accountingView ? 'Credit' : 'Money out'} amountMinor={totalOut} tone="negative" />
+        <StatementTile label={accountingView ? t('common.balanceBD') : t('accounts.opening')} amountMinor={openingBalanceMinor} />
+        <StatementTile label={accountingView ? t('common.debit') : t('common.moneyIn')} amountMinor={totalIn} tone="positive" />
+        <StatementTile label={accountingView ? t('common.credit') : t('common.moneyOut')} amountMinor={totalOut} tone="negative" />
         <StatementTile
-          label={accountingView ? 'Balance c/d' : 'Closing'}
+          label={accountingView ? t('common.balanceCD') : t('accounts.closing')}
           amountMinor={closingBalanceMinor}
           emphasise
         />
@@ -202,10 +228,10 @@ export function AccountLedgerPage() {
       <Card bare>
         <div className="p-5 pb-3 sm:p-6 sm:pb-3">
           <CardHeader
-            eyebrow="Statement"
+            eyebrow={t('accounts.statement')}
             title={
               range === 'all_time'
-                ? 'All transactions'
+                ? t('accounts.allTransactions')
                 : `${formatDate(dateRange.from)} – ${formatDate(dateRange.to)}`
             }
           />
@@ -214,33 +240,33 @@ export function AccountLedgerPage() {
         {rows.length === 0 ? (
           <EmptyState
             icon={<Wallet className="size-5" />}
-            title="Nothing in this period"
-            description="Try a wider date range, or record a transaction against this account."
+            title={t('common.nothingInThisPeriod')}
+            description={t('accounts.tryAWiderDateRangeOr')}
           />
         ) : (
-          <div className="overflow-x-auto border-t border-line-faint">
+          <ScrollRegion label={t('scroll.ledger')} className="border-t border-line-faint">
             <table className="w-full min-w-[640px] text-left">
               <caption className="sr-only">
-                Statement for {account.name}, showing a running balance
+                {t('accounts.statementFor')} {account.name}{t('accounts.showingARunningBalance')}
               </caption>
               <thead>
                 <tr className="border-b border-line bg-sunken/60">
-                  <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">Date</th>
-                  <th scope="col" className="label-eyebrow px-3 py-2.5">Particulars</th>
+                  <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">{t('common.date')}</th>
+                  <th scope="col" className="label-eyebrow px-3 py-2.5">{t('common.particulars')}</th>
                   <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">
-                    {accountingView ? 'Debit' : 'In'}
+                    {accountingView ? t('common.debit') : 'In'}
                   </th>
                   <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">
-                    {accountingView ? 'Credit' : 'Out'}
+                    {accountingView ? t('common.credit') : 'Out'}
                   </th>
-                  <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">Balance</th>
+                  <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">{t('common.balance')}</th>
                 </tr>
               </thead>
               <tbody>
                 {/* The opening row anchors the arithmetic that follows. */}
                 <tr className="border-b border-line-faint bg-sunken/30">
                   <td className="px-5 py-2.5 text-[12px] text-ink-muted sm:px-6" colSpan={4}>
-                    {accountingView ? 'Balance b/d' : 'Opening balance'}
+                    {accountingView ? t('common.balanceBD') : t('common.openingBalance')}
                   </td>
                   <td className="px-5 py-2.5 text-right sm:px-6">
                     <Money amountMinor={openingBalanceMinor} size="sm" tone="neutral" weight="medium" compactDecimals />
@@ -256,16 +282,16 @@ export function AccountLedgerPage() {
                         so the table keeps its designed width instead of growing with the longest text. */}
                     <td className="px-3 py-3 max-xl:w-full max-xl:min-w-40 max-xl:max-w-0">
                       <span className="flex items-center gap-2">
-                        <span className="truncate text-[13px] font-medium text-ink">{row.description}</span>
+                        <span className="truncate text-[13px] font-medium text-ink">{row.description === PRIVATE_TRANSFER_LABEL ? t('transactions.privateTransfer') : row.description}</span>
                         {row.isContra && (
                           <Badge tone="neutral" eyebrow className="shrink-0">
-                            Contra
+                            {t('common.contra')}
                           </Badge>
                         )}
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] text-ink-muted">
                         {[
-                          TRANSACTION_META[row.type as keyof typeof TRANSACTION_META]?.label,
+                          t.label('txType', row.type, TRANSACTION_META[row.type as keyof typeof TRANSACTION_META]?.label ?? row.type),
                           row.counterAccountName,
                           row.categoryName,
                           row.personName,
@@ -300,7 +326,7 @@ export function AccountLedgerPage() {
               <tfoot>
                 <tr className="border-t-2 border-line-strong bg-sunken/60">
                   <td className="px-5 py-3 text-[12.5px] font-semibold text-ink sm:px-6" colSpan={2}>
-                    {accountingView ? 'Balance c/d' : 'Closing balance'}
+                    {accountingView ? t('common.balanceCD') : t('common.closingBalance')}
                   </td>
                   <td className="px-3 py-3 text-right">
                     <Money amountMinor={totalIn} size="sm" tone="positive" weight="medium" compactDecimals />
@@ -314,10 +340,54 @@ export function AccountLedgerPage() {
                 </tr>
               </tfoot>
             </table>
-          </div>
+          </ScrollRegion>
         )}
       </Card>
     </div>
+  );
+}
+
+/** Credit card centre (§Phase 7): utilisation and the next payment due date. */
+function CreditCardSummary({ accountId }: { accountId: string }) {
+  const t = useT();
+  const { data } = useCardSummary(accountId);
+  if (!data || (!data.creditLimitMinor && !data.dueDay)) return null;
+
+  return (
+    <Card>
+      <CardHeader eyebrow={t('accounts.creditCard')} title={t('accounts.utilisationPayment')} />
+      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {data.creditLimitMinor !== undefined && (
+          <div>
+            <div className="flex items-baseline justify-between">
+              <Money amountMinor={data.outstandingMinor} size="md" tone="negative" compactDecimals />
+              <span className="text-[11.5px] text-ink-muted">{t('common.of')} <Money amountMinor={data.creditLimitMinor} size="xs" tone="neutral" compactDecimals /></span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-sunken">
+              <div
+                className={cn('h-full rounded-full', (data.utilizationPercent ?? 0) >= 80 ? 'bg-negative' : (data.utilizationPercent ?? 0) >= 50 ? 'bg-warning' : 'bg-positive')}
+                style={{ width: `${Math.min(100, data.utilizationPercent ?? 0)}%` }}
+              />
+            </div>
+            <p className="mt-1 text-[11px] text-ink-muted">{data.utilizationPercent ?? 0}{t('accounts.utilised')}</p>
+          </div>
+        )}
+        {data.dueDay && (
+          <div>
+            <p className="label-eyebrow">{t('accounts.nextPaymentDue')}</p>
+            <p className="mt-1 text-[14px] font-medium text-ink">
+              {data.nextDueDate && formatDate(data.nextDueDate)}
+              {data.daysUntilDue !== undefined && <span className="ml-1.5 text-ink-muted">({data.daysUntilDue === 0 ? 'today' : `${data.daysUntilDue}d`})</span>}
+            </p>
+            {data.minimumDueMinor !== undefined && (
+              <p className="mt-0.5 text-[11.5px] text-ink-muted">
+                {t('accounts.minimumDue2')} <Money amountMinor={data.minimumDueMinor} size="xs" tone="neutral" compactDecimals />
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 

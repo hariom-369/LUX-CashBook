@@ -35,7 +35,18 @@ async function resolveUri(): Promise<string> {
   return replSet.getUri(env.MONGODB_DB_NAME);
 }
 
-async function detectTransactionSupport(): Promise<void> {
+/**
+ * Exported solely so the test harness — which connects to its in-process
+ * replica set directly via `mongoose.connect()` rather than through
+ * `connectDatabase()` below — can still run this detection. Without it,
+ * `supportsTransactions()` stays permanently `false` in every test despite
+ * the replica set genuinely supporting transactions, silently exercising
+ * only the compensating-rollback fallback path and never the real
+ * multi-document transaction path `tests/setup.ts` documents itself as
+ * testing (§Phase 8 found this while adding the first code to actually
+ * depend on cross-call rollback via `createTransaction`'s `externalUow`).
+ */
+export async function detectTransactionSupport(): Promise<void> {
   try {
     const admin = mongoose.connection.db?.admin();
     if (!admin) return;

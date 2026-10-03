@@ -53,6 +53,27 @@ pettyCashRouter.post(
   }),
 );
 
+pettyCashRouter.post(
+  '/:id/count',
+  writeLimiter,
+  validate({
+    params: idParamSchema,
+    body: z.object({ countedMinor: amountMinorSchema.refine((n) => n >= 0, 'A count cannot be negative.'), date: dateSchema.optional(), note: text(500) }),
+  }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const count = await service.recordPettyCashCount(scopeOf(req), param(req, 'id'), req.body, auditContext(req));
+    created(res, count);
+  }),
+);
+
+pettyCashRouter.get(
+  '/:id/report',
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await service.getPettyCashDailyReport(scopeOf(req), param(req, 'id')));
+  }),
+);
+
 pettyCashRouter.delete(
   '/:id',
   writeLimiter,

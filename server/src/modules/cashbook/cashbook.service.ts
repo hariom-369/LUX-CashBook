@@ -3,6 +3,7 @@ import type { CashBookDto, CashBookRowDto } from '@khata/shared';
 import { Account, Transaction } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { hydrate } from '../transactions/transaction.query.js';
+import { excludeHiddenAccounts, visibleAccountIds } from '../../services/accountVisibility.js';
 
 /**
  * The traditional cash book (§10).
@@ -52,9 +53,11 @@ export async function getCashBook(scope: RequestScope, options: CashBookOptions)
   const accountFilter: Record<string, unknown> = {
     workspaceId: scope.workspaceId,
     deletedAt: null,
+    // Other members' private accounts are not part of this viewer's cash book.
+    ...excludeHiddenAccounts(scope),
   };
   if (options.accountIds?.length) {
-    accountFilter._id = { $in: options.accountIds.map((id) => new Types.ObjectId(id)) };
+    accountFilter._id = visibleAccountIds(scope, options.accountIds.map((id) => new Types.ObjectId(id)));
   } else {
     // Default scope: the accounts a cash book is actually about. Credit cards and
     // investments are not part of a receipts-and-payments statement.

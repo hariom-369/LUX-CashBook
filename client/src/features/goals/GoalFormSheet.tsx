@@ -9,7 +9,10 @@ import { Icon } from '../../components/ui/Icon';
 import { useToast } from '../../components/ui/Toast';
 import { useAccounts } from '../../lib/queries';
 import { useInvalidatePlanning } from '../../lib/queries3';
-import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { ApiRequestError, errorMessage } from '../../lib/api';
+import { useOfflinePatch } from '../../hooks/useOfflinePatch';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 const SWATCHES = ['#B08D4F', '#2F7A5C', '#3F6383', '#A8443C', '#8A6BA8', '#9A7420'];
 
@@ -22,7 +25,10 @@ export function GoalFormSheet({
   goal: GoalProgressDto | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
+  const patchOrQueue = useOfflinePatch();
   const invalidate = useInvalidatePlanning();
   const { data: accounts = [] } = useAccounts();
   const isEdit = Boolean(goal);
@@ -70,11 +76,10 @@ export function GoalFormSheet({
         linkedAccountId: linkedAccountId || null,
       };
       if (goal) {
-        await api.patch(`/goals/${goal.id}`, { ...payload, rev: goal.rev });
-        toast.success('Goal updated');
+        await patchOrQueue(`/goals/${goal.id}`, { ...payload, rev: goal.rev });
+        toast.success(t('goals.goalUpdated'));
       } else {
-        await api.post('/goals', payload);
-        toast.success('Goal created');
+        if (await createOrQueue('/goals', payload)) toast.success(t('goals.goalCreated'));
       }
       invalidate();
       onClose();
@@ -89,16 +94,16 @@ export function GoalFormSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit goal' : 'New goal'}
+      title={isEdit ? t('goals.editGoal') : t('goals.newGoal')}
       size="sm"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="gold" loading={busy} disabled={!name.trim() || !targetMinor} onClick={() => void save()}>
-            {isEdit ? 'Save changes' : 'Create goal'}
+            {isEdit ? t('common.saveChanges') : t('goals.createGoal')}
           </Button>
         </div>
       }
@@ -110,19 +115,19 @@ export function GoalFormSheet({
           </div>
         )}
 
-        <Field label="Name" required>
-          {({ id }) => <Input id={id} autoFocus value={name} maxLength={60} placeholder="New Laptop" onChange={(event) => setName(event.target.value)} />}
+        <Field label={t('common.name')} required>
+          {({ id }) => <Input id={id} autoFocus value={name} maxLength={60} placeholder={t('goals.newLaptop')} onChange={(event) => setName(event.target.value)} />}
         </Field>
 
-        <Field label="Target amount" required>
+        <Field label={t('goals.targetAmount')} required>
           {({ id }) => <MoneyInput id={id} size="hero" value={targetMinor} onChange={setTargetMinor} />}
         </Field>
 
-        <Field label="Target date" hint="Optional">
+        <Field label={t('goals.targetDate')} hint={t('common.optional')}>
           {({ id }) => <Input id={id} type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />}
         </Field>
 
-        <Field label="Icon">
+        <Field label={t('goals.icon')}>
           {({ id }) => (
             <div id={id} className="grid grid-cols-6 gap-2">
               {GOAL_ICONS.map((option) => (
@@ -130,6 +135,7 @@ export function GoalFormSheet({
                   key={option}
                   type="button"
                   onClick={() => setIcon(option)}
+                  aria-label={t.label('goalIcon', option, option)}
                   aria-pressed={icon === option}
                   className={cn(
                     'flex items-center justify-center rounded-md border p-2.5 transition-colors',
@@ -143,7 +149,7 @@ export function GoalFormSheet({
           )}
         </Field>
 
-        <Field label="Colour">
+        <Field label={t('common.colour')}>
           {({ id }) => (
             <div id={id} className="flex flex-wrap gap-2">
               {SWATCHES.map((swatch) => (
@@ -151,7 +157,7 @@ export function GoalFormSheet({
                   key={swatch}
                   type="button"
                   onClick={() => setColor(swatch)}
-                  aria-label={`Colour ${swatch}`}
+                  aria-label={t('common.colour2', { swatch })}
                   aria-pressed={color === swatch}
                   style={{ backgroundColor: swatch }}
                   className={cn('size-8 rounded-md transition-transform', color === swatch ? 'ring-2 ring-ink ring-offset-2 ring-offset-raised' : 'hover:scale-105')}
@@ -161,7 +167,7 @@ export function GoalFormSheet({
           )}
         </Field>
 
-        <Field label="Track an account instead" hint="Progress follows this account's balance automatically, instead of manual contributions.">
+        <Field label={t('goals.trackAnAccountInstead')} hint={t('goals.progressFollowsThisAccountSBalance')}>
           {({ id }) => (
             <select
               id={id}
@@ -169,7 +175,7 @@ export function GoalFormSheet({
               onChange={(event) => setLinkedAccountId(event.target.value)}
               className="h-11 w-full rounded-md border border-line bg-sunken px-3.5 text-[15px] text-ink focus:border-gold focus:bg-surface focus:outline-none focus:ring-4 focus:ring-[--k-gold-ring]"
             >
-              <option value="">Track manually</option>
+              <option value="">{t('goals.trackManually')}</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}

@@ -15,7 +15,17 @@ import { useCurrency } from '../../hooks/useCurrency';
 import { api, errorMessage } from '../../lib/api';
 import { GoalFormSheet } from './GoalFormSheet';
 import { ContributeSheet } from './ContributeSheet';
+import { TransferContributeSheet } from './TransferContributeSheet';
 import type { GoalProgressDto } from '@khata/shared';
+import { useT, msg, type MessageRef } from '../../i18n';
+
+const STATUS_BADGE: Record<GoalProgressDto['status'], { tone: 'positive' | 'warning' | 'negative' | 'outline'; label: MessageRef } | null> = {
+  achieved: null, // shown via the existing "Achieved" badge instead
+  ahead: { tone: 'positive', label: msg('goals.ahead') },
+  on_track: { tone: 'outline', label: msg('budgets.onTrack') },
+  behind: { tone: 'warning', label: msg('goals.behind') },
+  no_deadline: null,
+};
 
 /**
  * Savings goals (§30).
@@ -24,6 +34,7 @@ import type { GoalProgressDto } from '@khata/shared';
  * disappearing — the point of a goal you hit is to be able to see that you hit it.
  */
 export function GoalsPage() {
+  const t = useT();
   const { data: goals = [], isLoading, isError, error, refetch } = useGoals();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<GoalProgressDto | null>(null);
@@ -33,11 +44,11 @@ export function GoalsPage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Goals</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">What you're saving towards.</p>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.goals')}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{t('goals.whatYouReSavingTowards')}</p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add goal
+          {t('goals.addGoal')}
         </Button>
       </header>
 
@@ -53,11 +64,11 @@ export function GoalsPage() {
         <Card>
           <EmptyState
             icon={<Flag className="size-5" />}
-            title="No goals yet"
-            description="A new laptop, an emergency fund, a trip — set a target and watch your progress build."
+            title={t('goals.noGoalsYet')}
+            description={t('goals.aNewLaptopAnEmergencyFund')}
             action={
               <Button variant="gold" size="sm" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-                Add your first goal
+                {t('goals.addYourFirstGoal')}
               </Button>
             }
           />
@@ -76,7 +87,8 @@ export function GoalsPage() {
       )}
 
       <GoalFormSheet open={creating || Boolean(editing)} goal={editing} onClose={() => { setCreating(false); setEditing(null); }} />
-      <ContributeSheet goal={contributing} onClose={() => setContributing(null)} />
+      <ContributeSheet goal={contributing?.linkedAccountId ? null : contributing} onClose={() => setContributing(null)} />
+      <TransferContributeSheet goal={contributing?.linkedAccountId ? contributing : null} onClose={() => setContributing(null)} />
     </div>
   );
 }
@@ -90,6 +102,7 @@ function GoalCard({
   onEdit: () => void;
   onContribute: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
   const invalidate = useInvalidatePlanning();
   const currency = useCurrency();
@@ -101,9 +114,9 @@ function GoalCard({
     try {
       await api.delete(`/goals/${goal.id}`);
       invalidate();
-      toast.success('Goal removed');
+      toast.success(t('goals.goalRemoved'));
     } catch (err) {
-      toast.error('Could not remove that goal', errorMessage(err));
+      toast.error(t('goals.couldNotRemoveThatGoal'), errorMessage(err));
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -127,21 +140,25 @@ function GoalCard({
                 <p className="mt-0.5 text-[11.5px] text-ink-muted">
                   {goal.daysRemaining !== undefined
                     ? goal.daysRemaining > 0
-                      ? `${goal.daysRemaining} days left`
-                      : 'Target date passed'
+                      ? t.plural('goals.daysLeft', goal.daysRemaining)
+                      : t('goals.targetDatePassed')
                     : null}
                 </p>
               )}
             </div>
           </div>
-          {goal.isAchieved && <Badge tone="positive">Achieved</Badge>}
+          {goal.isAchieved ? (
+            <Badge tone="positive">{t('goals.achieved')}</Badge>
+          ) : (
+            STATUS_BADGE[goal.status] && <Badge tone={STATUS_BADGE[goal.status]!.tone}>{t(STATUS_BADGE[goal.status]!.label.key)}</Badge>
+          )}
         </div>
 
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <Money amountMinor={goal.currentMinor} size="lg" tone="neutral" compactDecimals />
             <span className="sensitive text-[12px] text-ink-muted">
-              of {formatMoney(goal.targetMinor, { currency, compactDecimals: true })}
+              {t('common.of')} {formatMoney(goal.targetMinor, { currency, compactDecimals: true })}
             </span>
           </div>
 
@@ -153,29 +170,28 @@ function GoalCard({
           </div>
 
           <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-muted">
-            <span>{formatPercent(goal.percentComplete)} complete</span>
+            <span>{formatPercent(goal.percentComplete)} {t('goals.complete')}</span>
             {!goal.isAchieved && (
-              <span>{formatMoney(goal.remainingMinor, { currency, compactDecimals: true })} to go</span>
+              <span>{formatMoney(goal.remainingMinor, { currency, compactDecimals: true })} {t('goals.toGo')}</span>
             )}
           </div>
         </div>
 
         {!goal.isAchieved && goal.requiredMonthlyMinor && goal.requiredMonthlyMinor > 0 && (
           <p className="rounded-md border border-line-faint bg-sunken px-3 py-2 text-[11.5px] text-ink-muted">
-            About {formatMoney(goal.requiredMonthlyMinor, { currency, compactDecimals: true })}/month reaches this
-            by your target date.
+            {t('goals.about')} {formatMoney(goal.requiredMonthlyMinor, { currency, compactDecimals: true })}{t('goals.monthReachesThisByYourTarget')}
           </p>
         )}
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex gap-3">
-            {!goal.linkedAccountId && !goal.isAchieved && (
+            {!goal.isAchieved && (
               <button
                 type="button"
                 onClick={onContribute}
                 className="text-[12px] font-medium text-gold underline-offset-4 hover:underline"
               >
-                Add contribution
+                {goal.linkedAccountId ? t('goals.contribute') : t('goals.addContribution')}
               </button>
             )}
             <button
@@ -183,13 +199,13 @@ function GoalCard({
               onClick={onEdit}
               className="text-[12px] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
             >
-              Edit
+              {t('common.edit')}
             </button>
           </div>
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            aria-label="Remove goal"
+            aria-label={t('goals.removeGoal')}
             className="rounded-sm p-1 text-ink-faint transition-colors hover:text-negative"
           >
             <Trash2 aria-hidden className="size-3.5" />
@@ -201,9 +217,9 @@ function GoalCard({
         open={confirmDelete}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={remove}
-        title={`Remove "${goal.name}"?`}
-        description="Its contribution history goes with it. This does not affect any transactions."
-        confirmLabel="Remove"
+        title={t('goals.remove', { name: goal.name })}
+        description={t('goals.itsContributionHistoryGoesWithIt')}
+        confirmLabel={t('common.remove')}
         tone="danger"
         busy={busy}
       />

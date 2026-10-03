@@ -9,6 +9,7 @@ import { useToast } from '../../components/ui/Toast';
 import { useAccounts, useInvalidateLedger } from '../../lib/queries';
 import { useCurrency } from '../../hooks/useCurrency';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 /**
  * Record a partial or full repayment (§16).
@@ -31,6 +32,7 @@ export function RepaySheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
   const invalidate = useInvalidateLedger();
   const currency = useCurrency();
@@ -73,7 +75,7 @@ export function RepaySheet({
         idempotencyKey: `repay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       });
       invalidate();
-      toast.success('Repayment recorded');
+      toast.success(t('people.repaymentRecorded'));
       onClose();
     } catch (err) {
       // The API's OVER_REPAYMENT message already names the outstanding amount.
@@ -87,10 +89,10 @@ export function RepaySheet({
     <Sheet
       open
       onClose={onClose}
-      title={`Repayment with ${personName}`}
+      title={t('people.repaymentWith', { personName })}
       description={
         outstanding > 0
-          ? `${formatMoney(outstanding, { currency, compactDecimals: true })} outstanding.`
+          ? t('people.outstandingAmount', { amount: formatMoney(outstanding, { currency, compactDecimals: true }) })
           : undefined
       }
       size="sm"
@@ -98,7 +100,7 @@ export function RepaySheet({
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="gold"
@@ -106,7 +108,7 @@ export function RepaySheet({
             disabled={!amountMinor || amountMinor <= 0 || !accountId}
             onClick={() => void submit()}
           >
-            Record repayment
+            {t('people.recordRepayment')}
           </Button>
         </div>
       }
@@ -127,13 +129,13 @@ export function RepaySheet({
           </div>
         )}
 
-        <Field label="Direction">
+        <Field label={t('common.direction')}>
           {({ id }) => (
             <div id={id} className="grid grid-cols-2 gap-2">
               {(
                 [
-                  ['received', 'They paid me'],
-                  ['given', 'I paid them'],
+                  ['received', t('people.theyPaidMe')],
+                  ['given', t('people.iPaidThem')],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -155,11 +157,11 @@ export function RepaySheet({
           )}
         </Field>
 
-        <Field label="Amount" hint={outstanding > 0 ? 'A partial amount is fine — the rest stays outstanding.' : undefined}>
+        <Field label={t('reminders.form.amount')} hint={outstanding > 0 ? 'A partial amount is fine — the rest stays outstanding.' : undefined}>
           {({ id }) => <MoneyInput id={id} size="hero" autoFocus value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
-        <Field label={direction === 'received' ? 'Into account' : 'From account'} required>
+        <Field label={direction === 'received' ? t('people.intoAccount') : t('goals.fromAccount')} required>
           {({ id }) => (
             <select
               id={id}
@@ -176,7 +178,7 @@ export function RepaySheet({
           )}
         </Field>
 
-        <Field label="Date">
+        <Field label={t('common.date')}>
           {({ id }) => (
             <Input
               id={id}
@@ -188,7 +190,7 @@ export function RepaySheet({
           )}
         </Field>
 
-        <Field label="Note" hint="Optional">
+        <Field label={t('common.note')} hint={t('common.optional')}>
           {({ id }) => <Input id={id} value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} />}
         </Field>
       </form>

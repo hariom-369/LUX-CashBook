@@ -1,8 +1,10 @@
 import { TRANSACTION_META, formatTime, type TransactionDto } from '@khata/shared';
+import { Check } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { Icon } from '../../components/ui/Icon';
 import { Money } from '../../components/ui/Money';
 import { Badge } from '../../components/ui/Badge';
+import { useT } from '../../i18n';
 
 /**
  * One line in a transaction list.
@@ -21,12 +23,16 @@ export function TransactionRow({
   onClick,
   showDate = false,
   dense = false,
+  selection,
 }: {
   transaction: TransactionDto;
   onClick?: (transaction: TransactionDto) => void;
   showDate?: boolean;
   dense?: boolean;
+  /** Bulk-select mode (§Phase 16): the row toggles instead of opening the detail sheet. */
+  selection?: { checked: boolean; onToggle: (transaction: TransactionDto) => void };
 }) {
+  const t = useT();
   const meta = TRANSACTION_META[transaction.type];
   const isTransfer = meta.isTransfer;
 
@@ -41,15 +47,21 @@ export function TransactionRow({
         ? transaction.amountMinor
         : -transaction.amountMinor;
 
+  const masked = Boolean(transaction.isMasked);
   const title =
-    transaction.description ||
+    (masked ? t('transactions.privateTransfer') : transaction.description) ||
     transaction.personName ||
     transaction.categoryName ||
-    meta.label;
+    t.label('txType', transaction.type, meta.label);
 
   const subtitleParts = [
     isTransfer
-      ? `${accountNameOf(transaction, 'from')} → ${accountNameOf(transaction, 'to')}`
+      ? masked
+        ? // Only the shared leg is visible: name it, and say the other side is private.
+          transaction.fromAccountId
+          ? `${accountNameOf(transaction, 'from', t('common.account'))} → ${t('transactions.privateAccount')}`
+          : `${t('transactions.privateAccount')} → ${accountNameOf(transaction, 'to', t('common.account'))}`
+        : `${accountNameOf(transaction, 'from', t('common.account'))} → ${accountNameOf(transaction, 'to', t('common.account'))}`
       : transaction.accountName,
     !isTransfer && transaction.categoryName && transaction.description ? transaction.categoryName : null,
     meta.isPersonal && transaction.personName && transaction.description ? transaction.personName : null,
@@ -58,19 +70,45 @@ export function TransactionRow({
 
   const hasBadge = isTransfer || Boolean(transaction.deletedAt) || Boolean(transaction.isRecurringInstance);
 
-  const Element = onClick ? 'button' : 'div';
+  // A masked entry (a transfer with another member's private account) cannot be opened, edited, deleted or selected.
+  const interactive = !masked && Boolean(onClick || selection);
+  const Element = interactive ? 'button' : 'div';
 
   return (
     <li>
       <Element
-        {...(onClick ? { type: 'button' as const, onClick: () => onClick(transaction) } : {})}
+        {...(!interactive
+          ? {}
+          : selection
+          ? {
+              type: 'button' as const,
+              // A selectable row is a checkbox, not a push button — and it must not contain a second control.
+              role: 'checkbox' as const,
+              'aria-checked': selection.checked,
+              onClick: () => selection.onToggle(transaction),
+            }
+          : onClick
+            ? { type: 'button' as const, onClick: () => onClick(transaction) }
+            : {})}
         className={cn(
           'flex w-full items-center gap-3 text-left transition-colors',
           dense ? 'px-4 py-2.5 sm:px-5' : 'px-5 py-3.5 sm:px-6',
-          onClick && 'hover:bg-sunken',
+          interactive && 'hover:bg-sunken',
+          selection?.checked && 'bg-gold-soft',
           transaction.deletedAt && 'opacity-55',
         )}
       >
+        {selection && interactive && (
+          <span
+            aria-hidden
+            className={cn(
+              'flex size-4 shrink-0 items-center justify-center rounded-sm border',
+              selection.checked ? 'border-gold bg-gold text-ink-inverse' : 'border-line-strong bg-surface',
+            )}
+          >
+            {selection.checked && <Check className="size-3" strokeWidth={3} />}
+          </span>
+        )}
         <span
           aria-hidden
           className={cn(
@@ -111,17 +149,17 @@ export function TransactionRow({
               <span className="min-w-0 max-w-full truncate text-[13.5px] font-medium text-ink">{title}</span>
               {isTransfer && (
                 <Badge tone="neutral" eyebrow className="shrink-0">
-                  Internal transfer
+                  {t('transactions.internalTransfer')}
                 </Badge>
               )}
               {transaction.deletedAt && (
                 <Badge tone="negative" eyebrow className="shrink-0">
-                  Deleted
+                  {t('common.deleted')}
                 </Badge>
               )}
               {transaction.isRecurringInstance && (
                 <Badge tone="outline" eyebrow className="shrink-0">
-                  Recurring
+                  {t('nav.recurring')}
                 </Badge>
               )}
             </span>
@@ -154,13 +192,13 @@ export function TransactionRow({
                     weight="normal"
                     compactDecimals
                   />{' '}
-                  outstanding
+                  {t('transactions.outstanding')}
                 </span>
               )}
 
             {(transaction.type === 'lend' || transaction.type === 'borrow') &&
               transaction.isSettled && (
-                <span className="text-[10.5px] font-medium text-positive">Settled</span>
+                <span className="text-[10.5px] font-medium text-positive">{t('common.settled')}</span>
               )}
           </span>
         </span>
@@ -169,7 +207,7 @@ export function TransactionRow({
   );
 }
 
-function accountNameOf(transaction: TransactionDto, side: 'from' | 'to'): string {
+function accountNameOf(transaction: TransactionDto, side: 'from' | 'to', fallback: string): string {
   const id = side === 'from' ? transaction.fromAccountId : transaction.toAccountId;
-  return transaction.postings.find((posting) => posting.accountId === id)?.accountName ?? 'Account';
+  return transaction.postings.find((posting) => posting.accountId === id)?.accountName ?? fallback;
 }

@@ -7,6 +7,7 @@ import { param, scopeOf } from '../../middleware/context.js';
 import { dateSchema, idParamSchema, validate } from '../../middleware/validate.js';
 import { reportLimiter } from '../../middleware/rateLimit.js';
 import * as service from './report.service.js';
+import * as builder from './reportBuilder.service.js';
 import { getPersonLedger } from '../people/person.service.js';
 
 export const reportRouter: Router = Router();
@@ -76,11 +77,58 @@ reportRouter.get(
   }),
 );
 
+reportRouter.get(
+  '/profit-and-loss',
+  validate({ query: rangeQuery }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { from, to } = resolve(req.query as unknown as { range: (typeof RANGE_PRESETS)[number]; from?: Date; to?: Date });
+    ok(res, await service.getProfitAndLoss(scopeOf(req), from, to));
+  }),
+);
+
+reportRouter.get(
+  '/ageing',
+  validate({ query: z.object({ direction: z.enum(['receivable', 'payable']).default('receivable') }) }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { direction } = req.query as unknown as { direction: 'receivable' | 'payable' };
+    ok(res, await service.getAgeingReport(scopeOf(req), direction));
+  }),
+);
+
+reportRouter.get(
+  '/gst-summary',
+  validate({ query: rangeQuery }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { from, to } = resolve(req.query as unknown as { range: (typeof RANGE_PRESETS)[number]; from?: Date; to?: Date });
+    ok(res, await service.getGstSummary(scopeOf(req), from, to));
+  }),
+);
+
 /** A shareable, privacy-conscious snapshot of one person's ledger for §36. */
 reportRouter.get(
   '/person/:id',
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await getPersonLedger(scopeOf(req), param(req, 'id')));
+  }),
+);
+
+/** Run a report-builder definition (§Phase 7). A POST because the definition is a structured body, not because it writes anything. */
+reportRouter.post(
+  '/custom',
+  validate({ body: z.object({ definition: z.unknown() }) }),
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await builder.runReport(scopeOf(req), req.body.definition));
+  }),
+);
+
+reportRouter.post(
+  '/custom/export',
+  validate({ body: z.object({ definition: z.unknown() }) }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const csv = builder.resultToCsv(await builder.runReport(scopeOf(req), req.body.definition));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="report-${Date.now()}.csv"`);
+    res.send(csv);
   }),
 );

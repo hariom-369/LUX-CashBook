@@ -10,6 +10,9 @@ import { Icon } from '../../components/ui/Icon';
 import { useToast } from '../../components/ui/Toast';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { useInvalidateLedger } from '../../lib/queries';
+import { useOfflinePatch } from '../../hooks/useOfflinePatch';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 const SWATCHES = [
   '#B08D4F', '#2F7A5C', '#3F6383', '#A8443C', '#8A6BA8',
@@ -33,7 +36,10 @@ export function AccountFormSheet({
   account: AccountDto | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
+  const patchOrQueue = useOfflinePatch();
   const invalidate = useInvalidateLedger();
   const isEdit = Boolean(account);
 
@@ -42,9 +48,14 @@ export function AccountFormSheet({
   const [openingBalanceMinor, setOpeningBalanceMinor] = useState<number | null>(0);
   const [bankName, setBankName] = useState('');
   const [last4, setLast4] = useState('');
+  const [creditLimitMinor, setCreditLimitMinor] = useState<number | null>(null);
+  const [statementDay, setStatementDay] = useState<number | ''>('');
+  const [dueDay, setDueDay] = useState<number | ''>('');
+  const [minimumDueMinor, setMinimumDueMinor] = useState<number | null>(null);
   const [color, setColor] = useState(SWATCHES[0]!);
   const [blockNegativeBalance, setBlockNegativeBalance] = useState(false);
   const [excludeFromTotals, setExcludeFromTotals] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [notes, setNotes] = useState('');
   const [isActive, setIsActive] = useState(true);
 
@@ -64,9 +75,14 @@ export function AccountFormSheet({
       setOpeningBalanceMinor(account.openingBalanceMinor);
       setBankName(account.bankName ?? '');
       setLast4(account.last4 ?? '');
+      setCreditLimitMinor(account.creditLimitMinor ?? null);
+      setStatementDay(account.statementDay ?? '');
+      setDueDay(account.dueDay ?? '');
+      setMinimumDueMinor(account.minimumDueMinor ?? null);
       setColor(account.color);
       setBlockNegativeBalance(account.blockNegativeBalance);
       setExcludeFromTotals(account.excludeFromTotals);
+      setIsPrivate(account.visibility === 'private');
       setNotes(account.notes ?? '');
       setIsActive(account.isActive);
     } else {
@@ -75,9 +91,14 @@ export function AccountFormSheet({
       setOpeningBalanceMinor(0);
       setBankName('');
       setLast4('');
+      setCreditLimitMinor(null);
+      setStatementDay('');
+      setDueDay('');
+      setMinimumDueMinor(null);
       setColor(SWATCHES[0]!);
       setBlockNegativeBalance(false);
       setExcludeFromTotals(false);
+      setIsPrivate(false);
       setNotes('');
       setIsActive(true);
     }
@@ -101,9 +122,18 @@ export function AccountFormSheet({
       openingBalanceMinor: openingBalanceMinor ?? 0,
       bankName: bankName.trim() || undefined,
       last4: last4.trim() || undefined,
+      ...(type === 'credit_card'
+        ? {
+            creditLimitMinor: creditLimitMinor ?? undefined,
+            statementDay: statementDay || undefined,
+            dueDay: dueDay || undefined,
+            minimumDueMinor: minimumDueMinor ?? undefined,
+          }
+        : {}),
       color,
       blockNegativeBalance,
       excludeFromTotals,
+      visibility: isPrivate ? 'private' : 'shared',
       notes: notes.trim() || undefined,
       ...(isEdit ? { isActive } : {}),
     };
@@ -112,11 +142,10 @@ export function AccountFormSheet({
       if (account) {
         // `rev` lets the server refuse a stale edit (someone else changed this
         // account after we loaded it) instead of silently overwriting it.
-        await api.patch(`/accounts/${account.id}`, { ...payload, rev: account.rev });
-        toast.success('Account updated');
+        await patchOrQueue(`/accounts/${account.id}`, { ...payload, rev: account.rev });
+        toast.success(t('accounts.accountUpdated'));
       } else {
-        await api.post('/accounts', payload);
-        toast.success('Account added', `${payload.name} is ready to use.`);
+        if (await createOrQueue('/accounts', payload)) toast.success(t('accounts.accountAdded'), t('accounts.isReadyToUse', { name: payload.name }));
       }
       invalidate();
       onClose();
@@ -142,15 +171,15 @@ export function AccountFormSheet({
       // which one actually happened instead of claiming a deletion.
       if (result.deactivated) {
         toast.success(
-          'Account deactivated',
-          `${result.transactionCount} transactions were kept and its history is intact.`,
+          t('accounts.accountDeactivated'),
+          t('accounts.transactionsWereKeptAndItsHistory', { transactionCount: result.transactionCount }),
         );
       } else {
-        toast.success('Account deleted');
+        toast.success(t('accounts.accountDeleted'));
       }
       onClose();
     } catch (err) {
-      toast.error('Could not remove that account', errorMessage(err));
+      toast.error(t('accounts.couldNotRemoveThatAccount'), errorMessage(err));
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -162,7 +191,7 @@ export function AccountFormSheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title={isEdit ? 'Edit account' : 'Add account'}
+        title={isEdit ? t('accounts.editAccount') : t('accounts.addAccount')}
         description={
           isEdit ? undefined : 'Where does this money actually sit? You can add as many as you need.'
         }
@@ -177,15 +206,15 @@ export function AccountFormSheet({
                 leftIcon={<Trash2 className="size-4" />}
                 onClick={() => setConfirmDelete(true)}
               >
-                Remove
+                {t('common.remove')}
               </Button>
             )}
             <div className="flex-1" />
             <Button variant="secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="gold" loading={busy} disabled={!name.trim()} onClick={() => void save()}>
-              {isEdit ? 'Save changes' : 'Add account'}
+              {isEdit ? t('common.saveChanges') : t('accounts.addAccount')}
             </Button>
           </div>
         }
@@ -206,21 +235,21 @@ export function AccountFormSheet({
             </div>
           )}
 
-          <Field label="Name" error={fieldErrors.name} required>
+          <Field label={t('common.name')} error={fieldErrors.name} required>
             {({ id }) => (
               <Input
                 id={id}
                 autoFocus
                 value={name}
                 maxLength={60}
-                placeholder="SBI Savings"
+                placeholder={t('accounts.sbiSavings')}
                 onChange={(event) => setName(event.target.value)}
               />
             )}
           </Field>
 
           {!isEdit && (
-            <Field label="Type" hint="This cannot be changed later.">
+            <Field label={t('reminders.form.type')} hint={t('accounts.thisCannotBeChangedLater')}>
               {({ id }) => (
                 <div id={id} className="grid grid-cols-4 gap-2">
                   {ACCOUNT_TYPES.map((option) => (
@@ -238,7 +267,7 @@ export function AccountFormSheet({
                     >
                       <Icon name={ACCOUNT_TYPE_META[option].icon} aria-hidden className="size-4" />
                       <span className="text-[10.5px] font-medium leading-tight">
-                        {ACCOUNT_TYPE_META[option].label}
+                        {t.label('accountType', option, ACCOUNT_TYPE_META[option].label)}
                       </span>
                     </button>
                   ))}
@@ -248,12 +277,12 @@ export function AccountFormSheet({
           )}
 
           <Field
-            label="Opening balance"
+            label={t('common.openingBalance')}
             error={fieldErrors.openingBalanceMinor}
             hint={
               isEdit
-                ? 'Changing this rebuilds every balance derived from it. Transactions are untouched.'
-                : 'What is in this account right now, before you record anything.'
+                ? t('accounts.changingThisRebuildsEveryBalanceDerived')
+                : t('accounts.whatIsInThisAccountRight')
             }
           >
             {({ id }) => (
@@ -263,18 +292,18 @@ export function AccountFormSheet({
 
           {(type === 'bank' || type === 'credit_card' || type === 'savings') && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Bank name" hint="Optional">
+              <Field label={t('accounts.bankName')} hint={t('common.optional')}>
                 {({ id }) => (
                   <Input
                     id={id}
                     value={bankName}
                     maxLength={80}
-                    placeholder="State Bank of India"
+                    placeholder={t('accounts.stateBankOfIndia')}
                     onChange={(event) => setBankName(event.target.value)}
                   />
                 )}
               </Field>
-              <Field label="Last 4 digits" error={fieldErrors.last4} hint="Optional. Never store the full number.">
+              <Field label={t('accounts.last4Digits')} error={fieldErrors.last4} hint={t('accounts.optionalNeverStoreTheFullNumber')}>
                 {({ id }) => (
                   <Input
                     id={id}
@@ -289,7 +318,42 @@ export function AccountFormSheet({
             </div>
           )}
 
-          <Field label="Colour">
+          {type === 'credit_card' && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label={t('accounts.creditLimit')} hint={t('accounts.optionalUsedForTheUtilisationDisplay')}>
+                {({ id }) => <MoneyInput id={id} value={creditLimitMinor} onChange={setCreditLimitMinor} />}
+              </Field>
+              <Field label={t('accounts.minimumDue')} hint={t('common.optional')}>
+                {({ id }) => <MoneyInput id={id} value={minimumDueMinor} onChange={setMinimumDueMinor} />}
+              </Field>
+              <Field label={t('accounts.statementDay')} hint={t('accounts.dayOfTheMonthOptional')}>
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={statementDay}
+                    onChange={(event) => setStatementDay(event.target.value ? Number(event.target.value) : '')}
+                  />
+                )}
+              </Field>
+              <Field label={t('accounts.paymentDueDay')} hint={t('accounts.dayOfTheMonthOptionalRaises')}>
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={dueDay}
+                    onChange={(event) => setDueDay(event.target.value ? Number(event.target.value) : '')}
+                  />
+                )}
+              </Field>
+            </div>
+          )}
+
+          <Field label={t('common.colour')}>
             {({ id }) => (
               <div id={id} className="flex flex-wrap gap-2">
                 {SWATCHES.map((swatch) => (
@@ -297,7 +361,7 @@ export function AccountFormSheet({
                     key={swatch}
                     type="button"
                     onClick={() => setColor(swatch)}
-                    aria-label={`Colour ${swatch}`}
+                    aria-label={t('common.colour2', { swatch })}
                     aria-pressed={color === swatch}
                     style={{ backgroundColor: swatch }}
                     className={cn(
@@ -316,26 +380,32 @@ export function AccountFormSheet({
             <Toggle
               checked={blockNegativeBalance}
               onChange={setBlockNegativeBalance}
-              label="Prevent a negative balance"
-              hint="Refuse any entry that would take this account below zero. Sensible for cash, not for a credit card."
+              label={t('accounts.preventANegativeBalance')}
+              hint={t('accounts.refuseAnyEntryThatWouldTake')}
             />
             <Toggle
               checked={excludeFromTotals}
               onChange={setExcludeFromTotals}
-              label="Exclude from totals"
-              hint="Keep this account's ledger but leave it out of your total balance and net worth."
+              label={t('accounts.excludeFromTotals')}
+              hint={t('accounts.keepThisAccountSLedgerBut')}
+            />
+            <Toggle
+              checked={isPrivate}
+              onChange={setIsPrivate}
+              label={t('accounts.privateAccount')}
+              hint={t('accounts.inASharedWorkspaceOnlyYou')}
             />
             {isEdit && (
               <Toggle
                 checked={!isActive}
                 onChange={(value) => setIsActive(!value)}
-                label="Hide from pickers"
-                hint="An inactive account keeps its history but stops appearing when you record a transaction."
+                label={t('accounts.hideFromPickers')}
+                hint={t('accounts.anInactiveAccountKeepsItsHistory')}
               />
             )}
           </div>
 
-          <Field label="Notes" hint="Optional">
+          <Field label={t('common.notes')} hint={t('common.optional')}>
             {({ id }) => (
               <Textarea
                 id={id}
@@ -353,9 +423,9 @@ export function AccountFormSheet({
         open={confirmDelete}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={remove}
-        title={`Remove ${account?.name ?? 'this account'}?`}
-        description="If it has any transactions it will be deactivated instead of deleted, so its history and every balance derived from it stay intact."
-        confirmLabel="Remove"
+        title={t('accounts.removeNamed', { name: account?.name ?? t('common.thisAccount') })}
+        description={t('accounts.ifItHasAnyTransactionsIt')}
+        confirmLabel={t('common.remove')}
         tone="danger"
         busy={busy}
       />

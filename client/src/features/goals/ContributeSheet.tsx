@@ -7,8 +7,10 @@ import { MoneyInput } from '../../components/ui/MoneyInput';
 import { useToast } from '../../components/ui/Toast';
 import { useInvalidatePlanning } from '../../lib/queries3';
 import { api, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 export function ContributeSheet({ goal, onClose }: { goal: GoalProgressDto | null; onClose: () => void }) {
+  const t = useT();
   const toast = useToast();
   const invalidate = useInvalidatePlanning();
 
@@ -39,7 +41,7 @@ export function ContributeSheet({ goal, onClose }: { goal: GoalProgressDto | nul
         note: note.trim() || undefined,
       });
       invalidate();
-      toast.success('Contribution added', `Towards "${goal!.name}".`);
+      toast.success(t('goals.contributionAdded'), t('goals.towardsGoal', { name: goal!.name }));
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -52,16 +54,16 @@ export function ContributeSheet({ goal, onClose }: { goal: GoalProgressDto | nul
     <Sheet
       open
       onClose={onClose}
-      title={`Add to "${goal.name}"`}
+      title={t('goals.addTo', { name: goal.name })}
       size="sm"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="gold" loading={busy} disabled={!amountMinor || amountMinor <= 0} onClick={() => void submit()}>
-            Add contribution
+            {t('goals.addContribution')}
           </Button>
         </div>
       }
@@ -73,15 +75,15 @@ export function ContributeSheet({ goal, onClose }: { goal: GoalProgressDto | nul
           </div>
         )}
 
-        <Field label="Amount" required>
+        <Field label={t('reminders.form.amount')} required>
           {({ id }) => <MoneyInput id={id} size="hero" autoFocus value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
-        <Field label="Date">
+        <Field label={t('common.date')}>
           {({ id }) => <Input id={id} type="date" value={date} max={toDateKey(new Date())} onChange={(event) => setDate(event.target.value)} />}
         </Field>
 
-        <Field label="Note" hint="Optional">
+        <Field label={t('common.note')} hint={t('common.optional')}>
           {({ id }) => <Input id={id} value={note} maxLength={200} onChange={(event) => setNote(event.target.value)} />}
         </Field>
       </form>

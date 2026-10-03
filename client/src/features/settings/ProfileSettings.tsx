@@ -8,8 +8,10 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { Avatar } from '../people/PeoplePage';
+import { useT } from '../../i18n';
 
 export function ProfileSettings() {
+  const t = useT();
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -35,12 +37,12 @@ export function ProfileSettings() {
         phone: phone.trim(),
       });
       setUser(updated);
-      toast.success('Profile updated');
+      toast.success(t('settings.profileUpdated'));
     } catch (err) {
       if (err instanceof ApiRequestError && err.fields.length) {
         setFieldErrors(Object.fromEntries(err.fields.map((f) => [f.path, f.message])));
       }
-      toast.error('Could not save', errorMessage(err));
+      toast.error(t('settings.couldNotSave'), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -50,9 +52,9 @@ export function ProfileSettings() {
     setResending(true);
     try {
       await api.post('/auth/resend-verification');
-      toast.success('Confirmation email sent', `Check ${currentUser.email}.`);
+      toast.success(t('settings.confirmationEmailSent'), t('settings.check', { email: currentUser.email }));
     } catch (err) {
-      toast.error('Could not send that', errorMessage(err));
+      toast.error(t('settings.couldNotSendThat'), errorMessage(err));
     } finally {
       setResending(false);
     }
@@ -81,12 +83,12 @@ export function ProfileSettings() {
         )}
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">
-            {user.emailVerified ? 'Email confirmed' : 'Confirm your email address'}
+            {user.emailVerified ? t('auth.emailConfirmed') : t('settings.confirmYourEmailAddress')}
           </p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">
             {user.emailVerified
-              ? 'Password recovery is fully available.'
-              : 'You need a confirmed address to reset your password if you ever lose access.'}
+              ? t('settings.passwordRecoveryIsFullyAvailable')
+              : t('settings.youNeedAConfirmedAddressTo')}
           </p>
           {!user.emailVerified && (
             <Button
@@ -98,27 +100,27 @@ export function ProfileSettings() {
               leftIcon={<Mail className="size-3.5" />}
               onClick={() => void resendVerification()}
             >
-              Resend confirmation email
+              {t('settings.resendConfirmationEmail')}
             </Button>
           )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Name" error={fieldErrors.name} required>
+        <Field label={t('common.name')} error={fieldErrors.name} required>
           {({ id }) => <Input id={id} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />}
         </Field>
-        <Field label="Phone" error={fieldErrors.phone} hint="Optional">
+        <Field label={t('common.phone')} error={fieldErrors.phone} hint={t('common.optional')}>
           {({ id }) => <Input id={id} type="tel" value={phone} maxLength={24} onChange={(event) => setPhone(event.target.value)} />}
         </Field>
       </div>
 
-      <Field label="Email">
+      <Field label={t('common.email')}>
         {({ id }) => (
           <div className="flex items-center gap-2">
             <Input id={id} value={user.email} disabled className="flex-1" />
             <Badge tone={user.emailVerified ? 'positive' : 'warning'}>
-              {user.emailVerified ? 'Verified' : 'Unverified'}
+              {user.emailVerified ? t('settings.verified') : t('settings.unverified')}
             </Badge>
           </div>
         )}
@@ -126,7 +128,7 @@ export function ProfileSettings() {
 
       <div className="flex justify-end border-t border-line-faint pt-5">
         <Button variant="gold" loading={busy} disabled={!dirty || !name.trim()} onClick={() => void save()}>
-          Save changes
+          {t('common.saveChanges')}
         </Button>
       </div>
     </div>

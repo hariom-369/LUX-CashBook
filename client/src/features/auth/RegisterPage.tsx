@@ -12,13 +12,14 @@ import { ApiRequestError, api } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { applyServerFieldErrors } from './formErrors';
 import { PasswordStrength } from './PasswordStrength';
+import { useT } from '../../i18n';
 
 const schema = z.object({
-  name: z.string().trim().min(1, 'Enter your name.').max(80, 'That name is too long.'),
-  email: z.string().trim().min(1, 'Enter your email address.').email('Enter a valid email address.'),
+  name: z.string().trim().min(1, 'auth.enterYourName').max(80, 'auth.thatNameIsTooLong'),
+  email: z.string().trim().min(1, 'auth.enterYourEmailAddress').email('auth.enterAValidEmailAddress'),
   // Matches the server's policy exactly, so the client never promises something
   // the API will then reject.
-  password: z.string().min(10, 'Use at least 10 characters.').max(256, 'That password is too long.'),
+  password: z.string().min(10, 'auth.useAtLeast10Characters').max(256, 'auth.thatPasswordIsTooLong'),
   currency: z.string().default('INR'),
 });
 
@@ -34,6 +35,7 @@ function guessTimeZone(): string {
 }
 
 export function RegisterPage() {
+  const t = useT();
   const navigate = useNavigate();
   const startSession = useAuthStore((s) => s.startSession);
 
@@ -65,19 +67,19 @@ export function RegisterPage() {
       navigate('/onboarding', { replace: true });
     } catch (err) {
       if (err instanceof ApiRequestError && applyServerFieldErrors(err, setError)) return;
-      setFormError(err instanceof Error ? err.message : 'Could not create your account. Please try again.');
+      setFormError(err instanceof Error ? err.message : t('auth.couldNotCreateYourAccountPlease'));
     }
   }
 
   return (
     <AuthLayout
-      title="Create your account"
-      subtitle="Track cash, bank, UPI and what people owe you — in one ledger."
+      title={t('auth.createYourAccount')}
+      subtitle={t('auth.trackCashBankUpiAndWhat')}
       footer={
         <>
-          Already have an account?{' '}
+          {t('auth.alreadyHaveAnAccount')}{' '}
           <Link to="/login" className="font-medium text-gold underline-offset-4 hover:underline">
-            Sign in
+            {t('auth.signIn')}
           </Link>
         </>
       }
@@ -92,12 +94,12 @@ export function RegisterPage() {
           </div>
         )}
 
-        <Field label="Your name" error={errors.name?.message} required>
+        <Field label={t('auth.yourName')} error={errors.name?.message && t.maybe(errors.name.message)} required>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
               autoComplete="name"
-              placeholder="Asha Sharma"
+              placeholder={t('auth.ashaSharma')}
               leftSlot={<User aria-hidden className="size-4" />}
               aria-describedby={describedBy}
               invalid={invalid}
@@ -106,7 +108,7 @@ export function RegisterPage() {
           )}
         </Field>
 
-        <Field label="Email" error={errors.email?.message} required>
+        <Field label={t('common.email')} error={errors.email?.message && t.maybe(errors.email.message)} required>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -122,9 +124,9 @@ export function RegisterPage() {
         </Field>
 
         <Field
-          label="Password"
-          error={errors.password?.message}
-          hint={!errors.password ? 'At least 10 characters. A short phrase works well.' : undefined}
+          label={t('auth.password')}
+          error={errors.password?.message && t.maybe(errors.password.message)}
+          hint={!errors.password ? t('auth.atLeast10CharactersAShort') : undefined}
           required
         >
           {({ id, describedBy, invalid }) => (
@@ -139,7 +141,7 @@ export function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="pointer-events-auto rounded-sm p-1 text-ink-muted transition-colors hover:text-ink"
                 >
                   {showPassword ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
@@ -152,12 +154,12 @@ export function RegisterPage() {
 
         <PasswordStrength password={password} />
 
-        <Field label="Currency" hint="You can add workspaces in other currencies later.">
+        <Field label={t('common.currency')} hint={t('auth.youCanAddWorkspacesInOther')}>
           {({ id }) => (
             <Select id={id} {...register('currency')}>
               {Object.values(CURRENCIES).map((currency) => (
                 <option key={currency.code} value={currency.code}>
-                  {currency.symbol} · {currency.name} ({currency.code})
+                  {currency.symbol} · {t.label('currency', currency.code, currency.name)} ({currency.code})
                 </option>
               ))}
             </Select>
@@ -165,11 +167,11 @@ export function RegisterPage() {
         </Field>
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting} className="mt-2">
-          Create account
+          {t('auth.createAccount')}
         </Button>
 
         <p className="text-center text-[12px] leading-relaxed text-ink-faint">
-          Your financial data stays yours. Export everything at any time.
+          {t('auth.yourFinancialDataStaysYoursExport')}
         </p>
       </form>
     </AuthLayout>

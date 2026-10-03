@@ -2,16 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { resolveLanguage, translate, translatePlural } from './index';
 import { en } from './messages/en';
 import { hi } from './messages/hi';
+import type { MessageKey } from './messages/en';
 
 describe('translations', () => {
   it('reads English from the source catalogue', () => {
     expect(translate('en', 'common.save')).toBe('Save');
   });
 
-  it('uses Hindi where a translation exists and falls back to English where it does not', () => {
+  it('uses Hindi where a translation exists', () => {
     expect(translate('hi', 'common.save')).toBe('सहेजें');
-    expect(hi['security.activity.title']).toBeUndefined();
-    expect(translate('hi', 'security.activity.title')).toBe(en['security.activity.title']);
+    expect(translate('hi', 'security.activity.title')).toBe(hi['security.activity.title']);
+  });
+
+  it('falls back to English for a key the active language catalogue does not define', () => {
+    // A cast, not a real key — simulates a brand-new English string that hasn't
+    // been translated yet. The catalogue is additive (§Phase 14), so a gap here
+    // must resolve to English rather than throw or go blank.
+    const notYetTranslated = 'a.key.no.language.has.yet' as MessageKey;
+    expect(translate('hi', notYetTranslated)).toBeUndefined();
+  });
+
+  it('has a Hindi translation for every key English defines (§Phase 14 full parity)', () => {
+    for (const key of Object.keys(en)) expect(key in hi).toBe(true);
   });
 
   it('fills placeholders and leaves unknown ones visible rather than blank', () => {
@@ -33,5 +45,19 @@ describe('translations', () => {
 
   it('only translates keys that exist in English', () => {
     for (const key of Object.keys(hi)) expect(key in en).toBe(true);
+  });
+});
+
+describe('navigation labels (§Phase 14)', () => {
+  it('every nav item and group has an English and a Hindi label', async () => {
+    const { NAV_ITEMS, NAV_GROUPS } = await import('../config/navigation');
+    for (const item of NAV_ITEMS) {
+      const key = `nav.${item.to === '/' ? 'dashboard' : item.to.slice(1)}` as MessageKey;
+      expect(key in en, key).toBe(true);
+      expect(key in hi, key).toBe(true);
+    }
+    for (const g of NAV_GROUPS.filter((g) => g.label)) {
+      expect(`nav.group.${g.id}` in hi).toBe(true);
+    }
   });
 });

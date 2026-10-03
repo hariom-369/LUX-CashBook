@@ -6,26 +6,37 @@ import { Button } from '../../components/ui/Button';
 import { Field, Select } from '../../components/ui/Input';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { useToast } from '../../components/ui/Toast';
-import { useCategories } from '../../lib/queries';
+import { useAccounts, useCategories } from '../../lib/queries';
 import { useInvalidatePlanning } from '../../lib/queries3';
-import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { ApiRequestError, errorMessage } from '../../lib/api';
+import { useOfflinePatch } from '../../hooks/useOfflinePatch';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 export function BudgetFormSheet({
   open,
   budget,
+  prefill,
   onClose,
 }: {
   open: boolean;
   budget: BudgetProgressDto | null;
+  /** A "copy last month" suggestion to start from (ignored once editing an existing budget). */
+  prefill?: { categoryId: string; amountMinor: number } | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
+  const patchOrQueue = useOfflinePatch();
   const invalidate = useInvalidatePlanning();
   const { data: categories = [] } = useCategories('expense');
+  const { data: accounts = [] } = useAccounts();
   const isEdit = Boolean(budget);
 
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [accountId, setAccountId] = useState('');
   const [amountMinor, setAmountMinor] = useState<number | null>(null);
   const [period, setPeriod] = useState<'monthly' | 'weekly' | 'yearly'>('monthly');
   const [rollover, setRollover] = useState(false);
@@ -38,25 +49,27 @@ export function BudgetFormSheet({
     if (budget) {
       setName(budget.name);
       setCategoryId(budget.categoryId ?? '');
+      setAccountId(budget.accountId ?? '');
       setAmountMinor(budget.amountMinor);
       setPeriod(budget.period);
       setRollover(budget.rollover);
     } else {
       setName('');
-      setCategoryId('');
-      setAmountMinor(null);
+      setCategoryId(prefill?.categoryId ?? '');
+      setAccountId('');
+      setAmountMinor(prefill?.amountMinor ?? null);
       setPeriod('monthly');
       setRollover(false);
     }
-  }, [open, budget]);
+  }, [open, budget, prefill]);
 
   // A budget without a name reads naturally as "the category's budget" —
   // auto-fill so most users never have to type one.
   useEffect(() => {
     if (isEdit || !categoryId) return;
     const category = categories.find((c) => c.id === categoryId);
-    if (category && !name) setName(`${category.name} Budget`);
-  }, [categoryId, categories, isEdit, name]);
+    if (category && !name) setName(t('budgets.nameBudget', { name: category.name }));
+  }, [categoryId, categories, isEdit, name, t]);
 
   async function save() {
     if (!amountMinor || amountMinor <= 0) return;
@@ -66,16 +79,16 @@ export function BudgetFormSheet({
       const payload = {
         name: name.trim(),
         categoryId: categoryId || null,
+        accountId: accountId || null,
         amountMinor,
         period,
         rollover,
       };
       if (budget) {
-        await api.patch(`/budgets/${budget.id}`, { ...payload, rev: budget.rev });
-        toast.success('Budget updated');
+        await patchOrQueue(`/budgets/${budget.id}`, { ...payload, rev: budget.rev });
+        toast.success(t('budgets.budgetUpdated'));
       } else {
-        await api.post('/budgets', payload);
-        toast.success('Budget created');
+        if (await createOrQueue('/budgets', payload)) toast.success(t('budgets.budgetCreated'));
       }
       invalidate();
       onClose();
@@ -90,16 +103,16 @@ export function BudgetFormSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Edit budget' : 'New budget'}
+      title={isEdit ? t('budgets.editBudget') : t('budgets.newBudget')}
       size="sm"
       busy={busy}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="gold" loading={busy} disabled={!amountMinor || amountMinor <= 0} onClick={() => void save()}>
-            {isEdit ? 'Save changes' : 'Create budget'}
+            {isEdit ? t('common.saveChanges') : t('budgets.createBudget')}
           </Button>
         </div>
       }
@@ -117,10 +130,10 @@ export function BudgetFormSheet({
           </div>
         )}
 
-        <Field label="Category" required>
+        <Field label={t('common.category')} required>
           {({ id }) => (
             <Select id={id} value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={isEdit}>
-              <option value="">Overall spending</option>
+              <option value="">{t('budgets.overallSpending')}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -130,11 +143,24 @@ export function BudgetFormSheet({
           )}
         </Field>
 
-        <Field label="Budget amount" required>
+        <Field label={t('common.account')} hint={t('budgets.optionalLimitsThisBudgetToSpending')}>
+          {({ id }) => (
+            <Select id={id} value={accountId} onChange={(event) => setAccountId(event.target.value)} disabled={isEdit}>
+              <option value="">{t('common.allAccounts')}</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+
+        <Field label={t('budgets.budgetAmount')} required>
           {({ id }) => <MoneyInput id={id} size="hero" autoFocus value={amountMinor} onChange={setAmountMinor} />}
         </Field>
 
-        <Field label="Name" hint="Shown on the budget card.">
+        <Field label={t('common.name')} hint={t('budgets.shownOnTheBudgetCard')}>
           {({ id }) => (
             <input
               id={id}
@@ -146,7 +172,7 @@ export function BudgetFormSheet({
           )}
         </Field>
 
-        <Field label="Period">
+        <Field label={t('common.period')}>
           {({ id }) => (
             <div id={id} className="grid grid-cols-3 gap-2">
               {(['weekly', 'monthly', 'yearly'] as const).map((option) => (
@@ -178,15 +204,15 @@ export function BudgetFormSheet({
             className="mt-0.5 size-4 shrink-0 rounded-sm border-line text-gold focus:ring-gold"
           />
           <span>
-            <span className="block text-[13px] font-medium text-ink">Roll over unused amount</span>
+            <span className="block text-[13px] font-medium text-ink">{t('budgets.rollOverUnusedAmount')}</span>
             <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">
-              Unspent budget carries into the next period as extra headroom.
+              {t('budgets.unspentBudgetCarriesIntoTheNext')}
             </span>
           </span>
         </label>
 
         <p className="text-[11.5px] leading-relaxed text-ink-faint">
-          You'll be alerted at {DEFAULT_BUDGET_THRESHOLDS.join('%, ')}% of this budget.
+          {t('budgets.youLlBeAlertedAt')} {DEFAULT_BUDGET_THRESHOLDS.join('%, ')}{t('budgets.ofThisBudget')}
         </p>
       </form>
     </Sheet>

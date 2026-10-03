@@ -17,13 +17,16 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     'bg-ink text-ink-inverse hover:bg-ink/90 active:bg-ink shadow-xs disabled:bg-ink/40',
   gold:
-    'bg-gold text-white hover:bg-gold-strong active:bg-gold-strong shadow-gold disabled:bg-gold/40',
+    'bg-gold text-ink-inverse hover:bg-gold-strong active:bg-gold-strong shadow-gold disabled:bg-gold/40',
   secondary:
     'bg-surface text-ink border border-line hover:bg-sunken hover:border-line-strong active:bg-sunken',
   ghost: 'bg-transparent text-ink-secondary hover:bg-sunken hover:text-ink active:bg-sunken',
-  danger: 'bg-negative text-white hover:bg-negative/90 active:bg-negative disabled:bg-negative/40',
+  danger: 'bg-negative text-ink-inverse hover:bg-negative/90 active:bg-negative disabled:bg-negative/40',
   link: 'bg-transparent text-gold hover:text-gold-strong underline underline-offset-4 decoration-gold/40 hover:decoration-gold',
 };
+
+/** Filled buttons are told apart by background alone; forced-colours mode removes it, so keep an edge. */
+const FORCED_COLORS_EDGE = 'forced-colors:border forced-colors:border-[ButtonText]';
 
 const SIZES: Record<ButtonSize, string> = {
   sm: 'h-9 px-3.5 text-[13px] gap-1.5 rounded-sm',
@@ -55,6 +58,7 @@ export function buttonClasses(
     'relative inline-flex select-none items-center justify-center whitespace-nowrap font-medium',
     'transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[--ease-out-soft]',
     'active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60',
+    FORCED_COLORS_EDGE,
     VARIANTS[variant],
     SIZES[size],
     fullWidth && 'w-full',
@@ -89,6 +93,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         'relative inline-flex select-none items-center justify-center whitespace-nowrap font-medium',
         'transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-[--ease-out-soft]',
         'active:scale-[0.985] disabled:pointer-events-none disabled:opacity-60 disabled:active:scale-100',
+        FORCED_COLORS_EDGE,
         VARIANTS[variant],
         SIZES[size],
         fullWidth && 'w-full',

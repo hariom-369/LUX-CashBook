@@ -2,11 +2,14 @@ import { Router, type Request, type Response } from 'express';
 import { asyncHandler, created, ok, paginate } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
-import { idParamSchema, validate } from '../../middleware/validate.js';
+import { idParamSchema, objectIdSchema, revisionField, validate } from '../../middleware/validate.js';
+import { z } from 'zod';
+import { REIMBURSEMENT_STATUSES, type ReimbursementStatus } from '@khata/shared';
 import { writeLimiter } from '../../middleware/rateLimit.js';
 import * as service from './transaction.service.js';
 import * as query from './transaction.query.js';
 import {
+  createSplitSchema,
   createTransactionSchema,
   duplicateTransactionSchema,
   listTransactionsSchema,
@@ -21,6 +24,14 @@ function auditContext(req: Request) {
   const scope = scopeOf(req);
   return { userId: scope.userId, workspaceId: scope.workspaceId, ...actorOf(req) };
 }
+
+/** Tracked reimbursements, grouped by stage (§Phase 7). Declared before `/:id` so the word is not read as an id. */
+transactionRouter.get(
+  '/reimbursements/summary',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await service.getReimbursementSummary(scopeOf(req)));
+  }),
+);
 
 transactionRouter.get(
   '/',
@@ -52,6 +63,18 @@ transactionRouter.post(
       auditContext(req),
     );
     created(res, await query.getTransaction(scope, String(transaction._id)));
+  }),
+);
+
+/** One payment split across categories (§Phase 8) — several rows, one `splitGroupId`. */
+transactionRouter.post(
+  '/split',
+  writeLimiter,
+  validate({ body: createSplitSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const scope = scopeOf(req);
+    const transactions = await service.createSplitTransaction(scope, req.body, auditContext(req));
+    created(res, await Promise.all(transactions.map((t) => query.getTransaction(scope, String(t._id)))));
   }),
 );
 
@@ -129,5 +152,25 @@ transactionRouter.post(
     );
 
     created(res, await query.getTransaction(scope, String(duplicate._id)));
+  }),
+);
+
+/** Move an expense through pending -> submitted -> approved -> paid, or stop tracking it (§Phase 7). */
+transactionRouter.patch(
+  '/:id/reimbursement',
+  writeLimiter,
+  validate({
+    params: idParamSchema,
+    body: z.object({
+      status: z.enum(['none', ...REIMBURSEMENT_STATUSES]),
+      payoutTransactionId: objectIdSchema.nullable().optional(),
+      rev: revisionField,
+    }),
+  }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const scope = scopeOf(req);
+    const { rev, ...input } = req.body as { rev?: number; status: 'none' | ReimbursementStatus; payoutTransactionId?: string | null };
+    await service.setReimbursement(scope, param(req, 'id'), input, auditContext(req), rev);
+    ok(res, await query.getTransaction(scope, param(req, 'id')));
   }),
 );

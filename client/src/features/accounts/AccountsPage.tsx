@@ -11,6 +11,7 @@ import { Icon } from '../../components/ui/Icon';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { useAccounts } from '../../lib/queries';
 import { AccountFormSheet } from './AccountFormSheet';
+import { useT } from '../../i18n';
 
 /**
  * Accounts (§8).
@@ -20,6 +21,7 @@ import { AccountFormSheet } from './AccountFormSheet';
  * misstate the position.
  */
 export function AccountsPage() {
+  const t = useT();
   const { data: accounts = [], isLoading, isError, error, refetch } = useAccounts(true);
   const [editing, setEditing] = useState<AccountDto | null>(null);
   const [creating, setCreating] = useState(false);
@@ -47,21 +49,21 @@ export function AccountsPage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Accounts</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.accounts')}</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">
-            Cash, bank, UPI, wallets and cards — each with its own ledger.
+            {t('accounts.cashBankUpiWalletsAndCards')}
           </p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add account
+          {t('accounts.addAccount')}
         </Button>
       </header>
 
       {accounts.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <TotalTile label="Assets" amountMinor={assets} tone="positive" />
-          <TotalTile label="Liabilities" amountMinor={liabilities} tone="negative" />
-          <TotalTile label="Net" amountMinor={assets - liabilities} tone="neutral" emphasise />
+          <TotalTile label={t('common.assets')} amountMinor={assets} tone="positive" />
+          <TotalTile label={t('common.liabilities')} amountMinor={liabilities} tone="negative" />
+          <TotalTile label={t('common.net')} amountMinor={assets - liabilities} tone="neutral" emphasise />
         </div>
       )}
 
@@ -77,11 +79,11 @@ export function AccountsPage() {
         <Card>
           <EmptyState
             icon={<Wallet className="size-5" />}
-            title="No accounts yet"
-            description="Add the places your money actually sits — a cash wallet, your bank, a UPI balance — and every transaction can be recorded against one."
+            title={t('accounts.noAccountsYet')}
+            description={t('accounts.addThePlacesYourMoneyActually')}
             action={
               <Button variant="gold" size="sm" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-                Add your first account
+                {t('accounts.addYourFirstAccount')}
               </Button>
             }
           />
@@ -92,8 +94,8 @@ export function AccountsPage() {
             <Card key={type} bare>
               <div className="p-5 pb-3 sm:p-6 sm:pb-3">
                 <CardHeader
-                  eyebrow={ACCOUNT_TYPE_META[type].label}
-                  title={`${byType.get(type)!.length} ${byType.get(type)!.length === 1 ? 'account' : 'accounts'}`}
+                  eyebrow={t.label('accountType', type, ACCOUNT_TYPE_META[type].label)}
+                  title={t.plural('accounts.countLabel', byType.get(type)!.length)}
                 />
               </div>
 
@@ -121,12 +123,12 @@ export function AccountsPage() {
                             </span>
                             {!account.isActive && (
                               <Badge tone="outline" eyebrow>
-                                Inactive
+                                {t('accounts.inactive')}
                               </Badge>
                             )}
                             {account.excludeFromTotals && (
                               <Badge tone="outline" eyebrow>
-                                Excluded
+                                {t('accounts.excluded')}
                               </Badge>
                             )}
                           </span>
@@ -155,7 +157,7 @@ export function AccountsPage() {
                       onClick={() => setEditing(account)}
                       className="shrink-0 border-l border-line-faint px-3 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink sm:px-4"
                     >
-                      Edit
+                      {t('common.edit')}
                     </button>
                   </li>
                 ))}

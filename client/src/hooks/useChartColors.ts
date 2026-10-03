@@ -21,9 +21,9 @@ export interface ChartColors {
 const FALLBACK: ChartColors = {
   income: '#1268a8',
   expense: '#c07a2e',
-  accent: '#A8813C',
+  accent: '#8c6a2c',
   grid: '#e9e5db',
-  axis: '#a8a294',
+  axis: '#716b5d',
   surface: '#fffefb',
   cursor: 'rgba(22,21,15,0.035)',
 };

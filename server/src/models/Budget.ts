@@ -16,6 +16,8 @@ export interface IBudget {
   workspaceId: Types.ObjectId;
   name: string;
   categoryId: Types.ObjectId | null;
+  /** Optional (Phase 7) — scopes this budget to spending on one account only. */
+  accountId: Types.ObjectId | null;
   amountMinor: number;
   period: 'monthly' | 'weekly' | 'yearly';
   startDate: Date;
@@ -39,6 +41,7 @@ const budgetSchema = new Schema<IBudget>(
     ...scopeFields(),
     name: { type: String, required: true, trim: true, maxlength: 60 },
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+    accountId: { type: Schema.Types.ObjectId, ref: 'Account', default: null },
     amountMinor: moneyField({ required: true, signed: false }),
     period: { type: String, enum: ['monthly', 'weekly', 'yearly'], default: 'monthly' },
     startDate: { type: Date, required: true },
@@ -61,10 +64,13 @@ const budgetSchema = new Schema<IBudget>(
   baseOptions,
 );
 
-// One active budget per category per workspace — two competing limits for the same
-// category would make "remaining" meaningless.
+// One active budget per category (optionally narrowed to one account) per
+// workspace — two competing limits for the same category/account would make
+// "remaining" meaningless. `accountId` joins the key so a category can carry
+// both an overall budget (accountId null) and account-specific ones (Phase 7)
+// without colliding.
 budgetSchema.index(
-  { workspaceId: 1, categoryId: 1, period: 1 },
+  { workspaceId: 1, categoryId: 1, accountId: 1, period: 1 },
   { unique: true, partialFilterExpression: { isActive: true } },
 );
 budgetSchema.index({ workspaceId: 1, isActive: 1 });

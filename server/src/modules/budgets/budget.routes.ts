@@ -19,6 +19,7 @@ const auditContext = (req: Request) => {
 const createSchema = z.object({
   name: z.string().trim().min(1, 'Give this budget a name.').max(60),
   categoryId: objectIdSchema.nullable(),
+  accountId: objectIdSchema.nullable().optional(),
   amountMinor: amountMinorSchema.refine((n) => n > 0, 'Enter an amount greater than zero.'),
   period: z.enum(['monthly', 'weekly', 'yearly']).default('monthly'),
   startDate: dateSchema.optional(),
@@ -32,6 +33,14 @@ budgetRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
     ok(res, await service.listBudgetsWithProgress(scopeOf(req)));
+  }),
+);
+
+/** "Copy last month" (§Phase 7) — suggestions only, nothing created here. */
+budgetRouter.get(
+  '/suggestions',
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await service.suggestBudgetsFromLastMonth(scopeOf(req)));
   }),
 );
 

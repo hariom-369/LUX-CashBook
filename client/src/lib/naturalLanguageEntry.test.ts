@@ -83,3 +83,114 @@ describe('parseQuickEntry', () => {
     expect(result.description).toBe(text);
   });
 });
+
+describe('Quick Entry 2.0 (§Phase 2): accounts, transfers, owes, and naming what it could not work out', () => {
+  const accounts = [
+    { id: 'a-cash', name: 'Cash', type: 'cash' },
+    { id: 'a-sbi', name: 'SBI', type: 'bank' },
+    { id: 'a-hdfc', name: 'HDFC Savings', type: 'bank' },
+    { id: 'a-gpay', name: 'GPay', type: 'upi' },
+    { id: 'a-card', name: 'ICICI Amazon', type: 'credit_card' },
+  ];
+  const ctx = { categories: [], people: [{ id: 'p-rahul', name: 'Rahul Sharma' }], accounts, today: new Date('2026-10-10T12:00:00') };
+  const parse = (text: string) => parseQuickEntry(text, ctx);
+
+  it('reads an account named after "from" / "using"', () => {
+    expect(parse('Paid 250 for lunch from SBI').accountId).toBe('a-sbi');
+    expect(parse('Paid 250 for lunch using GPay').accountId).toBe('a-gpay');
+    expect(parse('paid 250 via icici amazon').accountId).toBe('a-card');
+  });
+
+  it('reads a kind of account ("using UPI", "by card") when exactly one account fits', () => {
+    expect(parse('Paid 250 for lunch using UPI').accountId).toBe('a-gpay');
+    expect(parse('Bought shoes 3000 by credit card').accountId).toBe('a-card');
+    expect(parse('Paid 100 from cash').accountId).toBe('a-cash');
+  });
+
+  it('asks which account instead of guessing when a kind matches several', () => {
+    const entry = parse('Paid 5000 rent by bank');
+    expect(entry.accountId).toBeUndefined();
+    expect(entry.questions).toContainEqual({ field: 'account', candidates: ['a-sbi', 'a-hdfc'] });
+  });
+
+  it('asks which account when none is mentioned and there are several', () => {
+    const entry = parse('Paid 250 for lunch');
+    expect(entry.accountId).toBeUndefined();
+    expect(entry.questions).toContainEqual({ field: 'account' });
+  });
+
+  it('asks nothing about the account when the user only has one', () => {
+    const entry = parseQuickEntry('Paid 250 for lunch', { ...ctx, accounts: [accounts[0]!] });
+    expect(entry.questions).toEqual([]);
+  });
+
+  it('a longer account name beats a shorter one it contains', () => {
+    const entry = parseQuickEntry('Paid 900 from HDFC Savings', { ...ctx, accounts: [...accounts, { id: 'a-hdfc2', name: 'HDFC', type: 'bank' }] });
+    expect(entry.accountId).toBe('a-hdfc');
+  });
+
+  it('does not match part of a word', () => {
+    const entry = parseQuickEntry('Paid 50 for the cashew', { ...ctx, accounts: [{ id: 'a-cash', name: 'Cash', type: 'cash' }, { id: 'x', name: 'Other', type: 'bank' }] });
+    expect(entry.accountId).toBeUndefined();
+  });
+
+  it('reads both ends of a transfer', () => {
+    const entry = parse('Transferred 5000 from SBI to GPay');
+    expect(entry.type).toBe('transfer');
+    expect(entry.accountId).toBe('a-sbi');
+    expect(entry.toAccountId).toBe('a-gpay');
+    expect(entry.questions).toEqual([]);
+  });
+
+  it('reads a transfer whose "to" comes first in the sentence', () => {
+    const entry = parse('Moved cash 2000 to SBI from Cash');
+    expect(entry.type).toBe('transfer');
+    expect(entry.toAccountId).toBe('a-sbi');
+    expect(entry.accountId).toBe('a-cash');
+  });
+
+  it('names the missing side of a transfer', () => {
+    const entry = parse('Transferred 5000 to GPay');
+    expect(entry.toAccountId).toBe('a-gpay');
+    expect(entry.accountId).toBeUndefined();
+    expect(entry.questions).toContainEqual({ field: 'account' });
+    const neither = parse('Transferred 5000');
+    expect(neither.questions).toEqual(expect.arrayContaining([{ field: 'account' }, { field: 'toAccount' }]));
+  });
+
+  it('reads "Rahul owes me ₹1,200" as money lent to Rahul', () => {
+    const entry = parse('Rahul owes me ₹1,200');
+    expect(entry.type).toBe('lend');
+    expect(entry.amountMinor).toBe(120000);
+    expect(entry.personId).toBe('p-rahul');
+  });
+
+  it('reads "I owe Rahul 500" as money borrowed from Rahul', () => {
+    const entry = parse('I owe Rahul 500');
+    expect(entry.type).toBe('borrow');
+    expect(entry.amountMinor).toBe(50000);
+    expect(entry.personId).toBe('p-rahul');
+  });
+
+  it('asks who it was with when the person is not one it knows, and for the amount when there is none', () => {
+    const stranger = parse('Meena owes me 400');
+    expect(stranger.type).toBe('lend');
+    expect(stranger.personId).toBeUndefined();
+    expect(stranger.questions).toContainEqual({ field: 'person' });
+    const noAmount = parse('Paid for lunch from SBI');
+    expect(noAmount.matched).toBe(false);
+    expect(noAmount.questions).toContainEqual({ field: 'amount' });
+  });
+
+  it('never invents an account when none are supplied (the old behaviour is unchanged)', () => {
+    const entry = parseQuickEntry('Paid 250 for lunch using UPI', { categories: [], people: [] });
+    expect(entry.accountId).toBeUndefined();
+    expect(entry.questions).toEqual([]);
+  });
+
+  it('a pathological sentence neither hangs nor throws', () => {
+    const started = Date.now();
+    expect(() => parse(`${'from '.repeat(400)} ${'a'.repeat(3000)}`)).not.toThrow();
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});

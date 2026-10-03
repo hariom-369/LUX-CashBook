@@ -5,8 +5,9 @@ import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { useUiStore } from '../../stores/ui.store';
 import { api, errorMessage } from '../../lib/api';
+import { LANGUAGES, useT, msg, type MessageRef } from '../../i18n';
 
-const THEME_LABELS: Record<Theme, string> = { light: 'Light', dark: 'Dark', system: 'Match system' };
+const THEME_LABELS: Record<Theme, MessageRef> = { light: msg('settings.light'), dark: msg('settings.dark'), system: msg('settings.matchSystem') };
 
 /**
  * Display preferences (§6, §54).
@@ -17,9 +18,11 @@ const THEME_LABELS: Record<Theme, string> = { light: 'Light', dark: 'Dark', syst
  */
 export function PreferencesSettings() {
   const toast = useToast();
+  const t = useT();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const setTheme = useUiStore((s) => s.setTheme);
+  const setDeviceLanguage = useUiStore((s) => s.setDeviceLanguage);
   const theme = useUiStore((s) => s.theme);
 
   const [saving, setSaving] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export function PreferencesSettings() {
       const updated = await api.patch<UserDto>('/users/me/preferences', body);
       setUser(updated);
     } catch (err) {
-      toast.error('Could not save that preference', errorMessage(err));
+      toast.error(t('settings.couldNotSaveThatPreference'), errorMessage(err));
     } finally {
       setSaving(null);
     }
@@ -42,12 +45,12 @@ export function PreferencesSettings() {
   return (
     <div className="flex flex-col gap-6">
       <Row
-        label="Theme"
-        hint="Match system follows your device's light/dark setting automatically."
+        label={t('settings.theme')}
+        hint={t('settings.matchSystemFollowsYourDeviceS')}
         busy={saving === 'theme'}
       >
         <Select
-          aria-label="Theme"
+          aria-label={t('settings.theme')}
           value={theme}
           className="w-auto min-w-[160px]"
           onChange={(event) => {
@@ -58,42 +61,61 @@ export function PreferencesSettings() {
         >
           {THEMES.map((option) => (
             <option key={option} value={option}>
-              {THEME_LABELS[option]}
+              {t(THEME_LABELS[option].key)}
             </option>
           ))}
         </Select>
       </Row>
 
-      <Row label="Currency" hint="The default for new workspaces. Existing workspaces keep their own currency." busy={saving === 'currency'}>
+      <Row label={t('settings.language.label')} hint={t('settings.language.hint')} busy={saving === 'language'}>
         <Select
-          aria-label="Currency"
+          aria-label={t('settings.language.label')}
+          value={prefs.language}
+          className="w-auto min-w-[160px]"
+          onChange={(event) => {
+            // Remembered on this device too, so the sign-in screen is in the same language after sign-out.
+            setDeviceLanguage(event.target.value);
+            void patch('language', { language: event.target.value });
+          }}
+        >
+          {Object.entries(LANGUAGES).map(([code, label]) => (
+            <option key={code} value={code}>
+              {label}
+            </option>
+          ))}
+        </Select>
+      </Row>
+
+      <Row label={t('common.currency')} hint={t('settings.theDefaultForNewWorkspacesExisting')} busy={saving === 'currency'}>
+        <Select
+          aria-label={t('common.currency')}
           value={prefs.currency}
           className="w-auto min-w-[200px]"
           onChange={(event) => void patch('currency', { currency: event.target.value })}
         >
           {Object.values(CURRENCIES).map((currency) => (
             <option key={currency.code} value={currency.code}>
-              {currency.symbol} · {currency.name}
+              {currency.symbol} · {t.label('currency', currency.code, currency.name)}
             </option>
           ))}
         </Select>
       </Row>
 
-      <Row label="Number format" busy={saving === 'numberFormat'}>
+      <Row label={t('settings.numberFormat')} busy={saving === 'numberFormat'}>
         <Select
-          aria-label="Number format"
+          aria-label={t('settings.numberFormat')}
           value={prefs.numberFormat}
           className="w-auto min-w-[200px]"
           onChange={(event) => void patch('numberFormat', { numberFormat: event.target.value })}
         >
-          <option value="indian">Indian (₹1,25,000)</option>
-          <option value="western">Western (₹125,000)</option>
+          <option value="indian">{t('settings.indian125000')}</option>
+          <option value="western">{t('settings.western125000')}</option>
         </Select>
       </Row>
 
-      <Row label="Date format" busy={saving === 'dateFormat'}>
+      <Row label={t('settings.dateFormat')} busy={saving === 'dateFormat'}>
         <Select
-          aria-label="Date format"
+          aria-label={t('settings.dateFormat')}
           value={prefs.dateFormat}
           className="w-auto min-w-[180px]"
           onChange={(event) => void patch('dateFormat', { dateFormat: event.target.value })}
@@ -106,42 +128,67 @@ export function PreferencesSettings() {
         </Select>
       </Row>
 
-      <Row label="First day of week" busy={saving === 'firstDayOfWeek'}>
+      <Row label={t('settings.firstDayOfWeek')} busy={saving === 'firstDayOfWeek'}>
         <Select
-          aria-label="First day of week"
+          aria-label={t('settings.firstDayOfWeek')}
           value={String(prefs.firstDayOfWeek)}
           className="w-auto min-w-[140px]"
           onChange={(event) => void patch('firstDayOfWeek', { firstDayOfWeek: Number(event.target.value) })}
         >
-          <option value="0">Sunday</option>
-          <option value="1">Monday</option>
-          <option value="6">Saturday</option>
+          <option value="0">{t('settings.sunday')}</option>
+          <option value="1">{t('settings.monday')}</option>
+          <option value="6">{t('settings.saturday')}</option>
+        </Select>
+      </Row>
+
+      <Row label={t('settings.homeScreen')} hint={t('settings.homeScreenHint')} busy={saving === 'homeScreen'}>
+        <Select
+          aria-label={t('settings.homeScreen')}
+          value={prefs.homeScreen ?? 'dashboard'}
+          className="w-auto min-w-[180px]"
+          onChange={(event) => void patch('homeScreen', { homeScreen: event.target.value })}
+        >
+          <option value="dashboard">{t('settings.homeScreen.dashboard')}</option>
+          <option value="daily">{t('settings.homeScreen.daily')}</option>
         </Select>
       </Row>
 
       <div className="border-t border-line-faint pt-5">
         <Row
-          label="Accounting view"
-          hint="Show Debit / Credit / contra terminology instead of Money In / Money Out, for anyone used to formal bookkeeping (§54)."
+          label={t('settings.accountingView')}
+          hint={t('settings.showDebitCreditContraTerminologyInstead')}
           busy={saving === 'accountingView'}
         >
           <Toggle
-            label="Accounting view"
+            label={t('settings.accountingView')}
             checked={prefs.accountingView}
             onChange={(value) => void patch('accountingView', { accountingView: value })}
           />
         </Row>
 
         <Row
-          label="Start with amounts hidden"
-          hint="Every figure is masked when you open the app, until you tap to reveal it (§38)."
+          label={t('settings.startWithAmountsHidden')}
+          hint={t('settings.everyFigureIsMaskedWhenYou')}
           busy={saving === 'privacyModeDefault'}
           className="mt-4"
         >
           <Toggle
-            label="Start with amounts hidden"
+            label={t('settings.startWithAmountsHidden')}
             checked={prefs.privacyModeDefault}
             onChange={(value) => void patch('privacyModeDefault', { privacyModeDefault: value })}
+          />
+        </Row>
+
+        <Row
+          label={t('settings.aiAssistant')}
+          hint={t('settings.letsYouAskQuestionsAboutYour')}
+          busy={saving === 'aiAssistantEnabled'}
+          className="mt-4"
+        >
+          <Toggle
+            label={t('settings.aiAssistant')}
+            checked={prefs.aiAssistantEnabled}
+            onChange={(value) => void patch('aiAssistantEnabled', { aiAssistantEnabled: value })}
           />
         </Row>
       </div>

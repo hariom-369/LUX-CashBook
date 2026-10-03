@@ -9,20 +9,22 @@ import { Button } from '../../components/ui/Button';
 import { Field, Input } from '../../components/ui/Input';
 import { api, errorMessage } from '../../lib/api';
 import { PasswordStrength } from './PasswordStrength';
+import { useT } from '../../i18n';
 
 const schema = z
   .object({
-    password: z.string().min(10, 'Use at least 10 characters.').max(256, 'That password is too long.'),
-    confirm: z.string().min(1, 'Type your new password again.'),
+    password: z.string().min(10, 'auth.useAtLeast10Characters').max(256, 'auth.thatPasswordIsTooLong'),
+    confirm: z.string().min(1, 'auth.typeYourNewPasswordAgain'),
   })
   .refine((values) => values.password === values.confirm, {
     path: ['confirm'],
-    message: 'Those passwords do not match.',
+    message: 'auth.thosePasswordsDoNotMatch',
   });
 
 type FormValues = z.infer<typeof schema>;
 
 export function ResetPasswordPage() {
+  const t = useT();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get('token') ?? '';
@@ -54,11 +56,11 @@ export function ResetPasswordPage() {
   if (!token) {
     return (
       <AuthLayout
-        title="That link isn't complete"
-        subtitle="The reset link is missing its token. Request a new one and use the most recent email."
+        title={t('auth.thatLinkIsnTComplete')}
+        subtitle={t('auth.theResetLinkIsMissingIts')}
         footer={
           <Link to="/forgot-password" className="font-medium text-gold underline-offset-4 hover:underline">
-            Request a new link
+            {t('auth.requestANewLink')}
           </Link>
         }
       >
@@ -69,11 +71,11 @@ export function ResetPasswordPage() {
 
   if (done) {
     return (
-      <AuthLayout title="Password changed" subtitle="Taking you to sign in…">
+      <AuthLayout title={t('common.passwordChanged')} subtitle={t('auth.takingYouToSignIn')}>
         <div className="flex items-center gap-3.5 rounded-lg border border-positive/25 bg-positive-soft p-4">
           <CheckCircle2 aria-hidden className="size-5 shrink-0 text-positive" />
           <p className="text-[13px] leading-relaxed text-ink-secondary">
-            All other sessions were signed out. Sign in with your new password.
+            {t('auth.allOtherSessionsWereSignedOut')}
           </p>
         </div>
       </AuthLayout>
@@ -81,7 +83,7 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout title="Choose a new password" subtitle="This link can be used once and expires in an hour.">
+    <AuthLayout title={t('auth.chooseANewPassword')} subtitle={t('auth.thisLinkCanBeUsedOnce')}>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
         {formError && (
           <div
@@ -90,12 +92,12 @@ export function ResetPasswordPage() {
           >
             {formError}{' '}
             <Link to="/forgot-password" className="font-medium underline underline-offset-4">
-              Request a new link
+              {t('auth.requestANewLink')}
             </Link>
           </div>
         )}
 
-        <Field label="New password" error={errors.password?.message} required>
+        <Field label={t('common.newPassword')} error={errors.password?.message && t.maybe(errors.password.message)} required>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -107,7 +109,7 @@ export function ResetPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   className="pointer-events-auto rounded-sm p-1 text-ink-muted transition-colors hover:text-ink"
                 >
                   {showPassword ? <EyeOff aria-hidden className="size-4" /> : <Eye aria-hidden className="size-4" />}
@@ -120,7 +122,7 @@ export function ResetPasswordPage() {
 
         <PasswordStrength password={watch('password')} />
 
-        <Field label="Confirm new password" error={errors.confirm?.message} required>
+        <Field label={t('common.confirmNewPassword')} error={errors.confirm?.message && t.maybe(errors.confirm.message)} required>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -134,7 +136,7 @@ export function ResetPasswordPage() {
         </Field>
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting} className="mt-1">
-          Change password
+          {t('common.changePassword')}
         </Button>
       </form>
     </AuthLayout>

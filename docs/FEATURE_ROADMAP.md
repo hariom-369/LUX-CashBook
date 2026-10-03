@@ -60,22 +60,22 @@ Your 16-phase outline is followed with four deliberate changes:
 | Phase | Theme | Headline outcome |
 |---|---|---|
 | 0 | Audit | ✅ This document and `PRODUCT_AUDIT.md` |
-| 1 | Truth, safety, foundations | ✅ No fake settings, no data left behind at sign-out, installable app, flags, lint, i18n scaffold, hidden features surfaced, optimistic concurrency — see [`PHASE1_NOTES.md`](PHASE1_NOTES.md) |
-| 2 | Everyday entry | Quick Entry 2.0, payees, category rules, tags, real global search, Daily Money home |
-| 3 | Bills and reminders | Bills & subscriptions centre, reminder engine, browser notifications, calendar |
-| 4 | Lending 2.0 | Timeline, installments, reminder messages, statements |
-| 5 | Import and reconciliation | Bank CSV mapping, Indian formats, duplicate detection, account reconciliation |
-| 6 | Receipts and documents | Receipt capture in Quick Add, gallery, document vault with expiry reminders |
-| 7 | Planning and insight | Credit card centre, net worth centre, cash-flow forecast, report builder, budgets/goals 2.0 |
-| 8 | Splits and groups | Split transactions, group expenses, debt simplification |
-| 9 | Household | Shared workspaces, roles, private accounts |
-| 10 | AI | Q&A over your data, AI drafts, receipt extraction |
-| 11 | Freelancer and invoicing | Clients/projects, invoices, quotations, customer/vendor directory |
-| 12 | Business operations | Sales vs purchases, petty cash 2.0, inventory (basic), business reports |
-| 13 | GST foundations | GST fields, tax-inclusive/exclusive pricing, tax summaries |
-| 14 | Hindi and localisation | Full string extraction, Hindi, pluggable languages |
-| 15 | Offline sync 2.0 | Every mutation queueable, conflict resolution UI, sync states |
-| 16 | Final polish | Security, performance, accessibility pass; docs |
+| 1 | Truth, safety, foundations | ✅ No fake settings, no data left behind at sign-out, installable app, flags, lint, i18n scaffold, hidden features surfaced, optimistic concurrency — see [`ROADMAP_PHASE1_NOTES.md`](ROADMAP_PHASE1_NOTES.md) |
+| 2 | Everyday entry | ✅ Transaction edit UI, payees, tags management, category rules (suggest-only), Quick Entry 2.0, structured global search, opt-in Daily Money home — see [`ROADMAP_PHASE2_NOTES.md`](ROADMAP_PHASE2_NOTES.md) |
+| 3 | Bills and reminders | ✅ Bills & subscriptions centre, subscription detector, financial calendar, browser push — see [`ROADMAP_PHASE3_NOTES.md`](ROADMAP_PHASE3_NOTES.md) |
+| 4 | Lending 2.0 | ✅ Per-loan timeline, installment schedules, per-loan reminder message — see [`ROADMAP_PHASE4_NOTES.md`](ROADMAP_PHASE4_NOTES.md) |
+| 5 | Import and reconciliation | ✅ Bank CSV mapping, Indian formats, duplicate detection, account reconciliation — see [`ROADMAP_PHASE5_NOTES.md`](ROADMAP_PHASE5_NOTES.md) |
+| 6 | Receipts and documents | ✅ Receipt capture in Quick Add, gallery, document vault with expiry reminders — see [`ROADMAP_PHASE6_NOTES.md`](ROADMAP_PHASE6_NOTES.md) |
+| 7 | Planning and insight | ✅ Credit card centre, cash-flow forecast, budgets/goals 2.0, report builder, reimbursement tracking (no accounting effect) — loan interest and investments not specified — see [`ROADMAP_PHASE7_NOTES.md`](ROADMAP_PHASE7_NOTES.md) |
+| 8 | Splits and groups | ✅ Split transactions, group expenses (debt simplification turned out to be unnecessary — see notes) — see [`ROADMAP_PHASE8_NOTES.md`](ROADMAP_PHASE8_NOTES.md) |
+| 9 | Household | ✅ Shared workspaces, roles, invitations, private accounts — the aggregate-report gap is closed and tested — see [`ROADMAP_PHASE9_NOTES.md`](ROADMAP_PHASE9_NOTES.md) |
+| 10 | AI | ✅ Read-only Q&A tool-use, draft extraction from text/receipts (never auto-saved), shipped untested against a real model (no provider key in this environment) — see [`ROADMAP_PHASE10_NOTES.md`](ROADMAP_PHASE10_NOTES.md) |
+| 11 | Freelancer and invoicing | ✅ Invoices/quotations/projects built around the existing ledger, atomic number sequencing, customer/vendor directory reused from People — see [`ROADMAP_PHASE11_NOTES.md`](ROADMAP_PHASE11_NOTES.md) |
+| 12 | Business operations | ✅ Combined invoice+loan ageing, petty cash cash-counts, inventory with oversell protection, P&L — see [`ROADMAP_PHASE12_NOTES.md`](ROADMAP_PHASE12_NOTES.md) |
+| 13 | GST foundations | ✅ Place-of-supply CGST/SGST vs IGST, inclusive/exclusive pricing, HSN/SAC, GST summary — no filing claims — see [`ROADMAP_PHASE13_NOTES.md`](ROADMAP_PHASE13_NOTES.md) |
+| 14 | Hindi and localisation | 🟢 UI strings, server error/insight sentences, month names and signed-out screens localised (CI guards); stored/sent text (notifications, email, push, PDFs) still English; no native-speaker review — see [`ROADMAP_PHASE14_NOTES.md`](ROADMAP_PHASE14_NOTES.md) |
+| 15 | Offline sync 2.0 | 🟢 Outbox, `submitOrQueue`, sync states, back-off, conflict dialog, server-side idempotency and queued creates on 14 forms; uploads/imports/exports/email-sending actions still need a connection — see [`ROADMAP_PHASE15_NOTES.md`](ROADMAP_PHASE15_NOTES.md) |
+| 16 | Final polish | 🟡 Partial — shortcuts, bulk delete, demo workspace, axe/keyboard accessibility audit and fixes, Cash Book progressive rendering shipped; caching and analytics await a decision, contextual help and settings reorganisation have no spec, loan interest and investments deferred, real screen-reader testing not done — see [`ROADMAP_PHASE16_NOTES.md`](ROADMAP_PHASE16_NOTES.md) |
 
 ---
 
@@ -120,6 +120,12 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 2 — Everyday entry *(P1)*
 
+🟡 **Partial.** Shipped: transaction edit UI (closing `PRODUCT_AUDIT.md` U-6),
+payees, and global search — see [`ROADMAP_PHASE2_NOTES.md`](ROADMAP_PHASE2_NOTES.md)
+for what shipped, a bug caught along the way, and verification. Deferred:
+Quick Entry 2.0's parser upgrades, category rules, tags management UI, and the
+Daily Money home screen (all still described below as originally scoped).
+
 - **Quick Entry 2.0:** amount-first, account-first and text-first entry. The
   parser adds account detection ("from SBI", "using UPI"), transfer
   from/to accounts, "Rahul owes me ₹1,200", and names what it couldn't work out
@@ -146,6 +152,13 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 3 — Bills, subscriptions, reminders *(P1)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE3_NOTES.md`](ROADMAP_PHASE3_NOTES.md) for
+what was built, a design decision worth knowing about the detector's "already
+has a bill" check, and verification (272/272 tests). The confirm-this-occurrence
+flow (U-3) turned out to already exist from Phase 1's `run`/`skip` actions and
+recurring-reminder sweep; this phase's job there was closing the loop with a
+calendar and a bills-specific view, not building it from scratch.
+
 - **Bills & Subscriptions centre** built on `RecurringTransaction` plus a
   `billKind` (electricity, rent, EMI, OTT…): due today, this week, this month
   and overdue, with autopay status.
@@ -170,6 +183,11 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 4 — Lending 2.0 *(P1)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE4_NOTES.md`](ROADMAP_PHASE4_NOTES.md). The
+statement PDF and share-a-reminder mechanism below turned out to already
+exist before this phase started; what it actually built was the timeline and
+installment schedules, plus narrowing the existing share action to one loan.
+
 - Timeline per loan (lent ₹10,000 → repaid ₹2,000 → repaid ₹3,000 →
   remaining ₹5,000).
 - Installment schedules with due dates, feeding reminders.
@@ -189,6 +207,10 @@ a backfill; *additive* means new optional fields or collections only.
 | Tests | Installments never change settled amounts; timeline equals the ledger |
 
 ### Phase 5 — Bank import and reconciliation *(P1)*
+
+✅ **Shipped** — see [`ROADMAP_PHASE5_NOTES.md`](ROADMAP_PHASE5_NOTES.md),
+including a scope note on reconciling against the current balance rather
+than a historical as-of-date one.
 
 - Column-mapping import (Date, Description, Debit, Credit, Amount, Balance,
   Reference), saved per bank. `dd/mm/yyyy` and Indian-grouped amounts parsed
@@ -214,6 +236,10 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 6 — Receipts and documents *(P1/P2)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE6_NOTES.md`](ROADMAP_PHASE6_NOTES.md),
+including a deliberate behaviour change needed to make "restore" real
+(delete is now a 30-day soft-delete, not an immediate file purge).
+
 - Attach or capture a receipt inside Quick Add, crop and compress.
 - Receipt gallery with search, filters, download, delete and restore.
 - **Document vault:** receipts, bills, warranties, rent agreements, insurance
@@ -230,6 +256,12 @@ a backfill; *additive* means new optional fields or collections only.
 | Tests | Cross-user access denied; expiry reminders fire once |
 
 ### Phase 7 — Planning and insight *(P1/P2)*
+
+🟡 **Partial.** Shipped: credit card centre, cash-flow forecast, budgets 2.0
+(account scoping, projected spend, copy-last-month-as-suggestion), goals 2.0
+(status, real transfer contributions). Deferred — not started, named here so
+the next session doesn't need to rediscover the gap: the report builder and
+reimbursements. See [`ROADMAP_PHASE7_NOTES.md`](ROADMAP_PHASE7_NOTES.md).
 
 - **Credit card centre:** statement day, due day, minimum due, utilization,
   "payment due in 3 days." Card payments stay transfers, as they already are.
@@ -258,6 +290,12 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 8 — Splits and groups *(P2, decision 1)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE8_NOTES.md`](ROADMAP_PHASE8_NOTES.md),
+including a test-infrastructure bug this phase found and fixed (the suite
+had never actually exercised a real multi-document transaction) and why
+"debt simplification" turned out unnecessary under decision 1's model
+(every member owes you directly, never each other).
+
 - Split one payment across categories (linked transactions, one bank line).
 - Groups (trip, flatmates, family) with equal, unequal, percentage, shares,
   exact and itemised splits; who paid, who owes, who settled; debt
@@ -274,6 +312,16 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 9 — Household workspaces *(P2, decision 4)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE9_NOTES.md`](ROADMAP_PHASE9_NOTES.md),
+including what the "31 `userId` queries" turned out to actually be (none of
+them financial data), a real bug this phase caught (backup restore would
+have locked its own user out), and a named, scoped gap in private-account
+enforcement (browsing/export are covered; a sweep of every aggregate report
+is the clearest next step). An independent security review ran against this
+phase's diff specifically because it's the roadmap's own "highest-risk
+phase" — treat that as one input, not a substitute for human sign-off
+before onboarding real households.
+
 - Invite by email; roles Owner, Admin, Member and Viewer.
 - Shared accounts, budgets, bills and goals; private accounts invisible to
   others; per-member attribution in the audit log.
@@ -289,37 +337,57 @@ a backfill; *additive* means new optional fields or collections only.
 
 ### Phase 10 — AI assistant *(P2, decisions 7–8)*
 
+✅ **Shipped** — see [`ROADMAP_PHASE10_NOTES.md`](ROADMAP_PHASE10_NOTES.md).
+No real provider key exists in this environment, so the feature ships and
+is fully tested in its "not configured" steady state (the same contract
+SMTP and push already have); itemised receipt extraction and an AI-backed
+secondary duplicate check were deliberately left unbuilt — see the notes
+for why. Opt-in lives on the user (`preferences.aiAssistantEnabled`), off
+by default.
+
 - Questions such as "How much did I spend on food last month?", "Who owes
   me?" or "What bills are due this week?" are answered by calling read-only
   functions over existing services, citing the figures they used.
 - "Create a draft for ₹500 groceries" returns a draft that opens in the
   normal Quick Add preview.
-- Receipt extraction (merchant, date, items, tax, total), always reviewed
-  before saving.
-- A secondary duplicate check behind Phase 5's deterministic matcher; never
-  deletes.
+- Receipt extraction (merchant, date, total, a category guess), always
+  reviewed before saving.
 
 | Impact | Detail |
 |---|---|
-| Database | `AiConsent` on User; optional conversation log (off by default) |
-| API | `/ai/ask`, `/ai/draft` — no tool can mutate data |
-| Frontend | Assistant panel, consent flow, draft review |
-| Security | Opt-in, data minimisation, no notes sent unless needed, per-user rate limits, prompt-injection-safe tool design |
+| Database | `preferences.aiAssistantEnabled` on User; no conversation log |
+| API | `/ai/status`, `/ai/ask`, `/ai/draft`, `/ai/draft/receipt` — no tool can mutate data |
+| Frontend | `/assistant` page, consent toggle in Preferences, draft hands off to Quick Add review |
+| Security | Opt-in, tools scoped to the caller's own data only, rate limited, names (never ids) resolved from model output |
 | Migration | None |
 | Tests | Tool outputs match service results; drafts never persist without confirmation |
 
 ### Phases 11–13 — Business *(P2/P3, business workspaces only)*
 
-- **11:** Freelancer mode (clients, projects, billable expenses, project
-  profit). Invoices with number series, items, discount and tax, statuses from
-  Draft to Cancelled, PDF, and share or email on user action. Quotations
-  convert to invoices without duplicating data. Customer/vendor profiles
-  extend today's People-based lists.
-- **12:** Sales vs purchases, receivables/payables ageing, petty cash 2.0
-  (cash count and daily report on top of day closing), basic inventory
-  (products, SKU, stock in/out, low-stock alerts), business reports and P&L.
-- **13:** GST-ready data: GSTIN, HSN/SAC, CGST/SGST/IGST, place of supply,
-  inclusive/exclusive pricing and tax summaries. No filing claims.
+- **11:** ✅ **Shipped** — see [`ROADMAP_PHASE11_NOTES.md`](ROADMAP_PHASE11_NOTES.md).
+  Freelancer mode (clients, projects, billable expenses, project profit).
+  Invoices with number series, items, a flat discount and a single tax
+  percentage (itemised GST is Phase 13), statuses Draft through Cancelled
+  (Overdue derived, never stored), PDF, and a text-summary share or an
+  email notification on send. Quotations convert to invoices without
+  duplicating data — a new invoice with its own number, the quotation left
+  exactly as accepted. Customer/vendor profiles are the existing
+  People-based lists (`customer`/`supplier` relationships already existed);
+  no new customer model was built.
+- **12:** ✅ **Shipped** — see [`ROADMAP_PHASE12_NOTES.md`](ROADMAP_PHASE12_NOTES.md).
+  Sales vs purchases, receivables/payables ageing (invoices + loans,
+  combined, bucketed by days past due), petty cash 2.0 (cash count against
+  the live expected float, plus a daily report), basic inventory (products,
+  SKU, stock in/out/adjustment with oversell protection, low-stock alerts),
+  and a profit & loss report composed from the existing category statement.
+  Invoice-to-stock linking (auto-deduct on sale) is named as the clearest
+  next integration point, not yet built.
+- **13:** ✅ **Shipped** — see [`ROADMAP_PHASE13_NOTES.md`](ROADMAP_PHASE13_NOTES.md).
+  GST-ready data: workspace/customer GSTIN and state (deciding intra-state
+  CGST+SGST vs inter-state IGST, frozen onto each invoice as
+  `placeOfSupplyState`), per-line HSN/SAC, inclusive/exclusive pricing, and
+  a GST summary report by tax rate. No filing, return or e-invoicing
+  claims — this produces figures for an accountant, not a GSTR submission.
 
 Invoice payments post through the engine as ordinary income (or a
 receivable settled by repayment), so every report stays consistent. These
@@ -328,10 +396,15 @@ phases add new models (`Invoice`, `Quotation`, `Product`, `StockMovement`,
 
 ### Phase 14 — Hindi and localisation *(P2)*
 
-Extract every remaining string into the catalogue from Phase 1, translate to
-Hindi, add a language switcher, and document how to add Gujarati, Marathi,
-Bengali, Tamil, Telugu, Kannada, Malayalam or Punjabi. Numbers and dates go
-through `Intl` with the Indian system by default.
+🟢 **UI migration shipped; named gaps remain** — see
+[`ROADMAP_PHASE14_NOTES.md`](ROADMAP_PHASE14_NOTES.md). Every component's text
+(104 files, 1,619 catalogue keys) is in the catalogue with a Hindi line, a
+language switcher exists (Settings → Preferences), and a CI test fails on any
+new un-migrated string. [`LOCALIZATION.md`](LOCALIZATION.md) documents adding
+Gujarati, Marathi, Bengali, Tamil, Telugu, Kannada, Malayalam or Punjabi.
+**Not localised:** server-originated messages and stored audit summaries,
+`Intl` month names in formatted dates, and the signed-out screens (they follow
+the signed-in user's language). Hindi has not had a native-speaker review.
 
 ### Phase 15 — Offline sync 2.0 *(P2)*
 
@@ -347,6 +420,17 @@ list virtualisation, report caching, bulk actions with confirmation, keyboard
 shortcuts, a settings centre reorganisation, a demo workspace, contextual help,
 privacy-first product analytics (opt-in, no amounts), loan interest (P3) and
 investment holdings (P3).
+
+🟡 **Partially shipped** — see [`ROADMAP_PHASE16_NOTES.md`](ROADMAP_PHASE16_NOTES.md).
+**Done:** keyboard shortcuts; bulk delete with confirmation; demo workspace;
+an automated and scripted accessibility audit with fixes (contrast tokens,
+`lang`, page titles and announcements, combobox/disclosure patterns, chart text
+alternatives, labels, landmarks, headings); measured list rendering (Cash Book
+only — transactions are server-paginated and fast). **Waiting on a decision:**
+report caching, product analytics. **No spec exists, so not built:** contextual
+help, settings-centre reorganisation. **Deferred:** loan interest (accounting
+treatment), investment holdings (no model). **Not done:** a real screen-reader
+test, zoom/text-spacing/forced-colours checks.
 
 ---
 

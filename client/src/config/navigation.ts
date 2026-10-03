@@ -24,17 +24,26 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: 'LayoutDashboard', group: 'main', mobile: true, description: 'Balances, cash flow and what needs attention' },
+  { to: '/today', label: 'Daily Money', icon: 'Sun', group: 'main', description: 'The simple view: balance, today, safe to spend, what is due' },
   { to: '/transactions', label: 'Transactions', icon: 'ArrowLeftRight', group: 'main', mobile: true, description: 'Every entry, searchable and filterable' },
   { to: '/cash-book', label: 'Cash Book', icon: 'BookOpen', group: 'main', description: 'Traditional single, double and triple column views' },
 
   { to: '/people', label: 'People', icon: 'Users', group: 'money', mobile: true, description: 'Who owes you and who you owe' },
+  { to: '/groups', label: 'Groups', icon: 'UsersRound', group: 'money', description: 'Split shared expenses with a trip, flatmates or family' },
   { to: '/accounts', label: 'Accounts', icon: 'Wallet', group: 'money', description: 'Cash, bank, UPI, cards and wallets' },
 
   { to: '/budgets', label: 'Budgets', icon: 'Target', group: 'plan', description: 'Monthly limits by category' },
   { to: '/goals', label: 'Goals', icon: 'Flag', group: 'plan', description: 'What you are saving towards' },
   { to: '/recurring', label: 'Recurring', icon: 'Repeat', group: 'plan', description: 'Salary, rent, EMIs and subscriptions' },
+  { to: '/bills', label: 'Bills', icon: 'CalendarClock', group: 'plan', description: "What's due - overdue, this week, this month" },
+  { to: '/calendar', label: 'Calendar', icon: 'CalendarDays', group: 'plan', description: 'Bills, loans and reminders by date' },
+  { to: '/documents', label: 'Documents', icon: 'FolderOpen', group: 'plan', description: 'Receipts, warranties, agreements and more' },
 
-  { to: '/petty-cash', label: 'Petty Cash', icon: 'Coins', group: 'business', modes: ['business'], description: 'Imprest float and replenishment' },
+  { to: '/invoices', label: 'Invoices', icon: 'FileText', group: 'business', modes: ['business'], description: 'Issue, send and track payment' },
+  { to: '/quotations', label: 'Quotations', icon: 'FileSignature', group: 'business', modes: ['business'], description: 'Estimates that convert straight into invoices' },
+  { to: '/projects', label: 'Projects', icon: 'Briefcase', group: 'business', modes: ['business'], description: 'Clients, billable expenses and profit' },
+  { to: '/inventory', label: 'Inventory', icon: 'Package', group: 'business', modes: ['business'], description: 'Products, stock levels and low-stock alerts' },
+  { to: '/petty-cash', label: 'Petty Cash', icon: 'Coins', group: 'business', modes: ['business'], description: 'Imprest float, replenishment and cash counts' },
   { to: '/customers', label: 'Customers', icon: 'UserRound', group: 'business', modes: ['business'], description: 'Receivables by customer' },
   { to: '/suppliers', label: 'Suppliers', icon: 'Truck', group: 'business', modes: ['business'], description: 'Payables by supplier' },
   { to: '/daily-closing', label: 'Daily Closing', icon: 'CalendarCheck', group: 'business', modes: ['business'], description: 'Count the drawer and reconcile' },
@@ -42,6 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
 
   { to: '/reports', label: 'Reports', icon: 'FileBarChart', group: 'system', mobile: true, description: 'Statements, exports and PDFs' },
   { to: '/insights', label: 'Insights', icon: 'Sparkles', group: 'system', description: 'What changed and where the money went' },
+  { to: '/assistant', label: 'Assistant', icon: 'Bot', group: 'system', description: 'Ask about your finances, or turn a note or receipt into a draft' },
   { to: '/settings', label: 'Settings', icon: 'Settings', group: 'system', description: 'Profile, security, data and preferences' },
 ];
 

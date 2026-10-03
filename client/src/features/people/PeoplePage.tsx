@@ -12,14 +12,15 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States
 import { usePeople } from '../../lib/queries';
 import { useDebounced } from '../../hooks/useDebounced';
 import { PersonFormSheet } from './PersonFormSheet';
+import { useT, msg, type MessageRef } from '../../i18n';
 
 type StatusFilter = 'all' | 'receivable' | 'payable' | 'settled';
 
-const FILTERS: Array<{ value: StatusFilter; label: string }> = [
-  { value: 'all', label: 'Everyone' },
-  { value: 'receivable', label: 'Will receive' },
-  { value: 'payable', label: 'Need to pay' },
-  { value: 'settled', label: 'Settled' },
+const FILTERS: Array<{ value: StatusFilter; label: MessageRef }> = [
+  { value: 'all', label: msg('people.everyone') },
+  { value: 'receivable', label: msg('people.willReceive') },
+  { value: 'payable', label: msg('people.needToPay') },
+  { value: 'settled', label: msg('common.settled') },
 ];
 
 /**
@@ -31,6 +32,7 @@ const FILTERS: Array<{ value: StatusFilter; label: string }> = [
  * these apps unusable for them (§54).
  */
 export function PeoplePage() {
+  const t = useT();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [editing, setEditing] = useState<PersonDto | null>(null);
@@ -55,19 +57,19 @@ export function PeoplePage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">People</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.people')}</h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">
-            Who owes you, who you owe, and the full history with each of them.
+            {t('people.whoOwesYouWhoYouOwe')}
           </p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add person
+          {t('people.addPerson')}
         </Button>
       </header>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <SummaryCard label="You will receive" amountMinor={receivable} tone="positive" />
-        <SummaryCard label="You need to pay" amountMinor={payable} tone="negative" />
+        <SummaryCard label={t('people.youWillReceive')} amountMinor={receivable} tone="positive" />
+        <SummaryCard label={t('people.youNeedToPay')} amountMinor={payable} tone="negative" />
       </div>
 
       <Card bare className="p-3 sm:p-4">
@@ -78,9 +80,9 @@ export function PeoplePage() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name or phone…"
+              placeholder={t('people.searchByNameOrPhone')}
               leftSlot={<Search aria-hidden className="size-4" />}
-              aria-label="Search people"
+              aria-label={t('people.searchPeople')}
             />
           </div>
 
@@ -98,7 +100,7 @@ export function PeoplePage() {
                     : 'text-ink-muted hover:bg-sunken hover:text-ink',
                 )}
               >
-                {filter.label}
+                {t(filter.label.key)}
               </button>
             ))}
           </div>
@@ -115,11 +117,11 @@ export function PeoplePage() {
         ) : people.length === 0 ? (
           <EmptyState
             icon={<Users className="size-5" />}
-            title={debouncedSearch ? 'Nobody matches that' : 'No one here yet'}
+            title={debouncedSearch ? t('common.nobodyMatchesThat') : t('people.noOneHereYet')}
             description={
               debouncedSearch
-                ? 'Try a different name or clear the search.'
-                : 'Add the people you lend to and borrow from. Every amount you give or receive is tracked against them, with a running balance.'
+                ? t('people.tryADifferentNameOrClear')
+                : t('people.addThePeopleYouLendTo')
             }
             action={
               !debouncedSearch ? (
@@ -129,7 +131,7 @@ export function PeoplePage() {
                   leftIcon={<Plus className="size-4" />}
                   onClick={() => setCreating(true)}
                 >
-                  Add your first person
+                  {t('people.addYourFirstPerson')}
                 </Button>
               ) : undefined
             }
@@ -153,12 +155,12 @@ export function PeoplePage() {
                         </span>
                         {person.relationship !== 'friend' && (
                           <Badge tone="outline" eyebrow>
-                            {PERSON_RELATIONSHIP_LABELS[person.relationship]}
+                            {t.label('relationship', person.relationship, PERSON_RELATIONSHIP_LABELS[person.relationship])}
                           </Badge>
                         )}
                       </span>
                       <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
-                        {balanceLabel(person)}
+                        {balanceLabel(person, t)}
                       </span>
                     </span>
 
@@ -192,10 +194,10 @@ export function PeoplePage() {
   );
 }
 
-function balanceLabel(person: PersonDto): string {
-  if (person.balanceMinor > 0) return 'You will receive';
-  if (person.balanceMinor < 0) return 'You need to pay';
-  return person.lastTransactionAt ? 'Settled' : 'No transactions yet';
+function balanceLabel(person: PersonDto, t: ReturnType<typeof useT>): string {
+  if (person.balanceMinor > 0) return t('people.youWillReceive');
+  if (person.balanceMinor < 0) return t('people.youNeedToPay');
+  return person.lastTransactionAt ? t('common.settled') : t('common.noTransactionsYet');
 }
 
 export function Avatar({

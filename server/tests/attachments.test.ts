@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { as, createTestUser, rupees, type TestUser } from './helpers.js';
+import { as, createTestUser, realImage, rupees, type TestUser } from './helpers.js';
 
 /**
  * Attachment upload, download and authorization (§26, §69).
@@ -48,12 +48,12 @@ beforeEach(async () => {
 describe('uploading an attachment', () => {
   it('accepts a valid image, links it to the transaction, and serves it back byte-for-byte on download', async () => {
     const transactionId = await createTransaction();
-    const fakeJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const jpeg = await realImage('jpeg');
 
     const uploadRes = await as(owner)
       .post('/api/v1/attachments')
       .field('transactionId', transactionId)
-      .attach('file', fakeJpeg, { filename: 'receipt.jpg', contentType: 'image/jpeg' })
+      .attach('file', jpeg, { filename: 'receipt.jpg', contentType: 'image/jpeg' })
       .expect(201);
 
     expect(uploadRes.body.data.fileName).toBe('receipt.jpg');
@@ -65,8 +65,7 @@ describe('uploading an attachment', () => {
     const downloadRes = await as(owner)
       .get(`/api/v1/attachments/${uploadRes.body.data.id}/download`)
       .expect(200);
-    // sharp re-encodes any accepted image as JPEG — the exact bytes will differ
-    // from the tiny fake input above, but a real, non-empty JPEG must come back.
+    // sharp re-encodes any accepted image as JPEG, so a real, non-empty JPEG comes back.
     expect(downloadRes.headers['content-type']).toBe('image/jpeg');
     expect(downloadRes.body.length).toBeGreaterThan(0);
   });

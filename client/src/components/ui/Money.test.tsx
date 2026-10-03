@@ -55,7 +55,7 @@ describe('<Money>', () => {
   it('falls back to the active workspace currency when none is passed explicitly', () => {
     act(() => {
       useAuthStore.setState({
-        workspaces: [{ id: 'ws1', name: 'US Wallet', mode: 'personal', currency: 'USD', isDefault: true, isDemo: false, fiscalYearStartMonth: 1, createdAt: '', updatedAt: '' }],
+        workspaces: [{ id: 'ws1', name: 'US Wallet', mode: 'personal', currency: 'USD', isDefault: true, isDemo: false, fiscalYearStartMonth: 1, myRole: 'owner', memberCount: 1, createdAt: '', updatedAt: '' }],
         activeWorkspaceId: 'ws1',
       });
     });

@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { FEATURE_FLAG_NAMES, WORKSPACE_MODES, type FeatureFlag, type WorkspaceMode } from '@khata/shared';
+import { FEATURE_FLAG_NAMES, INDIAN_STATES, WORKSPACE_MODES, type FeatureFlag, type IndianState, type WorkspaceMode } from '@khata/shared';
 import { defineModel, baseOptions, currencyField } from './shared.js';
 
 /**
@@ -24,6 +24,8 @@ export interface IWorkspace {
   businessName?: string;
   businessAddress?: string;
   gstin?: string;
+  /** §Phase 13 — this business's own state, for place-of-supply (intra- vs inter-state GST). */
+  state?: IndianState;
   logoUrl?: string;
   /** Months closed via §33. Stored as `YYYY-MM` so a lookup is a plain array match. */
   closedMonths: string[];
@@ -52,6 +54,7 @@ const workspaceSchema = new Schema<IWorkspace>(
     businessName: { type: String, trim: true, maxlength: 120 },
     businessAddress: { type: String, trim: true, maxlength: 400 },
     gstin: { type: String, trim: true, uppercase: true, maxlength: 15 },
+    state: { type: String, enum: INDIAN_STATES },
     logoUrl: { type: String, maxlength: 512 },
     closedMonths: { type: [String], default: [] },
     // A plain object rather than a Mongoose `Map` — a `Map` doesn't survive

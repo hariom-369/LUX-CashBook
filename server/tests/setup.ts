@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { detectTransactionSupport } from '../src/config/db.js';
 
 // Attachment tests exercise the real local storage driver, which writes to
 // disk — pointed at a dedicated scratch directory (never the default
@@ -32,6 +33,12 @@ beforeAll(async () => {
 
   await mongoose.connect(replSet.getUri('khata_test'), { dbName: 'khata_test' });
 
+  // `connectDatabase()` runs this as part of connecting; since tests connect
+  // directly instead, it has to be called explicitly, or `supportsTransactions()`
+  // stays false for the whole suite despite the replica set genuinely supporting
+  // transactions (see the comment on `detectTransactionSupport` itself).
+  await detectTransactionSupport();
+
   // Import after connecting so every model registers against this connection.
   await import('../src/models/index.js');
   await Promise.all(
@@ -52,6 +59,6 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await mongoose.connection.close();
-  await replSet?.stop();
+  await replSet?.stop({ doCleanup: true, force: true });
   await fs.rm(TEST_STORAGE_DIR, { recursive: true, force: true });
 });

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getAccessToken } from '../lib/api';
+import { apiUrl, getAccessToken } from '../lib/api';
 import { useAuthStore } from '../stores/auth.store';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 /**
  * Fetch an authenticated endpoint and expose it as an object URL.
@@ -31,7 +30,7 @@ export function useAuthedBlobUrl(path: string | null): { url: string | null; loa
     setLoading(true);
     setError(false);
 
-    fetch(`${API_BASE}${path}`, {
+    fetch(apiUrl(path), {
       headers: {
         ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {}),
         ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),

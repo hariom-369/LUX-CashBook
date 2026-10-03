@@ -9,6 +9,7 @@ import { createTransaction } from '../transactions/transaction.service.js';
 import type { AuditContext } from '../../services/audit.service.js';
 import { badRequest } from '../../lib/errors.js';
 import { csvText, csvTextIn } from '../../lib/csv.js';
+import { excludeHiddenAccounts } from '../../services/accountVisibility.js';
 
 /**
  * CSV export (§34).
@@ -19,7 +20,7 @@ import { csvText, csvTextIn } from '../../lib/csv.js';
  * formatting to the currency's decimal places rather than dividing and truncating.
  */
 export async function exportTransactionsCsv(scope: RequestScope, filters: TransactionFilters): Promise<string> {
-  const filter = buildFilter(scope, filters);
+  const filter = buildFilter(scope, filters, scope.hiddenAccountIds);
   const rows = await Transaction.find(filter).sort({ date: 1, _id: 1 }).limit(50_000).lean();
   const dtos = await hydrate(scope, rows);
 
@@ -101,7 +102,7 @@ const VALID_TYPES = new Set<TransactionType>(['income', 'expense']);
 export async function previewImport(scope: RequestScope, csvText: string): Promise<ImportPreview> {
   const records = parseCsv(csvText);
 
-  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null }).select('name').lean();
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null, ...excludeHiddenAccounts(scope) }).select('name').lean();
   const categories = await Category.find({ workspaceId: scope.workspaceId }).select('name kind').lean();
   const accountByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a]));
   const categoryByName = new Map(categories.map((c) => [`${c.kind}:${c.name.toLowerCase()}`, c]));
@@ -170,7 +171,7 @@ export async function commitImport(
   const preview = await previewImport(scope, csvText);
   const records = parseCsv(csvText);
 
-  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null }).select('name').lean();
+  const accounts = await Account.find({ workspaceId: scope.workspaceId, deletedAt: null, ...excludeHiddenAccounts(scope) }).select('name').lean();
   const categories = await Category.find({ workspaceId: scope.workspaceId }).select('name kind').lean();
   const accountByName = new Map(accounts.map((a) => [a.name.toLowerCase(), a]));
   const categoryByName = new Map(categories.map((c) => [`${c.kind}:${c.name.toLowerCase()}`, c]));

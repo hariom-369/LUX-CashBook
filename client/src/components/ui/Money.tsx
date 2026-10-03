@@ -2,6 +2,7 @@ import { formatMoney, formatMoneyCompact } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { useCurrency } from '../../hooks/useCurrency';
 import { useUiStore } from '../../stores/ui.store';
+import { useT } from '../../i18n';
 
 export type MoneyTone = 'auto' | 'positive' | 'negative' | 'neutral' | 'inherit';
 export type MoneySize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'display';
@@ -57,6 +58,7 @@ export function Money({
   weight = 'semibold',
   className,
 }: MoneyProps) {
+  const t = useT();
   const fallbackCurrency = useCurrency();
   const code = currency ?? fallbackCurrency;
   // Privacy mode must hide the figure itself, not just blur it: while it's on, the
@@ -71,7 +73,7 @@ export function Money({
   const text = masked ? formatted.replace(/\d/g, '•') : formatted;
 
   // Always exact and always unabbreviated, whatever the visible text says.
-  const exact = masked ? 'Amount hidden' : formatMoney(amountMinor, { currency: code, signed });
+  const exact = masked ? t('ui.amountHidden') : formatMoney(amountMinor, { currency: code, signed });
 
   const resolvedTone =
     tone === 'auto' ? (amountMinor > 0 ? 'positive' : amountMinor < 0 ? 'negative' : 'neutral') : tone;

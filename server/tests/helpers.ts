@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import request from 'supertest';
 import type { Express } from 'express';
 import type { AuthSessionDto } from '@khata/shared';
@@ -83,3 +84,9 @@ export function anon() {
 
 /** Rupees → paise, for readable test fixtures. */
 export const rupees = (amount: number): number => Math.round(amount * 100);
+
+/** A small but genuine image, for upload tests - never a few header bytes (those are refused as undecodable). */
+export async function realImage(format: 'jpeg' | 'png' | 'webp' | 'gif' | 'avif' = 'jpeg', width = 64, height = 48): Promise<Buffer> {
+  const base = sharp({ create: { width, height, channels: 3, background: '#B08D4F' } });
+  return format === 'jpeg' ? base.jpeg().toBuffer() : format === 'png' ? base.png().toBuffer() : format === 'webp' ? base.webp().toBuffer() : format === 'gif' ? base.gif().toBuffer() : base.avif().toBuffer();
+}

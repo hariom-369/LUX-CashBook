@@ -65,9 +65,11 @@ export async function setActiveWorkspace(
   userId: Types.ObjectId,
   workspaceId: string,
 ): Promise<void> {
-  const workspace = await Workspace.findOne({ _id: workspaceId, userId }).lean();
-  if (!workspace) throw notFound('Workspace');
-  await User.updateOne({ _id: userId }, { $set: { activeWorkspaceId: workspace._id } });
+  if (!Types.ObjectId.isValid(workspaceId)) throw notFound('Workspace');
+  const { getRole } = await import('../../services/workspaceMembership.service.js');
+  const role = await getRole(userId, new Types.ObjectId(workspaceId));
+  if (!role) throw notFound('Workspace');
+  await User.updateOne({ _id: userId }, { $set: { activeWorkspaceId: new Types.ObjectId(workspaceId) } });
 }
 
 export async function completeOnboarding(
@@ -78,9 +80,11 @@ export async function completeOnboarding(
   if (!user) throw notFound('User');
 
   if (activeWorkspaceId) {
-    const workspace = await Workspace.findOne({ _id: activeWorkspaceId, userId }).lean();
-    if (!workspace) throw notFound('Workspace');
-    user.activeWorkspaceId = workspace._id;
+    if (!Types.ObjectId.isValid(activeWorkspaceId)) throw notFound('Workspace');
+    const { getRole } = await import('../../services/workspaceMembership.service.js');
+    const role = await getRole(userId, new Types.ObjectId(activeWorkspaceId));
+    if (!role) throw notFound('Workspace');
+    user.activeWorkspaceId = new Types.ObjectId(activeWorkspaceId);
   }
 
   user.onboardingCompleted = true;
@@ -105,12 +109,19 @@ export async function deleteAccount(userId: Types.ObjectId, password: string): P
     throw unauthorized('Your password is not correct.', 'INVALID_CREDENTIALS');
   }
 
-  const workspaces = await Workspace.find({ userId }).select('_id').lean();
-  for (const workspace of workspaces) {
+  // Only workspaces this user *owns* are destroyed — a shared workspace
+  // belongs to its other members too, and leaving your own account must not
+  // take their data with you (§Phase 9). Owned ones are still found by
+  // `Workspace.userId`, which keeps meaning "the original owner" even though
+  // it's no longer what access control checks.
+  const { WorkspaceMember } = await import('../../models/index.js');
+  const ownedWorkspaces = await Workspace.find({ userId }).select('_id').lean();
+  for (const workspace of ownedWorkspaces) {
     await purgeWorkspaceData(workspace._id);
   }
 
   await Workspace.deleteMany({ userId });
+  await WorkspaceMember.deleteMany({ userId });
   await RefreshToken.deleteMany({ userId });
 
   const { AuditLog, Notification } = await import('../../models/index.js');

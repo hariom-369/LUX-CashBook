@@ -7,6 +7,7 @@ import { Field, Input, Select } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/Toast';
 import { useAuthStore } from '../../stores/auth.store';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 const TIMEOUT_OPTIONS = [
   { minutes: 1, label: '1 minute' },
@@ -25,6 +26,7 @@ const TIMEOUT_OPTIONS = [
  * owner. The lock screen itself lives in `components/PinLockScreen.tsx`.
  */
 export function PinSection() {
+  const t = useT();
   const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -44,7 +46,7 @@ export function PinSection() {
       const updated = await api.patch<UserDto>('/users/me/preferences', { security: { sessionTimeoutMinutes: minutes } });
       setUser(updated);
     } catch (err) {
-      toast.error('Could not save that', errorMessage(err));
+      toast.error(t('common.couldNotSaveThat'), errorMessage(err));
     } finally {
       setSavingTimeout(false);
     }
@@ -65,7 +67,7 @@ export function PinSection() {
     try {
       await api.post('/auth/pin', { pin, password });
       if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: true, pinLength: pin.length } } });
-      toast.success('PIN set', 'Khata will ask for it after a period of inactivity.');
+      toast.success(t('settings.pinSet'), t('settings.khataWillAskForItAfter'));
       close();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : errorMessage(err));
@@ -80,7 +82,7 @@ export function PinSection() {
     try {
       await api.delete('/auth/pin', { password });
       if (user) setUser({ ...user, preferences: { ...user.preferences, security: { ...user.preferences.security, pinEnabled: false, pinLength: null } } });
-      toast.success('PIN removed');
+      toast.success(t('settings.pinRemoved'));
       close();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : errorMessage(err));
@@ -93,18 +95,18 @@ export function PinSection() {
     <section className="border-t border-line-faint pt-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 flex-1 basis-48">
-          <p className="text-[13.5px] font-medium text-ink">App-lock PIN</p>
+          <p className="text-[13.5px] font-medium text-ink">{t('settings.appLockPin')}</p>
           <p className="mt-1 max-w-md text-[12px] leading-relaxed text-ink-muted">
-            A 4–8 digit code to unlock Khata quickly on this device without your full password.
+            {t('settings.a48DigitCodeTo')}
           </p>
         </div>
         {pinEnabled ? (
           <Button variant="ghost" size="sm" className="text-negative hover:bg-negative-soft" leftIcon={<ShieldOff className="size-3.5" />} onClick={() => setOpen('remove')}>
-            Remove PIN
+            {t('settings.removePin')}
           </Button>
         ) : (
           <Button variant="secondary" size="sm" leftIcon={<KeyRound className="size-3.5" />} onClick={() => setOpen('set')}>
-            Set a PIN
+            {t('settings.setAPin')}
           </Button>
         )}
       </div>
@@ -112,8 +114,8 @@ export function PinSection() {
       {pinEnabled && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-line bg-sunken p-3.5">
           <div className="min-w-0 flex-1 basis-48">
-            <p className="text-[12.5px] font-medium text-ink">Lock after inactivity</p>
-            <p className="mt-0.5 text-[11px] text-ink-muted">Khata asks for your PIN again after this much idle time.</p>
+            <p className="text-[12.5px] font-medium text-ink">{t('settings.lockAfterInactivity')}</p>
+            <p className="mt-0.5 text-[11px] text-ink-muted">{t('settings.khataAsksForYourPinAgain')}</p>
           </div>
           <Select
             value={String(user?.preferences.security.sessionTimeoutMinutes ?? 0)}
@@ -121,7 +123,7 @@ export function PinSection() {
             disabled={savingTimeout}
             className="w-auto min-w-[140px]"
           >
-            <option value="0">Never</option>
+            <option value="0">{t('settings.never')}</option>
             {TIMEOUT_OPTIONS.map((option) => (
               <option key={option.minutes} value={option.minutes}>
                 {option.label}
@@ -134,16 +136,16 @@ export function PinSection() {
       <Sheet
         open={open === 'set'}
         onClose={close}
-        title="Set an app-lock PIN"
+        title={t('settings.setAnAppLockPin')}
         size="sm"
         busy={busy}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={close}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="gold" loading={busy} disabled={pin.length < 4 || pin !== confirmPin || !password} onClick={() => void setPinNow()}>
-              Set PIN
+              {t('settings.setPin')}
             </Button>
           </div>
         }
@@ -154,13 +156,13 @@ export function PinSection() {
               {error}
             </div>
           )}
-          <Field label="New PIN" hint="4 to 8 digits.">
+          <Field label={t('settings.newPin')} hint={t('settings.4To8Digits')}>
             {({ id }) => <Input id={id} type="password" inputMode="numeric" autoFocus value={pin} maxLength={8} onChange={(event) => setPin(event.target.value.replace(/\D/g, ''))} />}
           </Field>
-          <Field label="Confirm PIN">
+          <Field label={t('settings.confirmPin')}>
             {({ id }) => <Input id={id} type="password" inputMode="numeric" value={confirmPin} maxLength={8} onChange={(event) => setConfirmPin(event.target.value.replace(/\D/g, ''))} />}
           </Field>
-          <Field label="Your account password" hint="To confirm this is really you.">
+          <Field label={t('settings.yourAccountPassword')} hint={t('settings.toConfirmThisIsReallyYou')}>
             {({ id }) => <Input id={id} type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />}
           </Field>
         </form>
@@ -169,16 +171,16 @@ export function PinSection() {
       <Sheet
         open={open === 'remove'}
         onClose={close}
-        title="Remove the app-lock PIN?"
+        title={t('settings.removeTheAppLockPin')}
         size="sm"
         busy={busy}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={close}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="danger" loading={busy} disabled={!password} onClick={() => void removePinNow()}>
-              Remove PIN
+              {t('settings.removePin')}
             </Button>
           </div>
         }
@@ -189,7 +191,7 @@ export function PinSection() {
               {error}
             </div>
           )}
-          <Field label="Your account password">
+          <Field label={t('settings.yourAccountPassword')}>
             {({ id }) => <Input id={id} type="password" autoFocus autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />}
           </Field>
         </form>

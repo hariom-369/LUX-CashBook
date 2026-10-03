@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { CURRENCIES, WORKSPACE_MODES } from '@khata/shared';
+import { CURRENCIES, INDIAN_STATES, WORKSPACE_MODES } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { param, userIdOf } from '../../middleware/context.js';
@@ -8,6 +8,7 @@ import { idParamSchema, text, validate } from '../../middleware/validate.js';
 import { actorOf } from '../../middleware/auth.js';
 import { recordAudit } from '../../services/audit.service.js';
 import * as service from './workspace.service.js';
+import { createDemoWorkspace } from './demo.service.js';
 
 export const workspaceRouter: Router = Router();
 
@@ -37,13 +38,13 @@ const updateSchema = z.object({
   businessAddress: text(400),
   gstin: text(15),
   logoUrl: text(512),
+  state: z.enum(INDIAN_STATES).optional(),
 });
 
 workspaceRouter.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const workspaces = await service.listWorkspaces(userIdOf(req));
-    ok(res, workspaces.map(service.toWorkspaceDto));
+    ok(res, await service.listWorkspaces(userIdOf(req)));
   }),
 );
 
@@ -61,7 +62,15 @@ workspaceRouter.post(
         summary: `Created ${workspace.mode} workspace "${workspace.name}"`,
       },
     );
-    created(res, service.toWorkspaceDto(workspace));
+    created(res, service.toWorkspaceDto(workspace, 'owner', 1, true));
+  }),
+);
+
+workspaceRouter.post(
+  '/demo',
+  asyncHandler(async (req: Request, res: Response) => {
+    const workspace = await createDemoWorkspace(userIdOf(req), actorOf(req));
+    created(res, service.toWorkspaceDto(workspace, 'owner', 1, false));
   }),
 );
 
@@ -69,8 +78,12 @@ workspaceRouter.get(
   '/:id',
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const workspace = await service.getWorkspace(userIdOf(req), param(req, 'id'));
-    ok(res, service.toWorkspaceDto(workspace));
+    const { doc, role } = await service.getWorkspace(userIdOf(req), param(req, 'id'));
+    const [memberCount, memberships] = await Promise.all([
+      service.countMembers(doc._id),
+      service.getOwnMembership(userIdOf(req), doc._id),
+    ]);
+    ok(res, service.toWorkspaceDto(doc, role, memberCount, memberships?.isDefault ?? false));
   }),
 );
 
@@ -78,9 +91,10 @@ workspaceRouter.patch(
   '/:id',
   validate({ params: idParamSchema, body: updateSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const workspace = await service.updateWorkspace(userIdOf(req), param(req, 'id'), req.body);
+    const userId = userIdOf(req);
+    const workspace = await service.updateWorkspace(userId, param(req, 'id'), req.body);
     await recordAudit(
-      { userId: userIdOf(req), workspaceId: workspace._id, ...actorOf(req) },
+      { userId, workspaceId: workspace._id, ...actorOf(req) },
       {
         action: 'updated',
         entityType: 'Workspace',
@@ -88,7 +102,11 @@ workspaceRouter.patch(
         summary: `Updated workspace "${workspace.name}"`,
       },
     );
-    ok(res, service.toWorkspaceDto(workspace));
+    const [memberCount, membership] = await Promise.all([
+      service.countMembers(workspace._id),
+      service.getOwnMembership(userId, workspace._id),
+    ]);
+    ok(res, service.toWorkspaceDto(workspace, membership?.role ?? 'owner', memberCount, membership?.isDefault ?? false));
   }),
 );
 
@@ -101,6 +119,15 @@ workspaceRouter.post(
   }),
 );
 
+workspaceRouter.post(
+  '/:id/leave',
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    await service.leaveWorkspace(userIdOf(req), param(req, 'id'));
+    ok(res, { left: true });
+  }),
+);
+
 workspaceRouter.delete(
   '/:id',
   validate({
@@ -109,7 +136,7 @@ workspaceRouter.delete(
   }),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = userIdOf(req);
-    const workspace = await service.getWorkspace(userId, param(req, 'id'));
+    const { doc: workspace } = await service.getWorkspace(userId, param(req, 'id'));
     await service.deleteWorkspace(userId, param(req, 'id'), req.body.confirmation);
     await recordAudit(
       { userId, workspaceId: null, ...actorOf(req) },

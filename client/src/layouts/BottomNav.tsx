@@ -5,6 +5,8 @@ import { Icon } from '../components/ui/Icon';
 import { mobileNavItems } from '../config/navigation';
 import { useAuthStore } from '../stores/auth.store';
 import { useUiStore } from '../stores/ui.store';
+import { useNavLabels } from '../i18n/nav';
+import { useT } from '../i18n';
 
 /**
  * Mobile navigation (§3, §63).
@@ -15,6 +17,8 @@ import { useUiStore } from '../stores/ui.store';
  * thumb arc — rather than a corner.
  */
 export function BottomNav() {
+  const t = useT();
+  const navLabels = useNavLabels();
   const mode = useAuthStore(
     (s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.mode ?? 'personal',
   );
@@ -26,24 +30,24 @@ export function BottomNav() {
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label={t('layout.primary')}
       // Hook for the stylesheet rule that steps this bar aside while the on-screen keyboard is up.
       data-bottom-nav=""
       className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-canvas/90 backdrop-blur-xl pb-safe lg:hidden"
     >
       <div className="relative mx-auto flex h-16 max-w-lg items-stretch">
         {left.map((item) => (
-          <BottomNavLink key={item.to} to={item.to} icon={item.icon} label={item.label} />
+          <BottomNavLink key={item.to} to={item.to} icon={item.icon} label={navLabels.item(item)} />
         ))}
 
         <div className="flex w-[72px] shrink-0 items-start justify-center min-[360px]:w-[84px]">
           <button
             type="button"
             onClick={() => setQuickAddOpen(true)}
-            aria-label="Add transaction"
+            aria-label={t('common.addTransaction')}
             className={cn(
               'absolute -top-5 flex size-14 items-center justify-center rounded-full',
-              'bg-gold text-white shadow-gold ring-4 ring-canvas',
+              'bg-gold text-ink-inverse shadow-gold ring-4 ring-canvas',
               'transition-transform duration-150 ease-[--ease-out-soft] active:scale-95',
             )}
           >
@@ -52,7 +56,7 @@ export function BottomNav() {
         </div>
 
         {right.map((item) => (
-          <BottomNavLink key={item.to} to={item.to} icon={item.icon} label={item.label} />
+          <BottomNavLink key={item.to} to={item.to} icon={item.icon} label={navLabels.item(item)} />
         ))}
       </div>
     </nav>

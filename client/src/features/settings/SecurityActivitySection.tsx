@@ -48,7 +48,7 @@ export function SecurityActivitySection() {
               <li key={event.id} className="flex items-start gap-3 px-4 py-3">
                 <EventIcon aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-muted" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-ink">{event.summary}</p>
+                  <p className="text-[13px] font-medium text-ink">{t.server(event.summary)}</p>
                   <p className="truncate text-[11px] text-ink-muted">
                     {t('security.activity.at', {
                       device: shortUserAgent(event.userAgent),

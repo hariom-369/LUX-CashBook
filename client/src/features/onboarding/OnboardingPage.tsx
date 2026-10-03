@@ -9,6 +9,7 @@ import { Field, Input, Select } from '../../components/ui/Input';
 import { MoneyInput } from '../../components/ui/MoneyInput';
 import { api, errorMessage } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { useT } from '../../i18n';
 
 /**
  * First-run onboarding (§66).
@@ -21,6 +22,7 @@ import { useAuthStore } from '../../stores/auth.store';
 type Step = 'mode' | 'currency' | 'account' | 'done';
 
 export function OnboardingPage() {
+  const t = useT();
   const navigate = useNavigate();
   const workspaces = useAuthStore((s) => s.workspaces);
   const setUser = useAuthStore((s) => s.setUser);
@@ -98,47 +100,47 @@ export function OnboardingPage() {
         {step === 'mode' && (
           <div className="animate-rise-in">
             <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] text-ink">
-              What do you want to track?
+              {t('onboarding.whatDoYouWantToTrack')}
             </h1>
             <p className="mt-2 text-[14px] text-ink-muted">
-              You can add more workspaces later and switch between them anytime.
+              {t('onboarding.youCanAddMoreWorkspacesLater')}
             </p>
 
             <div className="mt-7 flex flex-col gap-3">
               <ModeOption
                 icon={<User className="size-5" />}
-                title="Personal Money"
-                description="Everyday income, expenses, savings and who owes you what."
+                title={t('onboarding.personalMoney')}
+                description={t('onboarding.everydayIncomeExpensesSavingsAndWho')}
                 active={mode === 'personal'}
                 onClick={() => setMode('personal')}
               />
               <ModeOption
                 icon={<Briefcase className="size-5" />}
-                title="Business / Cash Book"
-                description="Petty cash, daily closing, customers and suppliers."
+                title={t('onboarding.businessCashBook')}
+                description={t('onboarding.pettyCashDailyClosingCustomersAnd')}
                 active={mode === 'business'}
                 onClick={() => setMode('business')}
               />
             </div>
 
             <Button size="lg" fullWidth variant="gold" className="mt-8" onClick={() => setStep('currency')}>
-              Continue
+              {t('onboarding.continue')}
             </Button>
           </div>
         )}
 
         {step === 'currency' && (
           <div className="animate-rise-in">
-            <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] text-ink">Choose your currency</h1>
-            <p className="mt-2 text-[14px] text-ink-muted">Every amount you record will be shown in this currency.</p>
+            <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] text-ink">{t('onboarding.chooseYourCurrency')}</h1>
+            <p className="mt-2 text-[14px] text-ink-muted">{t('onboarding.everyAmountYouRecordWillBe')}</p>
 
             <div className="mt-7">
-              <Field label="Currency">
+              <Field label={t('common.currency')}>
                 {({ id }) => (
                   <Select id={id} value={currency} onChange={(event) => setCurrency(event.target.value)}>
                     {Object.values(CURRENCIES).map((option) => (
                       <option key={option.code} value={option.code}>
-                        {option.symbol} · {option.name} ({option.code})
+                        {option.symbol} · {t.label('currency', option.code, option.name)} ({option.code})
                       </option>
                     ))}
                   </Select>
@@ -148,10 +150,10 @@ export function OnboardingPage() {
 
             <div className="mt-8 flex gap-2.5">
               <Button variant="secondary" size="lg" onClick={() => setStep('mode')}>
-                Back
+                {t('common.back')}
               </Button>
               <Button size="lg" fullWidth variant="gold" onClick={() => setStep('account')}>
-                Continue
+                {t('onboarding.continue')}
               </Button>
             </div>
           </div>
@@ -160,10 +162,10 @@ export function OnboardingPage() {
         {step === 'account' && (
           <div className="animate-rise-in">
             <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] text-ink">
-              Create your first account
+              {t('onboarding.createYourFirstAccount')}
             </h1>
             <p className="mt-2 text-[14px] text-ink-muted">
-              Where does this money actually sit? Start with one — add the rest later.
+              {t('onboarding.whereDoesThisMoneyActuallySit')}
             </p>
 
             {error && (
@@ -176,7 +178,7 @@ export function OnboardingPage() {
             )}
 
             <div className="mt-7 flex flex-col gap-4">
-              <Field label="Account name">
+              <Field label={t('onboarding.accountName')}>
                 {({ id }) => (
                   <Input
                     id={id}
@@ -187,7 +189,7 @@ export function OnboardingPage() {
                   />
                 )}
               </Field>
-              <Field label="Current balance" hint="What's in it right now.">
+              <Field label={t('onboarding.currentBalance')} hint={t('onboarding.whatSInItRightNow')}>
                 {({ id }) => (
                   <MoneyInput id={id} value={openingBalanceMinor} onChange={setOpeningBalanceMinor} />
                 )}
@@ -196,10 +198,10 @@ export function OnboardingPage() {
 
             <div className="mt-8 flex gap-2.5">
               <Button variant="secondary" size="lg" onClick={() => setStep('currency')} disabled={busy}>
-                Back
+                {t('common.back')}
               </Button>
               <Button size="lg" fullWidth variant="gold" loading={busy} onClick={() => void finish()}>
-                You're ready
+                {t('onboarding.youReReady')}
               </Button>
             </div>
           </div>
@@ -210,8 +212,8 @@ export function OnboardingPage() {
             <span className="flex size-14 items-center justify-center rounded-full bg-positive-soft text-positive">
               <Check className="size-6" />
             </span>
-            <h1 className="mt-5 text-xl font-semibold tracking-[-0.01em] text-ink">You're ready.</h1>
-            <p className="mt-1.5 text-[13.5px] text-ink-muted">Taking you to your dashboard…</p>
+            <h1 className="mt-5 text-xl font-semibold tracking-[-0.01em] text-ink">{t('onboarding.youReReady2')}</h1>
+            <p className="mt-1.5 text-[13.5px] text-ink-muted">{t('onboarding.takingYouToYourDashboard')}</p>
           </div>
         )}
       </div>
@@ -265,7 +267,7 @@ function ModeOption({
       <span
         className={cn(
           'flex size-10 shrink-0 items-center justify-center rounded-md',
-          active ? 'bg-gold text-white' : 'bg-sunken text-ink-secondary',
+          active ? 'bg-gold text-ink-inverse' : 'bg-sunken text-ink-secondary',
         )}
       >
         {icon}

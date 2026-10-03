@@ -8,14 +8,16 @@ import { AuthLayout } from '../../layouts/AuthLayout';
 import { Button } from '../../components/ui/Button';
 import { Field, Input } from '../../components/ui/Input';
 import { api, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 const schema = z.object({
-  email: z.string().trim().min(1, 'Enter your email address.').email('Enter a valid email address.'),
+  email: z.string().trim().min(1, 'auth.enterYourEmailAddress').email('auth.enterAValidEmailAddress'),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function ForgotPasswordPage() {
+  const t = useT();
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -41,11 +43,10 @@ export function ForgotPasswordPage() {
   if (sent) {
     return (
       <AuthLayout
-        title="Check your email"
+        title={t('auth.checkYourEmail')}
         subtitle={
           <>
-            If an account exists for <span className="font-medium text-ink-secondary">{getValues('email')}</span>,
-            a reset link is on its way. It expires in one hour.
+            {t('auth.ifAnAccountExistsFor')} <span className="font-medium text-ink-secondary">{getValues('email')}</span>{t('auth.aResetLinkIsOnIts')}
           </>
         }
         footer={
@@ -54,7 +55,7 @@ export function ForgotPasswordPage() {
             className="inline-flex items-center gap-1.5 font-medium text-gold underline-offset-4 hover:underline"
           >
             <ArrowLeft aria-hidden className="size-3.5" />
-            Back to sign in
+            {t('auth.backToSignIn')}
           </Link>
         }
       >
@@ -63,13 +64,13 @@ export function ForgotPasswordPage() {
             <MailCheck aria-hidden className="size-4" />
           </span>
           <p className="text-[13px] leading-relaxed text-ink-muted">
-            Didn’t get it? Check your spam folder, then{' '}
+            {t('auth.didnTGetItCheckYour')}{' '}
             <button
               type="button"
               onClick={() => setSent(false)}
               className="font-medium text-gold underline-offset-4 hover:underline"
             >
-              try a different address
+              {t('auth.tryADifferentAddress')}
             </button>
             .
           </p>
@@ -80,15 +81,15 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthLayout
-      title="Reset your password"
-      subtitle="Enter your email address and we'll send you a link to choose a new one."
+      title={t('auth.resetYourPassword')}
+      subtitle={t('auth.enterYourEmailAddressAndWe')}
       footer={
         <Link
           to="/login"
           className="inline-flex items-center gap-1.5 font-medium text-gold underline-offset-4 hover:underline"
         >
           <ArrowLeft aria-hidden className="size-3.5" />
-          Back to sign in
+          {t('auth.backToSignIn')}
         </Link>
       }
     >
@@ -102,7 +103,7 @@ export function ForgotPasswordPage() {
           </div>
         )}
 
-        <Field label="Email" error={errors.email?.message}>
+        <Field label={t('common.email')} error={errors.email?.message && t.maybe(errors.email.message)}>
           {({ id, describedBy, invalid }) => (
             <Input
               id={id}
@@ -118,7 +119,7 @@ export function ForgotPasswordPage() {
         </Field>
 
         <Button type="submit" size="lg" fullWidth loading={isSubmitting}>
-          Send reset link
+          {t('auth.sendResetLink')}
         </Button>
       </form>
     </AuthLayout>

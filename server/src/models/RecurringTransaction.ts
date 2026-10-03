@@ -1,8 +1,10 @@
 import { Schema, type HydratedDocument, type Types } from 'mongoose';
 import {
+  BILL_KINDS,
   PAYMENT_METHODS,
   RECURRENCE_FREQUENCIES,
   TRANSACTION_TYPES,
+  type BillKind,
   type PaymentMethod,
   type RecurrenceFrequency,
   type TransactionType,
@@ -32,6 +34,7 @@ export interface IRecurringTransaction {
   categoryId?: Types.ObjectId | null;
   subcategoryId?: Types.ObjectId | null;
   personId?: Types.ObjectId | null;
+  payeeId?: Types.ObjectId | null;
   description: string;
   notes?: string;
   paymentMethod?: PaymentMethod;
@@ -55,6 +58,8 @@ export interface IRecurringTransaction {
   /** Post automatically, or only raise a reminder for the user to confirm. */
   autoPost: boolean;
   reminderDaysBefore: number;
+  /** Groups this item in the Bills & Subscriptions centre; unset = not a bill. */
+  billKind?: BillKind | null;
 
   isActive: boolean;
   isPaused: boolean;
@@ -79,6 +84,7 @@ const recurringSchema = new Schema<IRecurringTransaction>(
     categoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
     subcategoryId: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
     personId: { type: Schema.Types.ObjectId, ref: 'Person', default: null },
+    payeeId: { type: Schema.Types.ObjectId, ref: 'Payee', default: null },
     description: { type: String, trim: true, maxlength: 200, default: '' },
     notes: { type: String, trim: true, maxlength: 2000 },
     paymentMethod: { type: String, enum: PAYMENT_METHODS },
@@ -97,6 +103,7 @@ const recurringSchema = new Schema<IRecurringTransaction>(
 
     autoPost: { type: Boolean, default: true },
     reminderDaysBefore: { type: Number, min: 0, max: 30, default: 1 },
+    billKind: { type: String, enum: BILL_KINDS, default: null },
 
     isActive: { type: Boolean, default: true },
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
@@ -112,6 +119,7 @@ const recurringSchema = new Schema<IRecurringTransaction>(
 /** The scheduler's only query: everything live and due. */
 recurringSchema.index({ isActive: 1, isPaused: 1, nextRunDate: 1 });
 recurringSchema.index({ workspaceId: 1, isActive: 1, nextRunDate: 1 });
+recurringSchema.index({ workspaceId: 1, payeeId: 1, isActive: 1 });
 
 recurringSchema.pre('validate', function (this: HydratedDocument<IRecurringTransaction>, next) {
   if (this.frequency === 'custom' && !this.intervalDays) {

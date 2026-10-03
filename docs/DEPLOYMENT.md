@@ -41,14 +41,16 @@ so read those two sections even if you skim the rest.
 | `APP_URL` | **Yes** | The exact production URL of your Vercel frontend, e.g. `https://lux-cashbook.vercel.app`. This is the primary allowed CORS origin and the base URL used inside password-reset/verification emails. Get this wrong and the browser will block every API call from the frontend with a CORS error. |
 | `CORS_ORIGINS` | No | Comma-separated extra allowed origins — useful if you also serve a custom domain (`https://app.luxcashbook.com`) alongside the default Vercel URL. |
 | `API_URL` | No | Your Render service's own public URL, e.g. `https://lux-cashbook-api.onrender.com`. Used to build absolute links in emails/attachments. |
-| `COOKIE_CROSS_SITE` | **Yes — set to `true`** | Required for this specific architecture. See "Cross-domain authentication" below for why. |
+| `COOKIE_CROSS_SITE` | **Recommended: leave `false`** (same parent domain, see "Recommended: one parent domain" below). Set `true` only for a Vercel-domain + Render-domain split. | `true` makes the cookie `SameSite=None; Secure`, which depends on third-party cookies that Safari and some Chrome settings block. The server prints a warning at boot when it is `true`. |
 | `COOKIE_SECURE` | No | Leave as `auto` (the default) — it resolves to `true` automatically in production, and `COOKIE_CROSS_SITE=true` forces it to `true` regardless. |
-| `COOKIE_DOMAIN` | No | **Leave unset.** This is only meaningful when the API and frontend share a registrable domain (e.g. `api.example.com` + `app.example.com`); a Vercel-domain + Render-domain split has no shared domain to scope a cookie to. |
-| `STORAGE_DRIVER` | **Yes — set to `s3`** | Switches attachment storage from local disk (which Render wipes on every deploy) to S3. |
-| `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | **Yes, if `STORAGE_DRIVER=s3`** | See the AWS section below. The server checks these at first attachment upload/download and fails with a clear error naming exactly which one is missing — it will not silently fall back to local storage. |
+| `COOKIE_DOMAIN` | No | **Leave unset**, even on one parent domain: the refresh cookie is host-only on the API host and `SameSite=Strict` already sends it to same-site requests (verified, below). |
+| `STORAGE_DRIVER` | **Yes — set to `s3`** | Switches attachment storage from local disk (which Render wipes on every deploy) to S3. **A production boot refuses `local`** unless `ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` (only for a host with a persistent disk mounted at `STORAGE_DIR`). |
+| `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | **Yes, if `STORAGE_DRIVER=s3`** | See the AWS section below. The bucket and region are checked **at boot**; the two keys must be set together (or both omitted to use an IAM role). It never falls back to local storage. |
 | `S3_ENDPOINT` | No | Only set this if using an S3-compatible service other than real AWS (R2, Spaces, MinIO). Leave unset for AWS S3 itself. |
 | `MAX_UPLOAD_MB` | No | Defaults to 10. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | No | Leave unset to have the app log emails to its own console instead of sending them — fine for an initial launch; add real SMTP credentials when you want verification/reset emails to actually arrive. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | **Yes** | A production boot refuses to start without `SMTP_HOST`. Use port 465 with `SMTP_SECURE=true`, or port 587 with `SMTP_SECURE=false` — in production a non-`secure` connection **must** upgrade with STARTTLS (`requireTLS`) or the send fails; certificates are always validated. |
+| `MAIL_FROM` | **Yes** | An address on a domain verified with your mail provider (SPF/DKIM). The placeholder default is refused at boot. |
+| `APP_URL`, `API_URL` | **Yes** | Public `https://` URLs (used for CORS and links in emails). `localhost` or `http://` is refused at boot. |
 | `RATE_LIMIT_*`, `LOG_LEVEL`, `ENABLE_SCHEDULER` | No | Sensible defaults already in place; see `server/.env.example` for what each controls. |
 
 ### Frontend (Vercel → your project → Environment Variables)
@@ -207,7 +209,96 @@ npm run build
 NODE_ENV=production node dist/index.js
 ```
 
+**Caution:** `dotenv` loads `server/.env` first, so on a development machine that
+file's real database URI is used unless the variable is already set in your shell.
+Set `MONGODB_URI` to a dummy value (`mongodb://127.0.0.1:1/x`) for this check.
 With no `MONGODB_URI`/JWT secrets set, this should immediately print a clear
 configuration error and exit — confirmed working as of this phase. It will
 not silently start with an in-memory database or generated secrets the way
 development mode does.
+
+### Recommended: one parent domain (`app.` + `api.`)
+
+Put the frontend on `app.example.com` and the API on `api.example.com` (a Render
+custom domain). Both are the same *site*, so the browser sends the refresh
+cookie with `SameSite=Strict` and no third-party-cookie rule applies.
+
+1. Vercel: add `app.example.com`. Render: add `api.example.com` (both give you
+   the DNS records; both issue TLS certificates).
+2. Render environment: `APP_URL=https://app.example.com`,
+   `API_URL=https://api.example.com`, `COOKIE_CROSS_SITE=false`,
+   `COOKIE_SECURE=auto`, leave `COOKIE_DOMAIN` unset.
+3. Vercel environment: `VITE_API_URL=https://api.example.com/api/v1`.
+4. Edit `client/vercel.json`: replace `https://api.example.com` in
+   `connect-src` with your API origin, then run `npm run check:deploy
+   --workspace client` (it fails while the placeholder is still there).
+
+**Verified locally** (Chromium with fake hostnames mapped to 127.0.0.1, in-memory
+API, `SameSite=Strict`): `app.khata.test` → `api.khata.test` keeps the session
+across a reload (the `khata_rt` cookie is stored and `/auth/refresh` returns
+200); `app.khata.test` → `api.other.test` does not (the cookie is rejected, the
+reload lands on `/login`). That is the failure a Vercel-domain + Render-domain
+split has, and it is why `COOKIE_CROSS_SITE=true` exists — but `SameSite=None`
+additionally needs `Secure` and third-party cookies to be allowed; that part
+cannot be verified without HTTPS on two real sites, so treat the single-parent
+setup as the supported one.
+
+### Production readiness (2026-10-03)
+
+**What the server now refuses at boot in production**
+(`config/productionChecks.ts`, tested): local storage without an explicit
+persistent-disk opt-in; S3 without bucket/region or with half a key pair; no
+`SMTP_HOST`; the placeholder `MAIL_FROM`; `localhost` or non-https
+`APP_URL`/`API_URL`; `COOKIE_SECURE=false`. It warns when
+`COOKIE_CROSS_SITE=true`. Secrets (`JWT_*` ≥ 32 characters) and `MONGODB_URI`
+were already required.
+
+**Verified in this repository (local, in-memory DB; the real stack was not
+available)**
+- S3 driver over the real S3 wire protocol against an **S3 emulator (s3rver —
+  not AWS)**: 3 MB put/get/exists/delete; API upload → objects in the bucket →
+  API restart → bytes still there → download and thumbnail served from the
+  bucket → a deleted attachment 404s; nothing written to local disk.
+  Soft-deleted files stay in the bucket for the 30-day restore window and are
+  purged afterwards.
+- SMTP: registration verification and password-reset flows end to end through
+  the browser to an authenticated SMTP sink; implicit TLS (465) works and a
+  self-signed certificate is **refused**; STARTTLS is required in production.
+- Frontend headers (`client/vercel.json`, also applied by `vite preview`): the
+  full app (three browser suites, 1280 px and 390 px) runs under the CSP with
+  **0 violations**; an injected inline script, an external image and an external
+  `fetch` are blocked, and framing is refused.
+- Atlas (read-only, plus a throwaway collection): TLS `mongodb+srv`, 3-member
+  replica set (transactions work), the TTL index on `idempotencyrecords`
+  exists (`createdAt`, 30 days) and the user *can* create TTL indexes.
+
+**NOT verifiable without your accounts — manual steps**
+1. **Real S3** (needs an AWS account): create a private bucket (Block all
+   public access, default encryption) and an IAM user or role limited to
+   `s3:PutObject`, `GetObject`, `DeleteObject` and `HeadObject` on
+   `arn:aws:s3:::BUCKET/*`; set the four variables; upload a receipt, redeploy,
+   and confirm it still downloads.
+2. **Real SMTP** (a provider such as SES, Postmark or Resend): verify the
+   sender domain (SPF + DKIM), set the variables, then register and reset a
+   password with a real mailbox and check the message does not land in spam.
+3. **A real deployment** on Render + Vercel + Atlas + S3: sign up → verify email
+   → upload → backup/restore, in a real browser, at least once on a phone.
+4. **Atlas hardening.** What this repository's connection actually has:
+   `readWriteAnyDatabase@admin`. That is broader than needed. In Atlas →
+   Database Access, create a dedicated user with the **`readWrite` role on the
+   `khata` database only** (it includes create-index and create-collection,
+   which the app's index sync and the idempotency TTL index need), put its URI
+   in Render, and delete the broad user. In Network Access, replace any
+   `0.0.0.0/0` entry with Render's outbound IP addresses (Render dashboard →
+   your service → Connect → Outbound). Turn on **Cloud Backup** (a paid tier —
+   the M0/M2/M5 shared tiers do not have it; this cluster's tier could not be
+   read through the driver) and test a restore into a scratch cluster.
+   **Rotate** the current user's password: the connection string has lived in a
+   plain-text file on a development machine and has been used by test runs.
+   (The network access list, backup status and tier are Atlas-console facts the
+   database driver cannot show; nothing here claims them.)
+
+**Still to do later:** upgrade the vitest toolchain (development advisories,
+`SECURITY.md`); run a single API instance (the rate-limit store and the
+scheduler are per process); attachment downloads are cached privately for an
+hour, unlike the rest of the API.

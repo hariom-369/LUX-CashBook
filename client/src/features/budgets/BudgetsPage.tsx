@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Target, Trash2 } from 'lucide-react';
+import { Copy, Plus, Target, Trash2, X } from 'lucide-react';
 import { formatMoney, formatPercent } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Card } from '../../components/ui/Card';
@@ -9,11 +9,12 @@ import { Badge } from '../../components/ui/Badge';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { ConfirmDialog } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
-import { useBudgets, useInvalidatePlanning } from '../../lib/queries3';
+import { useBudgets, useBudgetSuggestions, useInvalidatePlanning } from '../../lib/queries3';
 import { useCurrency } from '../../hooks/useCurrency';
 import { api, errorMessage } from '../../lib/api';
 import { BudgetFormSheet } from './BudgetFormSheet';
-import type { BudgetProgressDto } from '@khata/shared';
+import type { BudgetProgressDto, BudgetSuggestionDto } from '@khata/shared';
+import { useT, msg, type MessageRef } from '../../i18n';
 
 /**
  * Budgets (§29).
@@ -24,21 +25,30 @@ import type { BudgetProgressDto } from '@khata/shared';
  * notification never disagree about how worried to be.
  */
 export function BudgetsPage() {
+  const t = useT();
   const { data: budgets = [], isLoading, isError, error, refetch } = useBudgets();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<BudgetProgressDto | null>(null);
+  const [prefill, setPrefill] = useState<{ categoryId: string; amountMinor: number } | null>(null);
 
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Budgets</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">Monthly limits by category, tracked automatically.</p>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.budgets')}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{t('budgets.monthlyLimitsByCategoryTrackedAutomatica')}</p>
         </div>
         <Button variant="gold" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-          Add budget
+          {t('budgets.addBudget')}
         </Button>
       </header>
+
+      <BudgetSuggestions
+        onPick={(suggestion) => {
+          setPrefill({ categoryId: suggestion.categoryId, amountMinor: suggestion.lastMonthSpentMinor });
+          setCreating(true);
+        }}
+      />
 
       {isLoading ? (
         <Card>
@@ -52,11 +62,11 @@ export function BudgetsPage() {
         <Card>
           <EmptyState
             icon={<Target className="size-5" />}
-            title="No budgets yet"
-            description="Set a monthly limit for a category — Food, Transport, Shopping — and see exactly how close you are to it, all month."
+            title={t('budgets.noBudgetsYet')}
+            description={t('budgets.setAMonthlyLimitForA')}
             action={
               <Button variant="gold" size="sm" leftIcon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-                Add your first budget
+                {t('budgets.addYourFirstBudget')}
               </Button>
             }
           />
@@ -72,12 +82,50 @@ export function BudgetsPage() {
       <BudgetFormSheet
         open={creating || Boolean(editing)}
         budget={editing}
+        prefill={prefill}
         onClose={() => {
           setCreating(false);
           setEditing(null);
+          setPrefill(null);
         }}
       />
     </div>
+  );
+}
+
+/** "Copy last month" (§Phase 7) — a suggestion only; nothing is created until picked. */
+function BudgetSuggestions({ onPick }: { onPick: (suggestion: BudgetSuggestionDto) => void }) {
+  const t = useT();
+  const { data: suggestions = [] } = useBudgetSuggestions();
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed || suggestions.length === 0) return null;
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 text-[13px] font-medium text-ink">
+          <Copy className="size-4 text-gold" />
+          {t('budgets.setABudgetFromLastMonth')}
+        </div>
+        <button type="button" onClick={() => setDismissed(true)} aria-label={t('common.dismiss')} className="rounded-sm p-1 text-ink-faint hover:bg-sunken hover:text-ink">
+          <X className="size-3.5" />
+        </button>
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {suggestions.slice(0, 6).map((s) => (
+          <li key={s.categoryId}>
+            <button
+              type="button"
+              onClick={() => onPick(s)}
+              className="flex items-center gap-2 rounded-md border border-line-faint px-3 py-1.5 text-[12.5px] text-ink transition-colors hover:border-gold hover:bg-gold-soft"
+            >
+              {s.categoryName}
+              <Money amountMinor={s.lastMonthSpentMinor} size="xs" tone="neutral" compactDecimals />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -88,14 +136,15 @@ const STATUS_BAR: Record<BudgetProgressDto['status'], string> = {
   exceeded: 'bg-negative',
 };
 
-const STATUS_BADGE: Record<BudgetProgressDto['status'], { tone: 'positive' | 'warning' | 'negative'; label: string }> = {
-  safe: { tone: 'positive', label: 'On track' },
-  warning: { tone: 'warning', label: 'Watch this' },
-  critical: { tone: 'warning', label: 'Almost there' },
-  exceeded: { tone: 'negative', label: 'Over budget' },
+const STATUS_BADGE: Record<BudgetProgressDto['status'], { tone: 'positive' | 'warning' | 'negative'; label: MessageRef }> = {
+  safe: { tone: 'positive', label: msg('budgets.onTrack') },
+  warning: { tone: 'warning', label: msg('budgets.watchThis') },
+  critical: { tone: 'warning', label: msg('budgets.almostThere') },
+  exceeded: { tone: 'negative', label: msg('budgets.overBudget') },
 };
 
 function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () => void }) {
+  const t = useT();
   const toast = useToast();
   const invalidate = useInvalidatePlanning();
   const currency = useCurrency();
@@ -107,9 +156,9 @@ function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () 
     try {
       await api.delete(`/budgets/${budget.id}`);
       invalidate();
-      toast.success('Budget removed');
+      toast.success(t('budgets.budgetRemoved'));
     } catch (err) {
-      toast.error('Could not remove that budget', errorMessage(err));
+      toast.error(t('budgets.couldNotRemoveThatBudget'), errorMessage(err));
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -127,14 +176,14 @@ function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () 
             <p className="truncate text-[14px] font-semibold text-ink">{budget.name}</p>
             <p className="mt-0.5 text-[11.5px] capitalize text-ink-muted">{budget.period}</p>
           </div>
-          <Badge tone={status.tone}>{status.label}</Badge>
+          <Badge tone={status.tone}>{t(status.label.key)}</Badge>
         </div>
 
         <div>
           <div className="flex items-baseline justify-between gap-3">
             <Money amountMinor={budget.spentMinor} size="lg" tone="neutral" compactDecimals />
             <span className="sensitive text-[12px] text-ink-muted">
-              of {formatMoney(budget.amountMinor, { currency, compactDecimals: true })}
+              {t('common.of')} {formatMoney(budget.amountMinor, { currency, compactDecimals: true })}
             </span>
           </div>
 
@@ -146,19 +195,25 @@ function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () 
           </div>
 
           <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-muted">
-            <span>{formatPercent(budget.percentUsed)} used</span>
+            <span>{formatPercent(budget.percentUsed)} {t('budgets.used')}</span>
             <span className={cn(budget.remainingMinor < 0 && 'text-negative')}>
               {budget.remainingMinor >= 0
-                ? `${formatMoney(budget.remainingMinor, { currency, compactDecimals: true })} left`
-                : `${formatMoney(-budget.remainingMinor, { currency, compactDecimals: true })} over`}
+                ? t('budgets.amountLeft', { amount: formatMoney(budget.remainingMinor, { currency, compactDecimals: true }) })
+                : t('budgets.amountOver', { amount: formatMoney(-budget.remainingMinor, { currency, compactDecimals: true }) })}
             </span>
           </div>
         </div>
 
         {budget.daysRemaining > 0 && budget.remainingMinor > 0 && (
           <p className="rounded-md border border-line-faint bg-sunken px-3 py-2 text-[11.5px] text-ink-muted">
-            {formatMoney(budget.safeDailyMinor, { currency, compactDecimals: true })}/day keeps you within budget
-            for the remaining {budget.daysRemaining} day{budget.daysRemaining === 1 ? '' : 's'}.
+            {t.plural('budgets.safeDailyKeeps', budget.daysRemaining, { amount: formatMoney(budget.safeDailyMinor, { currency, compactDecimals: true }) })}
+          </p>
+        )}
+
+        {budget.daysRemaining > 0 && (
+          <p className="text-[11px] text-ink-faint">
+            {t('budgets.projected')} {formatMoney(budget.projectedSpendMinor, { currency, compactDecimals: true })} {t('budgets.byPeriodEnd')}
+            {budget.projectedSpendMinor > budget.amountMinor && ' — over budget at this rate'} {t('budgets.estimate')}
           </p>
         )}
 
@@ -171,7 +226,7 @@ function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () 
           className="flex w-fit items-center gap-1.5 text-[11.5px] font-medium text-ink-faint transition-colors hover:text-negative"
         >
           <Trash2 aria-hidden className="size-3.5" />
-          Remove
+          {t('common.remove')}
         </button>
       </Card>
 
@@ -179,9 +234,9 @@ function BudgetCard({ budget, onEdit }: { budget: BudgetProgressDto; onEdit: () 
         open={confirmDelete}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={remove}
-        title={`Remove the ${budget.name} budget?`}
-        description="This only removes the limit. Nothing about your transactions changes."
-        confirmLabel="Remove"
+        title={t('budgets.removeTheBudget', { name: budget.name })}
+        description={t('budgets.thisOnlyRemovesTheLimitNothing')}
+        confirmLabel={t('common.remove')}
         tone="danger"
         busy={busy}
       />

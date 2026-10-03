@@ -8,7 +8,7 @@ import { validate } from '../../middleware/validate.js';
 import { reportLimiter, uploadLimiter } from '../../middleware/rateLimit.js';
 import { badRequest } from '../../lib/errors.js';
 import { recordAudit } from '../../services/audit.service.js';
-import { toWorkspaceDto, listWorkspaces } from '../workspaces/workspace.service.js';
+import { listWorkspaces } from '../workspaces/workspace.service.js';
 import * as service from './backup.service.js';
 
 export const backupRouter: Router = Router();
@@ -60,6 +60,6 @@ backupRouter.post(
     );
 
     const workspaces = await listWorkspaces(userId);
-    created(res, { ...result, workspaces: workspaces.map(toWorkspaceDto) });
+    created(res, { ...result, workspaces });
   }),
 );

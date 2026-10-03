@@ -1,9 +1,10 @@
 import { Types, type FilterQuery } from 'mongoose';
 import type { TransactionDto, TransactionListMeta, TransactionType, PostingDto } from '@khata/shared';
-import { TRANSACTION_META } from '@khata/shared';
-import { Account, Attachment, Category, Person, Transaction, type IAttachment, type ITransaction } from '../../models/index.js';
+import { TRANSACTION_META, PRIVATE_TRANSFER_LABEL } from '@khata/shared';
+import { Account, Attachment, Category, Payee, Person, Project, Transaction, type IAttachment, type ITransaction } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { notFound } from '../../lib/errors.js';
+import { isVisibleTo } from '../../services/accountVisibility.js';
 
 /**
  * Reading transactions.
@@ -20,6 +21,8 @@ export interface TransactionFilters {
   accountIds?: string[];
   categoryIds?: string[];
   personIds?: string[];
+  payeeIds?: string[];
+  projectIds?: string[];
   tags?: string[];
   minAmountMinor?: number;
   maxAmountMinor?: number;
@@ -30,9 +33,21 @@ export interface TransactionFilters {
   hasAttachment?: boolean;
   /** Unsettled lend/borrow only. */
   outstandingOnly?: boolean;
+  /** Expenses at any of these reimbursement stages. */
+  reimbursement?: Array<'pending' | 'submitted' | 'approved' | 'paid'>;
 }
 
-export function buildFilter(scope: RequestScope, filters: TransactionFilters): FilterQuery<ITransaction> {
+/**
+ * `hiddenAccountIds` — other members' `private` accounts (§Phase 9) — is
+ * resolved once by the caller (`listTransactions` below, and
+ * `importexport.service.ts`'s CSV export) rather than inside this function,
+ * so building a filter stays a synchronous, side-effect-free operation.
+ */
+export function buildFilter(
+  scope: RequestScope,
+  filters: TransactionFilters,
+  hiddenAccountIds: Types.ObjectId[] = [],
+): FilterQuery<ITransaction> {
   const query: FilterQuery<ITransaction> = { workspaceId: scope.workspaceId };
 
   if (filters.onlyDeleted) query.deletedAt = { $ne: null };
@@ -46,10 +61,23 @@ export function buildFilter(scope: RequestScope, filters: TransactionFilters): F
 
   if (filters.types?.length) query.type = { $in: filters.types };
 
+  const hiddenIdStrings = new Set(hiddenAccountIds.map(String));
   if (filters.accountIds?.length) {
     // Matches either leg of a transfer, which is what makes an account ledger
-    // include contra entries without a `$or` at every call site.
-    query['postings.accountId'] = { $in: filters.accountIds.map((id) => new Types.ObjectId(id)) };
+    // include contra entries without a `$or` at every call site. Any
+    // explicitly requested account that happens to be someone else's private
+    // one is silently dropped rather than erroring — same as it not existing.
+    const requested = filters.accountIds.filter((id) => !hiddenIdStrings.has(id));
+    query['postings.accountId'] = { $in: requested.map((id) => new Types.ObjectId(id)) };
+  } else if (hiddenAccountIds.length > 0) {
+    // At least one leg on an account this viewer may see; a transfer into a private account
+    // stays in the shared account's ledger as a masked entry (see `maskForViewer`).
+    query.postings = { $elemMatch: { accountId: { $nin: hiddenAccountIds } } };
+  }
+  if (hiddenAccountIds.length > 0 && (filters.search?.trim() || filters.tags?.length)) {
+    // Searching text or tags would otherwise confirm what a masked entry says. Match only
+    // entries that are wholly on visible accounts.
+    query['postings.accountId'] = { $nin: hiddenAccountIds };
   }
 
   if (filters.categoryIds?.length) {
@@ -59,6 +87,12 @@ export function buildFilter(scope: RequestScope, filters: TransactionFilters): F
 
   if (filters.personIds?.length) {
     query.personId = { $in: filters.personIds.map((id) => new Types.ObjectId(id)) };
+  }
+  if (filters.payeeIds?.length) {
+    query.payeeId = { $in: filters.payeeIds.map((id) => new Types.ObjectId(id)) };
+  }
+  if (filters.projectIds?.length) {
+    query.projectId = { $in: filters.projectIds.map((id) => new Types.ObjectId(id)) };
   }
 
   if (filters.tags?.length) query.tags = { $in: filters.tags.map((t) => t.toLowerCase()) };
@@ -70,6 +104,7 @@ export function buildFilter(scope: RequestScope, filters: TransactionFilters): F
   }
 
   if (filters.hasAttachment) query['attachmentIds.0'] = { $exists: true };
+  if (filters.reimbursement?.length) query['reimbursement.status'] = { $in: filters.reimbursement };
 
   if (filters.outstandingOnly) {
     query.type = { $in: ['lend', 'borrow'] };
@@ -131,7 +166,7 @@ export async function listTransactions(
 ): Promise<{ items: TransactionDto[]; total: number; meta: TransactionListMeta }> {
   const page = options.page ?? 1;
   const limit = Math.min(options.limit ?? 50, 200);
-  const filter = buildFilter(scope, options);
+  const filter = buildFilter(scope, options, scope.hiddenAccountIds);
 
   const sortKey = { date: 'date', amount: 'amountMinor', created: 'createdAt' }[options.sortBy ?? 'date'];
   const direction = options.sortOrder === 'asc' ? 1 : -1;
@@ -203,6 +238,8 @@ export async function hydrate(
   const accountIds = new Set<string>();
   const categoryIds = new Set<string>();
   const personIds = new Set<string>();
+  const payeeIds = new Set<string>();
+  const projectIds = new Set<string>();
   const hasAttachments = rows.some((row) => row.attachmentIds.length > 0);
 
   for (const row of rows) {
@@ -210,9 +247,11 @@ export async function hydrate(
     if (row.categoryId) categoryIds.add(String(row.categoryId));
     if (row.subcategoryId) categoryIds.add(String(row.subcategoryId));
     if (row.personId) personIds.add(String(row.personId));
+    if (row.payeeId) payeeIds.add(String(row.payeeId));
+    if (row.projectId) projectIds.add(String(row.projectId));
   }
 
-  const [accounts, categories, people, attachments] = await Promise.all([
+  const [accounts, categories, people, payees, projects, attachments] = await Promise.all([
     accountIds.size
       ? Account.find({ _id: { $in: [...accountIds] }, workspaceId: scope.workspaceId })
           .select('name type color icon')
@@ -228,6 +267,16 @@ export async function hydrate(
           .select('name avatarUrl')
           .lean()
       : [],
+    payeeIds.size
+      ? Payee.find({ _id: { $in: [...payeeIds] }, workspaceId: scope.workspaceId })
+          .select('name')
+          .lean()
+      : [],
+    projectIds.size
+      ? Project.find({ _id: { $in: [...projectIds] }, workspaceId: scope.workspaceId })
+          .select('name')
+          .lean()
+      : [],
     hasAttachments
       ? Attachment.find({
           workspaceId: scope.workspaceId,
@@ -240,6 +289,8 @@ export async function hydrate(
   const accountMap = new Map(accounts.map((a) => [String(a._id), a]));
   const categoryMap = new Map(categories.map((c) => [String(c._id), c]));
   const personMap = new Map(people.map((p) => [String(p._id), p]));
+  const payeeMap = new Map(payees.map((p) => [String(p._id), p]));
+  const projectMap = new Map(projects.map((p) => [String(p._id), p]));
 
   const attachmentsByTransaction = new Map<string, typeof attachments>();
   for (const attachment of attachments) {
@@ -247,9 +298,60 @@ export async function hydrate(
     attachmentsByTransaction.set(key, [...(attachmentsByTransaction.get(key) ?? []), attachment]);
   }
 
-  return rows.map((row) =>
-    toTransactionDto(row, accountMap, categoryMap, personMap, attachmentsByTransaction.get(String(row._id)) ?? []),
-  );
+  const hiddenSet = new Set(scope.hiddenAccountIds.map(String));
+  return rows.map((row) => {
+    const dto = toTransactionDto(
+      row,
+      accountMap,
+      categoryMap,
+      personMap,
+      attachmentsByTransaction.get(String(row._id)) ?? [],
+      payeeMap,
+      projectMap,
+    );
+    return hiddenSet.size > 0 && row.postings.some((p) => hiddenSet.has(String(p.accountId))) ? maskForViewer(dto, hiddenSet) : dto;
+  });
+}
+
+/**
+ * A transaction with a leg on someone else's private account, as another member sees it: the
+ * leg on a shared account (so that account's ledger still adds up) with everything that could
+ * identify the private side removed - the other account, the description, notes, tags, reference,
+ * receipts and any person.
+ */
+function maskForViewer(dto: TransactionDto, hiddenAccountIds: Set<string>): TransactionDto {
+  return {
+    ...dto,
+    postings: dto.postings.filter((p) => !hiddenAccountIds.has(p.accountId)),
+    accountId: dto.accountId && hiddenAccountIds.has(dto.accountId) ? undefined : dto.accountId,
+    accountName: dto.accountId && hiddenAccountIds.has(dto.accountId) ? undefined : dto.accountName,
+    fromAccountId: dto.fromAccountId && hiddenAccountIds.has(dto.fromAccountId) ? undefined : dto.fromAccountId,
+    toAccountId: dto.toAccountId && hiddenAccountIds.has(dto.toAccountId) ? undefined : dto.toAccountId,
+    description: PRIVATE_TRANSFER_LABEL,
+    isMasked: true,
+    notes: undefined,
+    tags: [],
+    referenceNo: undefined,
+    paymentMethod: undefined,
+    attachments: [],
+    personId: undefined,
+    personName: undefined,
+    payeeId: undefined,
+    payeeName: undefined,
+    projectId: undefined,
+    projectName: undefined,
+    categoryId: undefined,
+    categoryName: undefined,
+    categoryIcon: undefined,
+    categoryColor: undefined,
+    subcategoryId: undefined,
+    subcategoryName: undefined,
+    recurringId: undefined,
+    splitGroupId: undefined,
+    groupExpenseId: undefined,
+    reimbursement: undefined,
+    statementRef: undefined,
+  };
 }
 
 export function toTransactionDto(
@@ -258,6 +360,8 @@ export function toTransactionDto(
   categoryMap: Map<string, { name: string; icon: string; color: string }>,
   personMap: Map<string, { name: string }>,
   attachments: IAttachment[] = [],
+  payeeMap: Map<string, { name: string }> = new Map(),
+  projectMap: Map<string, { name: string }> = new Map(),
 ): TransactionDto {
   const meta = TRANSACTION_META[row.type];
 
@@ -303,6 +407,10 @@ export function toTransactionDto(
     subcategoryName: subcategory?.name,
     personId: row.personId ? String(row.personId) : undefined,
     personName: row.personId ? personMap.get(String(row.personId))?.name : undefined,
+    payeeId: row.payeeId ? String(row.payeeId) : undefined,
+    payeeName: row.payeeId ? payeeMap.get(String(row.payeeId))?.name : undefined,
+    projectId: row.projectId ? String(row.projectId) : undefined,
+    projectName: row.projectId ? projectMap.get(String(row.projectId))?.name : undefined,
     description: row.description,
     notes: row.notes,
     paymentMethod: row.paymentMethod,
@@ -324,6 +432,17 @@ export function toTransactionDto(
     discountMinor: row.discountMinor || undefined,
     recurringId: row.recurringId ? String(row.recurringId) : undefined,
     isRecurringInstance: row.isRecurringInstance,
+    reconciledAt: row.reconciledAt ? row.reconciledAt.toISOString() : undefined,
+    statementRef: row.statementRef ?? undefined,
+    splitGroupId: row.splitGroupId ?? undefined,
+    groupExpenseId: row.groupExpenseId ? String(row.groupExpenseId) : undefined,
+    reimbursement: row.reimbursement
+      ? {
+          status: row.reimbursement.status,
+          payoutTransactionId: row.reimbursement.payoutTransactionId ? String(row.reimbursement.payoutTransactionId) : undefined,
+          updatedAt: row.reimbursement.updatedAt.toISOString(),
+        }
+      : undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
@@ -339,6 +458,16 @@ export async function getTransaction(scope: RequestScope, transactionId: string)
   }).lean();
 
   if (!row) throw notFound('Transaction');
+
+  // Same rule as the list/export paths: a transaction touching another
+  // member's private account is invisible here too, not just absent from
+  // listings — otherwise a known/guessed id would leak it directly.
+  // Wholly on other members' private accounts: invisible here too, not just absent from
+  // listings - otherwise a known or guessed id would leak it directly. (One visible leg is
+  // enough to be shown, masked, by `hydrate`.)
+  if (!isVisibleTo(row.postings, scope.hiddenAccountIds)) {
+    throw notFound('Transaction');
+  }
 
   const [dto] = await hydrate(scope, [row]);
   return dto!;

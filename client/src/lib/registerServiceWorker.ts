@@ -22,6 +22,15 @@ export function registerServiceWorker(): void {
 
   if (!('serviceWorker' in navigator)) return;
 
+  // A tapped push notification (`sw.ts`'s `notificationclick`) posts the link
+  // it should open here rather than navigating itself — the service worker has
+  // no React Router instance, so it hands off to whichever tab is focused.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type === 'NAVIGATE' && typeof event.data.link === 'string') {
+      window.dispatchEvent(new CustomEvent('khata:sw-navigate', { detail: event.data.link }));
+    }
+  });
+
   const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {

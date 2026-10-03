@@ -6,6 +6,7 @@ import { useInvalidateLedger } from '../../lib/queries';
 import { useAuthedBlobUrl } from '../../hooks/useAuthedBlobUrl';
 import { downloadFile } from '../../lib/download';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
+import { useT } from '../../i18n';
 
 /**
  * Receipts and documents on a transaction (§26).
@@ -24,6 +25,7 @@ export function AttachmentList({
   transactionId: string;
   attachments: AttachmentDto[];
 }) {
+  const t = useT();
   const toast = useToast();
   const invalidate = useInvalidateLedger();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -32,7 +34,7 @@ export function AttachmentList({
 
   async function upload(file: File) {
     if (attachments.length >= 10) {
-      toast.error('Too many attachments', 'A transaction can have up to 10.');
+      toast.error(t('transactions.tooManyAttachments'), t('transactions.aTransactionCanHaveUpTo'));
       return;
     }
     setUploading(true);
@@ -42,9 +44,9 @@ export function AttachmentList({
       form.append('transactionId', transactionId);
       await api.post('/attachments', form);
       invalidate();
-      toast.success('Attachment added');
+      toast.success(t('transactions.attachmentAdded'));
     } catch (err) {
-      toast.error('Could not upload that file', err instanceof ApiRequestError ? err.message : errorMessage(err));
+      toast.error(t('transactions.couldNotUploadThatFile'), err instanceof ApiRequestError ? err.message : errorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -55,9 +57,9 @@ export function AttachmentList({
     try {
       await api.delete(`/attachments/${id}`);
       invalidate();
-      toast.success('Attachment removed');
+      toast.success(t('transactions.attachmentRemoved'));
     } catch (err) {
-      toast.error('Could not remove that', errorMessage(err));
+      toast.error(t('common.couldNotRemoveThat'), errorMessage(err));
     } finally {
       setDeletingId(null);
     }
@@ -67,14 +69,14 @@ export function AttachmentList({
     try {
       await downloadFile(attachment.url);
     } catch (err) {
-      toast.error('Could not open that file', errorMessage(err));
+      toast.error(t('common.couldNotOpenThatFile'), errorMessage(err));
     }
   }
 
   return (
     <div>
       <div className="flex items-center justify-between gap-3">
-        <p className="label-eyebrow">Attachments</p>
+        <p className="label-eyebrow">{t('transactions.attachments')}</p>
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -82,12 +84,12 @@ export function AttachmentList({
           className="flex items-center gap-1.5 text-[12px] font-medium text-gold underline-offset-4 transition-colors hover:underline disabled:opacity-50"
         >
           <Upload aria-hidden className="size-3.5" />
-          {uploading ? 'Uploading…' : 'Add receipt'}
+          {uploading ? 'Uploading…' : t('transactions.addReceipt')}
         </button>
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
           className="hidden"
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -100,7 +102,7 @@ export function AttachmentList({
       {attachments.length === 0 ? (
         <p className="mt-2 flex items-center gap-2 rounded-md border border-dashed border-line-strong px-3.5 py-3 text-[12px] text-ink-faint">
           <Paperclip aria-hidden className="size-3.5" />
-          No receipts attached yet.
+          {t('transactions.noReceiptsAttachedYet')}
         </p>
       ) : (
         <ul className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -130,6 +132,7 @@ function AttachmentThumb({
   onRemove: () => void;
   removing: boolean;
 }) {
+  const t = useT();
   const { url, loading } = useAuthedBlobUrl(attachment.thumbnailUrl ?? null);
 
   return (
@@ -150,9 +153,9 @@ function AttachmentThumb({
         type="button"
         onClick={onRemove}
         disabled={removing}
-        aria-label={`Remove ${attachment.fileName}`}
+        aria-label={t('transactions.remove', { fileName: attachment.fileName })}
         // Hover reveals it for a mouse; touch screens (no hover) and keyboard focus always show it.
-        className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-ink/70 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-60 pointer-coarse:opacity-100"
+        className="absolute right-1 top-1 flex size-6 items-center justify-center rounded-full bg-ink/70 text-ink-inverse opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-60 pointer-coarse:opacity-100"
       >
         <Trash2 aria-hidden className="size-3" />
       </button>

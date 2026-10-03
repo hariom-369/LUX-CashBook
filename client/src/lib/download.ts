@@ -1,7 +1,6 @@
-import { getAccessToken } from './api';
+import { apiUrl, getAccessToken } from './api';
 import { useAuthStore } from '../stores/auth.store';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
 
 /**
  * Download a file from an authenticated endpoint.
@@ -11,8 +10,13 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '/api/v1';
  * download flow, not a data: URI hack, so a large PDF or backup file never passes
  * through JS string encoding.
  */
-export async function downloadFile(path: string, query?: Record<string, string>): Promise<void> {
-  const url = new URL(`${API_BASE}${path}`, window.location.origin);
+export async function downloadFile(
+  path: string,
+  query?: Record<string, string>,
+  /** For an export whose input is a structured body (the report builder): same download flow, sent as a POST. */
+  init?: { method: 'POST'; body: unknown },
+): Promise<void> {
+  const url = new URL(apiUrl(path), window.location.origin);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value) url.searchParams.set(key, value);
@@ -23,10 +27,13 @@ export async function downloadFile(path: string, query?: Record<string, string>)
   const token = getAccessToken();
 
   const response = await fetch(url.toString(), {
+    method: init?.method ?? 'GET',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+      ...(init ? { 'Content-Type': 'application/json' } : {}),
     },
+    ...(init ? { body: JSON.stringify(init.body) } : {}),
     credentials: 'include',
   });
 

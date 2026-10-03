@@ -4,6 +4,7 @@ import { Icon } from '../../components/ui/Icon';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { useDashboard } from '../../lib/queries';
 import { cn } from '../../lib/cn';
+import { useT } from '../../i18n';
 
 /**
  * Insights (§49).
@@ -15,14 +16,15 @@ import { cn } from '../../lib/cn';
  * (`buildInsights` on the server) is written to stay on the descriptive side of it.
  */
 export function InsightsPage() {
+  const t = useT();
   const { data, isLoading, isError, error, refetch } = useDashboard('last_30_days');
   const insights = data?.insights ?? [];
 
   return (
     <div className="flex flex-col gap-5">
       <header>
-        <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Insights</h1>
-        <p className="mt-0.5 text-[13px] text-ink-muted">What changed and where the money went, based on your last 30 days.</p>
+        <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.insights')}</h1>
+        <p className="mt-0.5 text-[13px] text-ink-muted">{t('insights.whatChangedAndWhereTheMoney')}</p>
       </header>
 
       <Card bare>
@@ -35,8 +37,8 @@ export function InsightsPage() {
         ) : insights.length === 0 ? (
           <EmptyState
             icon={<Sparkles className="size-5" />}
-            title="Nothing to report yet"
-            description="Once you've recorded a bit more activity, patterns and comparisons will show up here."
+            title={t('insights.nothingToReportYet')}
+            description={t('insights.onceYouVeRecordedABit')}
           />
         ) : (
           <ul className="divide-y divide-line-faint">
@@ -52,7 +54,7 @@ export function InsightsPage() {
                 >
                   <Icon name={insight.icon} className="size-[18px]" />
                 </span>
-                <p className="sensitive text-[14px] leading-relaxed text-ink-secondary">{insight.text}</p>
+                <p className="sensitive text-[14px] leading-relaxed text-ink-secondary">{t.server(insight.text)}</p>
               </li>
             ))}
           </ul>

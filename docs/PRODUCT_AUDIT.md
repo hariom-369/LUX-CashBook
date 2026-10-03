@@ -67,7 +67,7 @@ significant gap. **Backend only** — API exists, no screen reaches it.
 | Core | 8 transaction types, transfers, loans, repayments, settle | Working | `transaction.service.ts`, `person.service.ts`; 31 ledger tests |
 | Core | Soft delete, restore, edit, duplicate | Working | Edits are last-write-wins (see A) |
 | Core | Idempotent create | Working | `idempotencyKey` + unique index |
-| Accounts | Cash, bank, UPI, wallet, credit card, savings, investment, other | Working | Credit limit stored; no statement/due dates or utilization |
+| Accounts | Cash, bank, UPI, wallet, credit card, savings, investment, other | Working | Credit card centre (statement/due day, utilisation) resolved in Phase 7 — see [`ROADMAP_PHASE7_NOTES.md`](ROADMAP_PHASE7_NOTES.md) |
 | Accounts | Account ledger + running balance + PDF statement | Working | `pdf/` → accounts, people, cash book |
 | Cash book | Single / double / triple column, contra, discount | Working | `cashbook.service.ts` |
 | People | Receivables/payables, partial repayment, settle, share summary | Working | No installments, interest or due-date schedule beyond one `dueDate` |
@@ -79,14 +79,14 @@ significant gap. **Backend only** — API exists, no screen reaches it.
 | Reminders | Custom reminders (bill, rent, EMI, subscription…) | **Backend only** | `/reminders` CRUD exists; `useReminders` is used by no page |
 | Notifications | In-app list, read/unread | Working | Auto-expire after 90 days (TTL index) |
 | Notifications | Email / push / monthly summary / per-type toggles | **Stored, not wired** | See finding P-1 |
-| Reports | Category, net worth, monthly comparison, annual, borrow/lend, statement | Working | Six tabs; no custom report builder, no tag reports |
+| Reports | Category, net worth, monthly comparison, annual, borrow/lend, statement, cash-flow forecast | Working | Seven tabs (forecast added in Phase 7); no custom report builder, no tag reports — deferred, see [`ROADMAP_PHASE7_NOTES.md`](ROADMAP_PHASE7_NOTES.md) |
 | Insights | Six descriptive insights | Working | Insights page re-renders the dashboard's insights (same query) |
 | Dashboard | Widgets, reorder, hide, reset | Working | Stored per device (localStorage) |
-| Quick entry | Type picker + natural-language parser (preview, never auto-saves) | Partial | No account detection ("from SBI", "using UPI"); no receipt attach in Quick Add |
-| Search | Transaction text search (Mongo text index), people search | Partial | Command palette (Ctrl K) only navigates; it does not search data |
+| Quick entry | Type picker + natural-language parser (preview, never auto-saves) | Partial | No account detection ("from SBI", "using UPI") — receipt attach in Quick Add resolved in Phase 6 |
+| Search | Transaction text search (Mongo text index), people search | Working | Command palette search resolved in Phase 2 — see [`ROADMAP_PHASE2_NOTES.md`](ROADMAP_PHASE2_NOTES.md) |
 | Filters | Type, account, category, date range, deleted | Partial | Server also supports tags, amount range, has-attachment, outstanding-only — not exposed |
-| Attachments | Image/PDF upload, re-encode + thumbnail (sharp), private download | Working | On the transaction detail screen only; no gallery; no OCR |
-| Import | CSV import with preview and batch undo | Partial | See finding D-3 |
+| Attachments | Image/PDF upload, re-encode + thumbnail (sharp), private download | Working | Gallery/vault resolved in Phase 6 — see [`ROADMAP_PHASE6_NOTES.md`](ROADMAP_PHASE6_NOTES.md); no OCR (deferred to Phase 10, AI) |
+| Import | CSV import with preview and batch undo | Working | D-3 resolved in Phase 5 — bank-statement import with column mapping now exists alongside the original Khata-template importer |
 | Export | CSV export, PDFs | Working | See finding S-4 (formula injection) |
 | Backup | JSON backup; restore into a **new** workspace | Working | Never overwrites live data. No encryption, checksum or partial restore |
 | Business | Petty cash (imprest), daily closing, month closing, customers/suppliers | Working | Customers/suppliers are People filtered by relationship |
@@ -110,10 +110,10 @@ significant gap. **Backend only** — API exists, no screen reaches it.
 | # | Journey | Path today | Friction |
 |---|---|---|---|
 | 1 | First run | Register → onboarding (mode, currency, first account) → dashboard | Short (three steps). No demo option; email verification is a banner, not a step |
-| 2 | Record spending | Bottom-bar **+** → type picker *or* "Type it instead" → form → save | 3–4 taps minimum; account must always be picked manually; can't attach a receipt here |
-| 3 | Lend / get repaid | People → person → Lend / Repay / Settle | Solid. No installments, no reminder message to send, no statement share as PDF from the phone flow |
+| 2 | Record spending | Bottom-bar **+** → type picker *or* "Type it instead" → form → save | 3–4 taps minimum; account must always be picked manually. ~~Can't attach a receipt here~~ **resolved in Phase 6** — see [`ROADMAP_PHASE6_NOTES.md`](ROADMAP_PHASE6_NOTES.md) |
+| 3 | Lend / get repaid | People → person → Lend / Repay / Settle | ~~No installments, no reminder message to send~~ **resolved in Phase 4** — see [`ROADMAP_PHASE4_NOTES.md`](ROADMAP_PHASE4_NOTES.md). (Statement PDF and share already existed pre-Phase 4; this row understated what was built.) |
 | 4 | Find a transaction | Transactions → search/filters → detail sheet | Palette search doesn't search data; tag/amount filters hidden |
-| 5 | Plan | Budgets / Goals / Recurring pages | Goals don't move money; recurring "remind me" occurrences need manual Run now |
+| 5 | Plan | Budgets / Goals / Recurring pages | ~~Goals don't move money~~ **resolved in Phase 7** for account-linked goals (a real transfer, not a record) — see [`ROADMAP_PHASE7_NOTES.md`](ROADMAP_PHASE7_NOTES.md). Recurring "remind me" occurrences still need a manual Run/Skip — that's by design (§Phase 1/3), not a gap |
 | 6 | Understand | Reports (6 tabs), Insights, PDFs, CSV | No saved or custom reports; no tag or payee reports |
 | 7 | Run a shop | Business workspace → Petty cash, Daily/Month closing, Customers/Suppliers | No invoices, sales/purchase distinction or inventory |
 | 8 | Protect / move data | Settings → Data (backup, restore, import, export), Security | Import only fits Khata's own template; restore makes a copy (safe, but unexplained); no account deletion screen |
@@ -187,22 +187,38 @@ offer installation when the manifest has 192px and 512px icons, so the
 
 ### Data and import
 
-**D-1 · High · Two-posting limit.** Split transactions (one bill across
+~~**D-1 · High · Two-posting limit.** Split transactions (one bill across
 categories) and group expenses can't be expressed as a single transaction.
 Any design must add them *around* the engine, not by loosening its validator
-(see roadmap decision 1).
+(see roadmap decision 1).~~ **Resolved in Phase 8** exactly as decision 1
+specified — several ordinary transactions sharing a `splitGroupId`, and one
+expense plus one `lend` per group member, never a change to the posting
+validator itself. See
+[`ROADMAP_PHASE8_NOTES.md`](ROADMAP_PHASE8_NOTES.md), which also covers a
+test-infrastructure gap this phase surfaced: the test suite had never
+actually been exercising real multi-document transactions.
 
-**D-2 · High · Single-owner workspaces.** `Workspace.userId` is the only
+~~**D-2 · High · Single-owner workspaces.** `Workspace.userId` is the only
 access grant; `requireWorkspace` checks ownership. Household mode needs a
 membership model, a change to that one middleware, and a review of the 31
 service queries that also filter by `userId` (the other 147 scope by
-`workspaceId` and are unaffected).
+`workspaceId` and are unaffected).~~ **Resolved in Phase 9** — see
+[`ROADMAP_PHASE9_NOTES.md`](ROADMAP_PHASE9_NOTES.md) for what the "31 queries"
+turned out to actually be (workspace listing/session resolution, not
+financial data — the 147 `workspaceId`-scoped queries needed no change at
+all), and for this phase's explicit review status before real household use.
 
-**D-3 · High · CSV import is Khata-template only.** Fixed column names
+~~**D-3 · High · CSV import is Khata-template only.** Fixed column names
 (`Date, Type, Amount, Account, Category, Description`), income/expense only,
 `new Date(text)` date parsing (a `dd/mm/yyyy` bank date is rejected or read as
 US month/day), `Number(text)` amount parsing (rejects `1,250.00`), and no
-duplicate detection. Unsuitable for bank statements as-is.
+duplicate detection. Unsuitable for bank statements as-is.~~ **Resolved in
+Phase 5** — a separate bank-statement importer (`/bank-import`) now handles
+arbitrary column mapping, `dd/mm/yyyy`/`mm/dd/yyyy`/Indian-grouped amounts,
+and new/duplicate/possible-duplicate/invalid classification. The original
+Khata-template importer (`/import-export`) is untouched — it still exists for
+round-tripping Khata's own export. See
+[`ROADMAP_PHASE5_NOTES.md`](ROADMAP_PHASE5_NOTES.md).
 
 **D-4 · Medium · No optimistic concurrency.** Last write wins on every update.
 Blocks safe offline editing and multi-member workspaces.
@@ -220,20 +236,23 @@ audience; noted as constraints, not defects.
 
 - **U-1 · Medium** — Quick Add always needs a manual account choice; the NL
   parser detects type, amount, date, category and person but not account.
-- **U-2 · Medium** — Global search (Ctrl K) navigates only; data search lives
-  on individual pages.
-- **U-3 · Medium** — No "confirm this occurrence" flow for remind-only
-  recurring items; users must find them and press Run now.
+- ~~**U-2 · Medium** — Global search (Ctrl K) navigates only; data search lives
+  on individual pages.~~ **Resolved in Phase 2** — the command palette now
+  searches transactions and people live; see
+  [`ROADMAP_PHASE2_NOTES.md`](ROADMAP_PHASE2_NOTES.md).
+- ~~**U-3 · Medium** — No "confirm this occurrence" flow for remind-only
+  recurring items; users must find them and press Run now.~~ **Resolved** —
+  this existed since Phase 1 (the `run`/`skip` actions plus the recurring
+  reminder sweep); Phase 3 closed the remaining gap with a dedicated Bills
+  centre and calendar. See [`ROADMAP_PHASE3_NOTES.md`](ROADMAP_PHASE3_NOTES.md).
 - **U-4 · Low** — Insights page duplicates the dashboard's insights widget.
-- **U-5 · Low** — Bills, subscriptions, reminders and recurring entries are
+- ~~**U-5 · Low** — Bills, subscriptions, reminders and recurring entries are
   four overlapping concepts with no single "what's due" place beyond the
-  dashboard's Due soon list.
-- **U-6 · High** *(found during Phase 1)* — **Transactions have no in-app edit
-  form.** `TransactionDetailSheet` offers delete, restore and duplicate only.
-  `updateTransaction` on the server is fully built, tested, and (as of Phase 1)
-  supports optimistic-concurrency `rev` — but nothing in the client calls it.
-  Fixing a typo'd description or amount today means delete-and-recreate,
-  which loses the original's audit trail continuity. Flagged for Phase 2.
+  dashboard's Due soon list.~~ **Resolved in Phase 3** — see
+  [`ROADMAP_PHASE3_NOTES.md`](ROADMAP_PHASE3_NOTES.md).
+- ~~**U-6 · High** *(found during Phase 1)* — Transactions have no in-app edit
+  form.~~ **Resolved in Phase 2** — see
+  [`ROADMAP_PHASE2_NOTES.md`](ROADMAP_PHASE2_NOTES.md).
 
 ### Mobile / desktop / accessibility
 

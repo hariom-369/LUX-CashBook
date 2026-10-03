@@ -10,7 +10,9 @@ import type {
   CashBookDto,
   CategoryDto,
   DashboardDto,
+  LoanTimelineEntryDto,
   Paginated,
+  PayeeDto,
   PersonDto,
   PersonLedgerDto,
   RangePreset,
@@ -35,8 +37,10 @@ export const queryKeys = {
   accountLedger: (ws: string, id: string, params: unknown) => [ws, 'account-ledger', id, params] as const,
   categories: (ws: string, kind?: string) => [ws, 'categories', kind ?? 'all'] as const,
   people: (ws: string, params: unknown) => [ws, 'people', params] as const,
+  payees: (ws: string, params: unknown) => [ws, 'payees', params] as const,
   person: (ws: string, id: string) => [ws, 'person', id] as const,
   personLedger: (ws: string, id: string) => [ws, 'person-ledger', id] as const,
+  loanTimeline: (ws: string, id: string) => [ws, 'loan-timeline', id] as const,
   peopleSummary: (ws: string) => [ws, 'people-summary'] as const,
   transactions: (ws: string, params: unknown) => [ws, 'transactions', params] as const,
   transaction: (ws: string, id: string) => [ws, 'transaction', id] as const,
@@ -135,6 +139,22 @@ export function usePeople(params: PeopleParams = {}) {
   });
 }
 
+export interface PayeeParams {
+  search?: string;
+  includeArchived?: boolean;
+}
+
+/** Merchants/counterparties (docs/FINANCIAL_MODEL.md, decision 3) — separate from People. */
+export function usePayees(params: PayeeParams = {}) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: queryKeys.payees(ws, params),
+    queryFn: () => api.get<PayeeDto[]>('/payees', { query: params as Record<string, string> }),
+    enabled: ws !== 'none',
+    staleTime: 30_000,
+  });
+}
+
 export function usePerson(id: string | undefined) {
   const ws = useWorkspaceId();
   return useQuery({
@@ -153,6 +173,15 @@ export function usePersonLedger(id: string | undefined) {
   });
 }
 
+export function useLoanTimeline(personId: string | undefined) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: queryKeys.loanTimeline(ws, personId ?? ''),
+    queryFn: () => api.get<LoanTimelineEntryDto[]>(`/people/${personId}/timeline`),
+    enabled: Boolean(personId) && ws !== 'none',
+  });
+}
+
 export interface TransactionParams {
   page?: number;
   limit?: number;
@@ -162,6 +191,7 @@ export interface TransactionParams {
   accountIds?: string[];
   categoryIds?: string[];
   personIds?: string[];
+  payeeIds?: string[];
   tags?: string[];
   minAmountMinor?: number;
   maxAmountMinor?: number;
@@ -171,6 +201,8 @@ export interface TransactionParams {
   onlyDeleted?: boolean;
   outstandingOnly?: boolean;
   hasAttachment?: boolean;
+  /** Expenses at any of these reimbursement stages (§Phase 7). */
+  reimbursement?: string[];
 }
 
 /**
@@ -252,7 +284,7 @@ export function useInvalidateLedger() {
   const ws = useAuthStore.getState().activeWorkspaceId ?? 'none';
 
   return () => {
-    for (const key of ['dashboard', 'accounts', 'account', 'account-ledger', 'transactions', 'transaction', 'people', 'person', 'person-ledger', 'people-summary', 'cash-book', 'integrity']) {
+    for (const key of ['dashboard', 'accounts', 'account', 'account-ledger', 'transactions', 'transaction', 'people', 'person', 'person-ledger', 'people-summary', 'payees', 'cash-book', 'integrity', 'today-spend', 'budgets']) {
       void queryClient.invalidateQueries({ queryKey: [ws, key] });
     }
   };

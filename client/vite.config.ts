@@ -4,6 +4,16 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
+import { readFileSync } from 'node:fs';
+
+/** The headers `vercel.json` applies to every path, as a plain object. */
+function productionHeaders(): Record<string, string> {
+  const config = JSON.parse(readFileSync(fileURLToPath(new URL('./vercel.json', import.meta.url)), 'utf8')) as {
+    headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
+  };
+  const all = config.headers.find((entry) => entry.source === '/(.*)');
+  return Object.fromEntries((all?.headers ?? []).map((h) => [h.key, h.value]));
+}
 
 export default defineConfig({
   plugins: [
@@ -73,6 +83,9 @@ export default defineConfig({
   // production exactly.
   preview: {
     port: 5173,
+    // The exact response headers production sends (vercel.json), so `vite preview` exercises the real
+    // Content-Security-Policy and a violation shows up here, not after deploy.
+    headers: productionHeaders(),
     proxy: {
       '/api': {
         target: process.env.VITE_API_PROXY ?? 'http://localhost:4000',

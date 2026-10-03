@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { ACCOUNT_TYPES } from '@khata/shared';
+import { ACCOUNT_TYPES, ACCOUNT_VISIBILITIES } from '@khata/shared';
 import { asyncHandler, created, ok } from '../../lib/http.js';
 import { actorOf, requireAuth, requireWorkspace } from '../../middleware/auth.js';
 import { param, scopeOf } from '../../middleware/context.js';
@@ -34,8 +34,12 @@ const createSchema = z.object({
   color: hexColor.optional(),
   icon: text(48),
   isLiability: z.boolean().optional(),
+  visibility: z.enum(ACCOUNT_VISIBILITIES).optional(),
   blockNegativeBalance: z.boolean().optional(),
   creditLimitMinor: amountMinorSchema.refine((n) => n >= 0, 'Enter a positive limit.').optional(),
+  statementDay: z.number().int().min(1).max(31).optional(),
+  dueDay: z.number().int().min(1).max(31).optional(),
+  minimumDueMinor: amountMinorSchema.refine((n) => n >= 0, 'Enter a positive amount.').optional(),
   excludeFromTotals: z.boolean().optional(),
   notes: text(500),
   isPettyCash: z.boolean().optional(),
@@ -138,5 +142,38 @@ accountRouter.post(
     const before = account.cachedBalanceMinor;
     const balanceMinor = await recomputeAccountBalance(scope.workspaceId, account._id);
     ok(res, { balanceMinor, previousMinor: before, changed: balanceMinor !== before });
+  }),
+);
+
+const reconcileQuerySchema = z.object({ statementBalanceMinor: z.coerce.number().int() });
+const reconcileBodySchema = z.object({ statementBalanceMinor: z.number().int(), note: text(500) });
+
+/** Read-only: how far the statement balance is from Khata's own (§Phase 5). */
+accountRouter.get(
+  '/:id/reconcile/preview',
+  validate({ params: idParamSchema, query: reconcileQuerySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { statementBalanceMinor } = req.query as unknown as { statementBalanceMinor: number };
+    ok(res, await service.previewReconciliation(scopeOf(req), param(req, 'id'), statementBalanceMinor));
+  }),
+);
+
+/** Posts an adjustment for any difference — never a silent change to the cached balance. */
+accountRouter.post(
+  '/:id/reconcile',
+  writeLimiter,
+  validate({ params: idParamSchema, body: reconcileBodySchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { statementBalanceMinor, note } = req.body as { statementBalanceMinor: number; note?: string };
+    ok(res, await service.reconcileAccount(scopeOf(req), param(req, 'id'), statementBalanceMinor, note, auditContext(req)));
+  }),
+);
+
+/** Credit card centre (§Phase 7): utilisation and the next payment due date. */
+accountRouter.get(
+  '/:id/card-summary',
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    ok(res, await service.getCardSummary(scopeOf(req), param(req, 'id')));
   }),
 );

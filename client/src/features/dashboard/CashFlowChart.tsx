@@ -15,6 +15,8 @@ import { useChartColors } from '../../hooks/useChartColors';
 import { useUiStore } from '../../stores/ui.store';
 import { EmptyState } from '../../components/ui/States';
 import { ChartLine } from 'lucide-react';
+import { bucketLabel } from '../../lib/bucketLabel';
+import { useT } from '../../i18n';
 
 /**
  * Income vs expense over time.
@@ -33,7 +35,12 @@ import { ChartLine } from 'lucide-react';
  * One y-axis only: both series are the same measure in the same currency, so there
  * is nothing a second scale could honestly represent.
  */
-export function CashFlowChart({ points }: { points: CashFlowPointDto[] }) {
+export function CashFlowChart({ points: serverPoints }: { points: CashFlowPointDto[] }) {
+  const t = useT();
+  // Bucket names in the interface language (the server writes them in English).
+  // `t.language` is not read inside, but a new language must rebuild the labels.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const points = useMemo(() => serverPoints.map((point) => ({ ...point, label: bucketLabel(point) })), [serverPoints, t.language]);
   const currency = useCurrency();
   const privacyMode = useUiStore((s) => s.privacyMode);
   const [showTable, setShowTable] = useState(false);
@@ -58,8 +65,8 @@ export function CashFlowChart({ points }: { points: CashFlowPointDto[] }) {
       <EmptyState
         compact
         icon={<ChartLine className="size-5" />}
-        title="No activity in this period"
-        description="Once you record income or expenses, your cash flow appears here."
+        title={t('dashboard.noActivityInThisPeriod')}
+        description={t('dashboard.onceYouRecordIncomeOrExpenses')}
       />
     );
   }
@@ -71,8 +78,8 @@ export function CashFlowChart({ points }: { points: CashFlowPointDto[] }) {
             colour alone). */}
         <ul className="flex items-center gap-4">
           {[
-            { label: 'Income', color: colors.income },
-            { label: 'Expenses', color: colors.expense },
+            { label: t('common.income'), color: colors.income },
+            { label: t('common.expenses'), color: colors.expense },
           ].map((series) => (
             <li key={series.label} className="flex items-center gap-2">
               <span
@@ -91,7 +98,7 @@ export function CashFlowChart({ points }: { points: CashFlowPointDto[] }) {
           aria-expanded={showTable}
           className="text-[12px] font-medium text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline"
         >
-          {showTable ? 'Hide table' : 'View as table'}
+          {showTable ? t('dashboard.hideTable') : t('dashboard.viewAsTable')}
         </button>
       </div>
 
@@ -148,13 +155,13 @@ export function CashFlowChart({ points }: { points: CashFlowPointDto[] }) {
       */}
       <div className={showTable ? 'mt-4 overflow-x-auto' : 'sr-only'}>
         <table className="w-full min-w-[320px] text-left">
-          <caption className="sr-only">Income and expenses by period</caption>
+          <caption className="sr-only">{t('dashboard.incomeAndExpensesByPeriod')}</caption>
           <thead>
             <tr className="border-b border-line">
-              <th scope="col" className="label-eyebrow py-2 pr-3 font-semibold">Period</th>
-              <th scope="col" className="label-eyebrow py-2 px-3 text-right font-semibold">Income</th>
-              <th scope="col" className="label-eyebrow py-2 px-3 text-right font-semibold">Expenses</th>
-              <th scope="col" className="label-eyebrow py-2 pl-3 text-right font-semibold">Net</th>
+              <th scope="col" className="label-eyebrow py-2 pr-3 font-semibold">{t('common.period')}</th>
+              <th scope="col" className="label-eyebrow py-2 px-3 text-right font-semibold">{t('common.income')}</th>
+              <th scope="col" className="label-eyebrow py-2 px-3 text-right font-semibold">{t('common.expenses')}</th>
+              <th scope="col" className="label-eyebrow py-2 pl-3 text-right font-semibold">{t('common.net')}</th>
             </tr>
           </thead>
           <tbody>
@@ -201,6 +208,7 @@ function CashFlowTooltip({
   currency: string;
   masked: boolean;
 }) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;
   if (!point) return null;
@@ -215,15 +223,15 @@ function CashFlowTooltip({
       </p>
       <dl className="mt-2 flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-6">
-          <dt className="text-[12px] text-ink-secondary">Income</dt>
+          <dt className="text-[12px] text-ink-secondary">{t('common.income')}</dt>
           <dd className="tabular text-[12.5px] font-semibold text-ink">{money(point.incomeMinor)}</dd>
         </div>
         <div className="flex items-center justify-between gap-6">
-          <dt className="text-[12px] text-ink-secondary">Expenses</dt>
+          <dt className="text-[12px] text-ink-secondary">{t('common.expenses')}</dt>
           <dd className="tabular text-[12.5px] font-semibold text-ink">{money(point.expenseMinor)}</dd>
         </div>
         <div className="flex items-center justify-between gap-6 border-t border-line-faint pt-1.5">
-          <dt className="text-[12px] text-ink-secondary">Net</dt>
+          <dt className="text-[12px] text-ink-secondary">{t('common.net')}</dt>
           <dd
             className={`tabular text-[12.5px] font-semibold ${
               point.netMinor >= 0 ? 'text-positive' : 'text-negative'

@@ -24,9 +24,7 @@ import {
 import {
   RANGE_PRESET_LABELS,
   formatMoney,
-  formatPercent,
-  relativeDay,
-  type RangePreset,
+  formatPercent,   type RangePreset,
 } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Card, CardHeader } from '../../components/ui/Card';
@@ -42,6 +40,8 @@ import { useCurrency } from '../../hooks/useCurrency';
 import { CashFlowChart } from './CashFlowChart';
 import { TransactionRow } from '../transactions/TransactionRow';
 import { useDashboardLayoutStore, type DashboardWidgetId } from '../../stores/dashboardLayout.store';
+import { useT, msg, type MessageRef } from '../../i18n';
+import { useRelativeDay } from '../../i18n/relativeDay';
 
 const RANGES: RangePreset[] = ['last_7_days', 'last_30_days', 'last_3_months', 'last_6_months', 'this_year'];
 
@@ -54,18 +54,19 @@ const RANGES: RangePreset[] = ['last_7_days', 'last_30_days', 'last_3_months', '
  *   3. What did I just spend on?
  *   4. Who owes me, and what is due?
  */
-const WIDGET_META: Record<DashboardWidgetId, { label: string; span: 'wide' | 'narrow' }> = {
-  monthSummary: { label: 'This month', span: 'narrow' },
-  cashFlow: { label: 'Income vs expenses chart', span: 'wide' },
-  transactions: { label: 'Recent transactions', span: 'wide' },
-  quickActions: { label: 'Quick actions', span: 'narrow' },
-  receivables: { label: 'Money to receive', span: 'narrow' },
-  payables: { label: 'Money to pay', span: 'narrow' },
-  upcoming: { label: 'Due soon', span: 'narrow' },
-  insights: { label: 'Insights', span: 'narrow' },
+const WIDGET_META: Record<DashboardWidgetId, { label: MessageRef; span: 'wide' | 'narrow' }> = {
+  monthSummary: { label: msg('common.thisMonth'), span: 'narrow' },
+  cashFlow: { label: msg('dashboard.incomeVsExpensesChart'), span: 'wide' },
+  transactions: { label: msg('dashboard.recentTransactions'), span: 'wide' },
+  quickActions: { label: msg('dashboard.quickActions'), span: 'narrow' },
+  receivables: { label: msg('dashboard.moneyToReceive'), span: 'narrow' },
+  payables: { label: msg('dashboard.moneyToPay'), span: 'narrow' },
+  upcoming: { label: msg('dashboard.dueSoon'), span: 'narrow' },
+  insights: { label: msg('nav.insights'), span: 'narrow' },
 };
 
 export function DashboardPage() {
+  const t = useT();
   const [range, setRange] = useState<RangePreset>('last_30_days');
   const { data, isLoading, isError, error, refetch } = useDashboard(range);
   const userName = useAuthStore((s) => s.user?.name?.split(' ')[0] ?? '');
@@ -94,7 +95,7 @@ export function DashboardPage() {
         return (
           <Card bare>
             <div className="flex flex-wrap items-start justify-between gap-3 p-5 pb-0 sm:p-6 sm:pb-0">
-              <CardHeader eyebrow="Cash flow" title="Income vs expenses" />
+              <CardHeader eyebrow={t('dashboard.cashFlow')} title={t('common.incomeVsExpenses')} />
               <div className="no-scrollbar -mx-1 flex gap-1 overflow-x-auto px-1">
                 {RANGES.map((preset) => (
                   <button
@@ -109,7 +110,7 @@ export function DashboardPage() {
                         : 'text-ink-muted hover:bg-sunken hover:text-ink',
                     )}
                   >
-                    {RANGE_PRESET_LABELS[preset]}
+                    {t.label('range', preset, RANGE_PRESET_LABELS[preset])}
                   </button>
                 ))}
               </div>
@@ -123,15 +124,15 @@ export function DashboardPage() {
           <Card bare>
             <div className="p-5 pb-3 sm:p-6 sm:pb-3">
               <CardHeader
-                eyebrow="Activity"
-                title="Recent transactions"
+                eyebrow={t('dashboard.activity')}
+                title={t('dashboard.recentTransactions')}
                 action={
                   data!.recentTransactions.length > 0 ? (
                     <Link
                       to="/transactions"
                       className="text-[12.5px] font-medium text-gold underline-offset-4 hover:underline"
                     >
-                      View all
+                      {t('dashboard.viewAll')}
                     </Link>
                   ) : undefined
                 }
@@ -142,8 +143,8 @@ export function DashboardPage() {
               <EmptyState
                 compact
                 icon={<Wallet className="size-5" />}
-                title="No transactions yet"
-                description="Start by recording your first income or expense. It takes a few seconds."
+                title={t('common.noTransactionsYet')}
+                description={t('dashboard.startByRecordingYourFirstIncome')}
                 action={<AddTransactionButton />}
               />
             ) : (
@@ -162,26 +163,26 @@ export function DashboardPage() {
       case 'receivables':
         return (
           <PeoplePanel
-            title="Money to receive"
-            eyebrow="Receivables"
+            title={t('dashboard.moneyToReceive')}
+            eyebrow={t('dashboard.receivables')}
             tone="positive"
             icon={<HandCoins className="size-4" />}
             totalMinor={data!.receivables.totalMinor}
             people={data!.receivables.people}
-            emptyText="Nobody owes you anything right now."
+            emptyText={t('dashboard.nobodyOwesYouAnythingRightNow')}
           />
         );
 
       case 'payables':
         return (
           <PeoplePanel
-            title="Money to pay"
-            eyebrow="Payables"
+            title={t('dashboard.moneyToPay')}
+            eyebrow={t('dashboard.payables')}
             tone="negative"
             icon={<CreditCard className="size-4" />}
             totalMinor={data!.payables.totalMinor}
             people={data!.payables.people}
-            emptyText="You don't owe anyone right now."
+            emptyText={t('dashboard.youDonTOweAnyoneRight')}
           />
         );
 
@@ -201,7 +202,7 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-5">
       <BalanceHeader
-        greeting={userName ? `Good ${timeOfDay()}, ${userName}` : `Good ${timeOfDay()}`}
+        greeting={userName ? t(`dashboard.greeting.${timeOfDay()}Named`, { name: userName }) : t(`dashboard.greeting.${timeOfDay()}`)}
         totalMinor={data.totalBalanceMinor}
         netWorthMinor={data.netWorthMinor}
       />
@@ -230,14 +231,14 @@ export function DashboardPage() {
                   <div className="flex items-center justify-between gap-2 px-1">
                     <span className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">
                       <GripVertical aria-hidden className="size-3.5 text-ink-faint" />
-                      {meta.label}
+                      {t(meta.label.key)}
                     </span>
                     <div className="flex items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => moveWidget(id, 'up')}
                         disabled={index === 0}
-                        aria-label={`Move ${meta.label} earlier`}
+                        aria-label={t('dashboard.moveEarlier', { label: t(meta.label.key) })}
                         className="rounded-sm p-1 text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:pointer-events-none disabled:opacity-30"
                       >
                         <ChevronUp aria-hidden className="size-4" />
@@ -246,7 +247,7 @@ export function DashboardPage() {
                         type="button"
                         onClick={() => moveWidget(id, 'down')}
                         disabled={index === arr.length - 1}
-                        aria-label={`Move ${meta.label} later`}
+                        aria-label={t('dashboard.moveLater', { label: t(meta.label.key) })}
                         className="rounded-sm p-1 text-ink-muted transition-colors hover:bg-sunken hover:text-ink disabled:pointer-events-none disabled:opacity-30"
                       >
                         <ChevronDown aria-hidden className="size-4" />
@@ -254,7 +255,7 @@ export function DashboardPage() {
                       <button
                         type="button"
                         onClick={() => toggleHidden(id)}
-                        aria-label={`Hide ${meta.label}`}
+                        aria-label={t('dashboard.hide', { label: t(meta.label.key) })}
                         className="rounded-sm p-1 text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
                       >
                         <EyeOff aria-hidden className="size-4" />
@@ -264,7 +265,7 @@ export function DashboardPage() {
                   <div aria-hidden={content === null} className={content === null ? 'opacity-40' : undefined}>
                     {content ?? (
                       <p className="rounded-md border border-line-faint bg-surface px-3.5 py-6 text-center text-[12.5px] text-ink-faint">
-                        Nothing to show right now
+                        {t('dashboard.nothingToShowRightNow')}
                       </p>
                     )}
                   </div>
@@ -290,6 +291,7 @@ function DashboardCustomizeBar({
   onToggle: () => void;
   onReset: () => void;
 }) {
+  const t = useT();
   if (!editing) {
     return (
       <div className="flex justify-end">
@@ -299,7 +301,7 @@ function DashboardCustomizeBar({
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
         >
           <LayoutGrid aria-hidden className="size-3.5" />
-          Customize dashboard
+          {t('dashboard.customizeDashboard')}
         </button>
       </div>
     );
@@ -308,7 +310,7 @@ function DashboardCustomizeBar({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gold/30 bg-gold-soft px-4 py-3">
       <p className="text-[12.5px] font-medium text-gold-strong">
-        Drag isn't required — use the arrows on each card to reorder, or hide what you don't need.
+        {t('dashboard.dragIsnTRequiredUseThe')}
       </p>
       <div className="flex items-center gap-2">
         <button
@@ -317,10 +319,10 @@ function DashboardCustomizeBar({
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-ink-secondary transition-colors hover:bg-surface"
         >
           <RotateCcw aria-hidden className="size-3.5" />
-          Reset layout
+          {t('dashboard.resetLayout')}
         </button>
         <Button size="sm" variant="secondary" leftIcon={<X className="size-3.5" />} onClick={onToggle}>
-          Done
+          {t('dashboard.done')}
         </Button>
       </div>
     </div>
@@ -334,11 +336,12 @@ function HiddenWidgetsTray({
   hidden: DashboardWidgetId[];
   onShow: (id: DashboardWidgetId) => void;
 }) {
+  const t = useT();
   if (hidden.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line border-dashed bg-sunken/50 px-4 py-3">
-      <span className="text-[12px] font-medium text-ink-muted">Hidden:</span>
+      <span className="text-[12px] font-medium text-ink-muted">{t('dashboard.hidden')}</span>
       {hidden.map((id) => (
         <button
           key={id}
@@ -347,25 +350,26 @@ function HiddenWidgetsTray({
           className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 text-[12px] font-medium text-ink-secondary transition-colors hover:border-line-strong"
         >
           <Eye aria-hidden className="size-3" />
-          {WIDGET_META[id].label}
+          {t(WIDGET_META[id].label.key)}
         </button>
       ))}
     </div>
   );
 }
 
-function timeOfDay(): string {
+function timeOfDay(): 'morning' | 'afternoon' | 'evening' {
   const hour = new Date().getHours();
   if (hour < 12) return 'morning';
   if (hour < 17) return 'afternoon';
   return 'evening';
 }
 
-function AddTransactionButton({ variant = 'gold' as const }) {
+export function AddTransactionButton({ variant = 'gold' as const }) {
+  const t = useT();
   const setQuickAddOpen = useUiStore((s) => s.setQuickAddOpen);
   return (
     <Button size="sm" variant={variant} leftIcon={<Plus className="size-4" />} onClick={() => setQuickAddOpen(true)}>
-      Add transaction
+      {t('common.addTransaction')}
     </Button>
   );
 }
@@ -377,7 +381,7 @@ function AddTransactionButton({ variant = 'gold' as const }) {
  * total balance is precisely the number someone wants to hide when a colleague
  * glances over (§38).
  */
-function BalanceHeader({
+export function BalanceHeader({
   greeting,
   totalMinor,
   netWorthMinor,
@@ -386,6 +390,7 @@ function BalanceHeader({
   totalMinor: number;
   netWorthMinor: number;
 }) {
+  const t = useT();
   const privacyMode = useUiStore((s) => s.privacyMode);
   const togglePrivacy = useUiStore((s) => s.togglePrivacyMode);
   const currency = useCurrency();
@@ -400,14 +405,13 @@ function BalanceHeader({
 
       <div className="relative flex flex-wrap items-start justify-between gap-5">
         <div className="min-w-0">
-          <p className="text-[13px] text-ink-muted">{greeting}</p>
+          <h1 className="text-[13px] font-normal text-ink-muted">{greeting}</h1>
           <div className="mt-1 flex items-baseline gap-3">
-            <p className="label-eyebrow">Total balance</p>
+            <p className="label-eyebrow">{t('dashboard.totalBalance')}</p>
             <button
               type="button"
               onClick={togglePrivacy}
-              aria-pressed={privacyMode}
-              aria-label={privacyMode ? 'Show amounts' : 'Hide amounts'}
+              aria-label={privacyMode ? t('common.showAmounts') : t('common.hideAmounts')}
               // The pseudo-element widens the touch target without moving the layout.
               className="relative rounded-sm p-1 text-ink-faint transition-colors after:absolute after:-inset-2.5 hover:text-gold"
             >
@@ -428,11 +432,11 @@ function BalanceHeader({
           </div>
 
           <p className="mt-3 text-[12.5px] text-ink-muted">
-            Net worth{' '}
+            {t('common.netWorth')}{' '}
             <span className="sensitive font-medium text-ink-secondary">
               {formatMoney(netWorthMinor, { currency, compactDecimals: true })}
             </span>{' '}
-            <span className="text-ink-faint">· after what you owe and are owed</span>
+            <span className="text-ink-faint">{t('dashboard.afterWhatYouOweAndAre')}</span>
           </p>
         </div>
 
@@ -492,7 +496,7 @@ function AccountStrip({
   );
 }
 
-function MonthSummary({
+export function MonthSummary({
   month,
   className,
 }: {
@@ -507,23 +511,24 @@ function MonthSummary({
   };
   className?: string;
 }) {
+  const t = useT();
   const expenseDelta = month.expenseMinor - month.previousExpenseMinor;
 
   return (
     <Card className={className}>
-      <CardHeader eyebrow={month.label} title="This month" />
+      <CardHeader eyebrow={month.label} title={t('common.thisMonth')} />
 
       <dl className="mt-5 flex flex-col gap-4">
         <SummaryRow
           icon={<ArrowDownLeft className="size-4" />}
           tone="positive"
-          label="Income"
+          label={t('common.income')}
           amountMinor={month.incomeMinor}
         />
         <SummaryRow
           icon={<ArrowUpRight className="size-4" />}
           tone="negative"
-          label="Expenses"
+          label={t('common.expenses')}
           amountMinor={month.expenseMinor}
           delta={
             month.previousExpenseMinor > 0 && Math.abs(expenseDelta) > 0
@@ -531,35 +536,39 @@ function MonthSummary({
               : undefined
           }
         />
+      </dl>
 
-        <div className="border-t border-line-faint pt-4">
+      <div className="mt-4 border-t border-line-faint pt-4">
+        {/* A definition list may only hold dt/dd (or one wrapper div per pair), so the
+            net-savings row gets its own list rather than nesting inside the div above. */}
+        <dl>
           <SummaryRow
             icon={<Wallet className="size-4" />}
             tone={month.netSavingsMinor >= 0 ? 'positive' : 'negative'}
-            label="Net savings"
+            label={t('common.netSavings')}
             amountMinor={month.netSavingsMinor}
             emphasise
           />
+        </dl>
 
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="text-[12.5px] text-ink-muted">Savings rate</span>
-            <Badge tone={month.savingsRate >= 20 ? 'positive' : month.savingsRate > 0 ? 'warning' : 'neutral'}>
-              {formatPercent(Math.max(month.savingsRate, 0))}
-            </Badge>
-          </div>
-
-          {/* A savings rate is a proportion, so a bar reads faster than the number. */}
-          <div aria-hidden className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
-            <div
-              className={cn(
-                'h-full rounded-full transition-[width] duration-500 ease-[--ease-out-soft]',
-                month.savingsRate >= 20 ? 'bg-positive' : month.savingsRate > 0 ? 'bg-warning' : 'bg-negative',
-              )}
-              style={{ width: `${Math.min(Math.max(month.savingsRate, 0), 100)}%` }}
-            />
-          </div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-[12.5px] text-ink-muted">{t('common.savingsRate')}</span>
+          <Badge tone={month.savingsRate >= 20 ? 'positive' : month.savingsRate > 0 ? 'warning' : 'neutral'}>
+            {formatPercent(Math.max(month.savingsRate, 0))}
+          </Badge>
         </div>
-      </dl>
+
+        {/* A savings rate is a proportion, so a bar reads faster than the number. */}
+        <div aria-hidden className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
+          <div
+            className={cn(
+              'h-full rounded-full transition-[width] duration-500 ease-[--ease-out-soft]',
+              month.savingsRate >= 20 ? 'bg-positive' : month.savingsRate > 0 ? 'bg-warning' : 'bg-negative',
+            )}
+            style={{ width: `${Math.min(Math.max(month.savingsRate, 0), 100)}%` }}
+          />
+        </div>
+      </div>
     </Card>
   );
 }
@@ -579,6 +588,7 @@ function SummaryRow({
   delta?: { amountMinor: number; invert?: boolean };
   emphasise?: boolean;
 }) {
+  const t = useT();
   const currency = useCurrency();
   // For expenses, spending more is the bad direction — so the tone flips.
   const deltaIsBad = delta ? (delta.invert ? delta.amountMinor > 0 : delta.amountMinor < 0) : false;
@@ -617,7 +627,7 @@ function SummaryRow({
             ) : (
               <TrendingDown aria-hidden className="size-3" />
             )}
-            {formatMoney(Math.abs(delta.amountMinor), { currency, compactDecimals: true })} vs last month
+            {formatMoney(Math.abs(delta.amountMinor), { currency, compactDecimals: true })} {t('dashboard.vsLastMonth')}
           </span>
         )}
       </dd>
@@ -627,18 +637,19 @@ function SummaryRow({
 
 /** §47 — the eight actions that account for nearly all daily use. */
 function QuickActions() {
+  const t = useT();
   const setQuickAddOpen = useUiStore((s) => s.setQuickAddOpen);
 
   const actions = [
-    { label: 'Income', icon: <ArrowDownLeft className="size-4" />, tone: 'positive' as const },
-    { label: 'Expense', icon: <ArrowUpRight className="size-4" />, tone: 'negative' as const },
-    { label: 'Transfer', icon: <ArrowLeftRight className="size-4" />, tone: 'neutral' as const },
-    { label: 'Lend', icon: <HandCoins className="size-4" />, tone: 'neutral' as const },
+    { label: t('common.income'), icon: <ArrowDownLeft className="size-4" />, tone: 'positive' as const },
+    { label: t('dashboard.expense'), icon: <ArrowUpRight className="size-4" />, tone: 'negative' as const },
+    { label: t('quickAdd.type.transfer.label'), icon: <ArrowLeftRight className="size-4" />, tone: 'neutral' as const },
+    { label: t('people.lend'), icon: <HandCoins className="size-4" />, tone: 'neutral' as const },
   ];
 
   return (
     <Card className="@container">
-      <CardHeader eyebrow="Quick actions" title="Record something" />
+      <CardHeader eyebrow={t('dashboard.quickActions')} title={t('dashboard.recordSomething')} />
       {/* Two-by-two only when this card itself is too narrow for four labels. */}
       <div className="mt-4 grid grid-cols-2 gap-2 @min-[13.5rem]:grid-cols-4">
         {actions.map((action) => (
@@ -667,7 +678,7 @@ function QuickActions() {
   );
 }
 
-function PeoplePanel({
+export function PeoplePanel({
   title,
   eyebrow,
   tone,
@@ -728,7 +739,7 @@ function PeoplePanel({
   );
 }
 
-function UpcomingPanel({
+export function UpcomingPanel({
   items,
 }: {
   items: Array<{
@@ -742,18 +753,20 @@ function UpcomingPanel({
     direction: 'in' | 'out';
   }>;
 }) {
+  const t = useT();
+  const relativeDay = useRelativeDay();
   return (
     <Card bare>
       <div className="p-5 sm:p-6">
-        <CardHeader eyebrow="Upcoming" title="Due soon" />
+        <CardHeader eyebrow={t('dashboard.upcoming')} title={t('dashboard.dueSoon')} />
       </div>
 
       {items.length === 0 ? (
         <EmptyState
           compact
           icon={<CalendarClock className="size-5" />}
-          title="Nothing is due"
-          description="Loans with a due date and dated reminders show up here."
+          title={t('dashboard.nothingIsDue')}
+          description={t('dashboard.loansWithADueDateAnd')}
         />
       ) : (
         <ul className="divide-y divide-line-faint border-t border-line-faint">
@@ -774,8 +787,7 @@ function UpcomingPanel({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-medium text-ink">{item.title}</p>
                 <p className="truncate text-[11.5px] text-ink-muted">
-                  {item.isOverdue ? 'Overdue · ' : ''}
-                  {relativeDay(item.dueDate)}
+                  {item.isOverdue ? t('reminders.overdue', { when: relativeDay(item.dueDate) }) : relativeDay(item.dueDate)}
                   {item.subtitle ? ` · ${item.subtitle}` : ''}
                 </p>
               </div>
@@ -800,14 +812,15 @@ function InsightsPanel({
 }: {
   insights: Array<{ id: string; text: string; tone: string; icon: string }>;
 }) {
+  const t = useT();
   if (insights.length === 0) return null;
 
   return (
     <Card bare>
       <div className="p-5 sm:p-6">
         <CardHeader
-          eyebrow="Insights"
-          title="What changed"
+          eyebrow={t('nav.insights')}
+          title={t('dashboard.whatChanged')}
           action={
             <span aria-hidden className="flex size-8 items-center justify-center rounded-md bg-gold-soft text-gold-strong">
               <Sparkles className="size-4" />
@@ -830,7 +843,7 @@ function InsightsPanel({
             >
               <Icon name={insight.icon} className="size-3.5" />
             </span>
-            <p className="sensitive text-[13px] leading-relaxed text-ink-secondary">{insight.text}</p>
+            <p className="sensitive text-[13px] leading-relaxed text-ink-secondary">{t.server(insight.text)}</p>
           </li>
         ))}
       </ul>

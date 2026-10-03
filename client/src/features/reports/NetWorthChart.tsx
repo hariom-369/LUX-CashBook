@@ -3,6 +3,8 @@ import { formatDate, formatMoney, formatMoneyCompact } from '@khata/shared';
 import { useCurrency } from '../../hooks/useCurrency';
 import { useChartColors } from '../../hooks/useChartColors';
 import { useUiStore } from '../../stores/ui.store';
+import { ChartTextAlternative } from '../../components/ui/ChartTextAlternative';
+import { useT } from '../../i18n';
 
 /**
  * Net worth over time (§31, §28).
@@ -13,6 +15,7 @@ import { useUiStore } from '../../stores/ui.store';
  * elsewhere (net worth is the one figure the whole reports page adds up to).
  */
 export function NetWorthChart({ history }: { history: Array<{ date: string; netWorthMinor: number }> }) {
+  const t = useT();
   const currency = useCurrency();
   const privacyMode = useUiStore((s) => s.privacyMode);
   const colors = useChartColors();
@@ -21,7 +24,9 @@ export function NetWorthChart({ history }: { history: Array<{ date: string; netW
   if (data.length === 0) return null;
 
   return (
-    <div className="h-[220px] w-full px-2 pb-5 pt-3 sm:h-[260px] sm:px-4">
+    <>
+    {/* The picture is hidden from assistive tech; the table below carries the same points. */}
+    <div aria-hidden className="h-[220px] w-full px-2 pb-5 pt-3 sm:h-[260px] sm:px-4">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
@@ -59,6 +64,15 @@ export function NetWorthChart({ history }: { history: Array<{ date: string; netW
         </AreaChart>
       </ResponsiveContainer>
     </div>
+    <ChartTextAlternative
+      caption={t('reports.netWorthTrend')}
+      columns={[t('common.date'), t('common.netWorth')]}
+      rows={history.map((point) => [
+        formatDate(point.date, 'MMM yyyy'),
+        privacyMode ? '••••' : formatMoney(point.netWorthMinor, { currency, compactDecimals: true }),
+      ])}
+    />
+    </>
   );
 }
 

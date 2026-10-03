@@ -19,3 +19,9 @@ if (!window.matchMedia) {
     dispatchEvent: () => false,
   }) as unknown as MediaQueryList;
 }
+
+// jsdom has no scrollIntoView either; the command palette (and any other
+// keyboard-navigable list) calls it to keep the highlighted row in view.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}

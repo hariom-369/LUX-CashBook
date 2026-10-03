@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
-import { PERSON_RELATIONSHIPS, PERSON_RELATIONSHIP_LABELS, type PersonDto } from '@khata/shared';
+import { INDIAN_STATES, PERSON_RELATIONSHIPS, PERSON_RELATIONSHIP_LABELS, type PersonDto } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { ConfirmDialog, Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
@@ -9,6 +9,10 @@ import { MoneyInput } from '../../components/ui/MoneyInput';
 import { useToast } from '../../components/ui/Toast';
 import { api, ApiRequestError, errorMessage } from '../../lib/api';
 import { useInvalidateLedger } from '../../lib/queries';
+import { useAuthStore } from '../../stores/auth.store';
+import { useOfflinePatch } from '../../hooks/useOfflinePatch';
+import { useT } from '../../i18n';
+import { useOfflineCreate } from '../../hooks/useOfflineCreate';
 
 /**
  * Add or edit a person (§12).
@@ -30,14 +34,20 @@ export function PersonFormSheet({
   /** The relationship a new person starts with — e.g. 'customer' from the Customers page. */
   defaultRelationship?: (typeof PERSON_RELATIONSHIPS)[number];
 }) {
+  const t = useT();
   const toast = useToast();
+  const createOrQueue = useOfflineCreate();
+  const patchOrQueue = useOfflinePatch();
   const invalidate = useInvalidateLedger();
   const isEdit = Boolean(person);
+  const mode = useAuthStore((s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.mode ?? 'personal');
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [relationship, setRelationship] = useState<(typeof PERSON_RELATIONSHIPS)[number]>('friend');
+  const [gstin, setGstin] = useState('');
+  const [state, setState] = useState('');
   const [notes, setNotes] = useState('');
   const [openingDirection, setOpeningDirection] = useState<'receivable' | 'payable'>('receivable');
   const [openingAmount, setOpeningAmount] = useState<number | null>(0);
@@ -57,6 +67,8 @@ export function PersonFormSheet({
       setPhone(person.phone ?? '');
       setEmail(person.email ?? '');
       setRelationship(person.relationship);
+      setGstin(person.gstin ?? '');
+      setState(person.state ?? '');
       setNotes(person.notes ?? '');
       setOpeningDirection(person.openingBalanceMinor < 0 ? 'payable' : 'receivable');
       setOpeningAmount(Math.abs(person.openingBalanceMinor));
@@ -65,6 +77,8 @@ export function PersonFormSheet({
       setPhone('');
       setEmail('');
       setRelationship(defaultRelationship);
+      setGstin('');
+      setState('');
       setNotes('');
       setOpeningDirection('receivable');
       setOpeningAmount(0);
@@ -84,17 +98,18 @@ export function PersonFormSheet({
       phone: phone.trim() || undefined,
       email: email.trim() || undefined,
       relationship,
+      gstin: gstin.trim() || undefined,
+      state: state || undefined,
       notes: notes.trim() || undefined,
       openingBalanceMinor: signed,
     };
 
     try {
       if (person) {
-        await api.patch(`/people/${person.id}`, { ...payload, rev: person.rev });
-        toast.success('Person updated');
+        await patchOrQueue(`/people/${person.id}`, { ...payload, rev: person.rev });
+        toast.success(t('people.personUpdated'));
       } else {
-        await api.post('/people', payload);
-        toast.success('Person added', `${payload.name} is in your ledger.`);
+        if (await createOrQueue('/people', payload)) toast.success(t('people.personAdded'), t('people.isInYourLedger', { name: payload.name }));
       }
       invalidate();
       onClose();
@@ -114,11 +129,11 @@ export function PersonFormSheet({
     try {
       await api.delete(`/people/${person.id}`);
       invalidate();
-      toast.success('Person removed');
+      toast.success(t('people.personRemoved'));
       onClose();
     } catch (err) {
       // The API refuses while a balance is outstanding, and says so.
-      toast.error('Could not remove this person', errorMessage(err));
+      toast.error(t('people.couldNotRemoveThisPerson'), errorMessage(err));
     } finally {
       setBusy(false);
       setConfirmDelete(false);
@@ -130,7 +145,7 @@ export function PersonFormSheet({
       <Sheet
         open={open}
         onClose={onClose}
-        title={isEdit ? 'Edit person' : 'Add person'}
+        title={isEdit ? t('people.editPerson') : t('people.addPerson')}
         size="md"
         busy={busy}
         footer={
@@ -142,15 +157,15 @@ export function PersonFormSheet({
                 leftIcon={<Trash2 className="size-4" />}
                 onClick={() => setConfirmDelete(true)}
               >
-                Remove
+                {t('common.remove')}
               </Button>
             )}
             <div className="flex-1" />
             <Button variant="secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="gold" loading={busy} disabled={!name.trim()} onClick={() => void save()}>
-              {isEdit ? 'Save changes' : 'Add person'}
+              {isEdit ? t('common.saveChanges') : t('people.addPerson')}
             </Button>
           </div>
         }
@@ -171,21 +186,21 @@ export function PersonFormSheet({
             </div>
           )}
 
-          <Field label="Name" error={fieldErrors.name} required>
+          <Field label={t('common.name')} error={fieldErrors.name} required>
             {({ id }) => (
               <Input
                 id={id}
                 autoFocus
                 value={name}
                 maxLength={80}
-                placeholder="Rahul Sharma"
+                placeholder={t('people.rahulSharma')}
                 onChange={(event) => setName(event.target.value)}
               />
             )}
           </Field>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Phone" error={fieldErrors.phone} hint="Optional">
+            <Field label={t('common.phone')} error={fieldErrors.phone} hint={t('common.optional')}>
               {({ id }) => (
                 <Input
                   id={id}
@@ -198,7 +213,7 @@ export function PersonFormSheet({
               )}
             </Field>
 
-            <Field label="Relationship">
+            <Field label={t('people.relationship')}>
               {({ id }) => (
                 <Select
                   id={id}
@@ -209,7 +224,7 @@ export function PersonFormSheet({
                 >
                   {PERSON_RELATIONSHIPS.map((option) => (
                     <option key={option} value={option}>
-                      {PERSON_RELATIONSHIP_LABELS[option]}
+                      {t.label('relationship', option, PERSON_RELATIONSHIP_LABELS[option])}
                     </option>
                   ))}
                 </Select>
@@ -217,7 +232,7 @@ export function PersonFormSheet({
             </Field>
           </div>
 
-          <Field label="Email" error={fieldErrors.email} hint="Optional">
+          <Field label={t('common.email')} error={fieldErrors.email} hint={t('common.optional')}>
             {({ id }) => (
               <Input
                 id={id}
@@ -230,19 +245,45 @@ export function PersonFormSheet({
             )}
           </Field>
 
+          {mode === 'business' && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="GSTIN" hint={t('common.optional')}>
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    value={gstin}
+                    maxLength={15}
+                    placeholder="29ABCDE1234F1Z5"
+                    onChange={(event) => setGstin(event.target.value.toUpperCase())}
+                  />
+                )}
+              </Field>
+              <Field label={t('common.state')} hint={t('common.forPlaceOfSupply')}>
+                {({ id }) => (
+                  <Select id={id} value={state} onChange={(event) => setState(event.target.value)}>
+                    <option value="">{t('common.notSet')}</option>
+                    {INDIAN_STATES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+            </div>
+          )}
+
           <div className="rounded-lg border border-line p-4">
-            <p className="text-[13px] font-medium text-ink">Existing balance</p>
+            <p className="text-[13px] font-medium text-ink">{t('people.existingBalance')}</p>
             <p className="mt-1 text-[11.5px] leading-relaxed text-ink-muted">
-              If something is already owed between you before you started using Khata,
-              record it here. It becomes the starting point of their ledger rather
-              than a transaction you never made.
+              {t('people.ifSomethingIsAlreadyOwedBetween')}
             </p>
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               {(
                 [
-                  ['receivable', 'They owe me'],
-                  ['payable', 'I owe them'],
+                  ['receivable', t('people.theyOweMe')],
+                  ['payable', t('people.iOweThem')],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -267,7 +308,7 @@ export function PersonFormSheet({
             </div>
           </div>
 
-          <Field label="Notes" hint="Optional">
+          <Field label={t('common.notes')} hint={t('common.optional')}>
             {({ id }) => (
               <Textarea
                 id={id}
@@ -285,9 +326,9 @@ export function PersonFormSheet({
         open={confirmDelete}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={remove}
-        title={`Remove ${person?.name ?? 'this person'}?`}
-        description="Their transactions stay in your ledger. This is only possible once nothing is outstanding between you."
-        confirmLabel="Remove"
+        title={t('accounts.removeNamed', { name: person?.name ?? t('common.thisPerson') })}
+        description={t('people.theirTransactionsStayInYourLedger')}
+        confirmLabel={t('common.remove')}
         tone="danger"
         busy={busy}
       />

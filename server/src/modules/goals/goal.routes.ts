@@ -88,6 +88,20 @@ goalRouter.post(
   }),
 );
 
+goalRouter.post(
+  '/:id/transfer-contribution',
+  writeLimiter,
+  validate({
+    params: idParamSchema,
+    body: z.object({ fromAccountId: objectIdSchema, amountMinor: positiveAmountSchema, date: dateSchema.optional(), note: text(200) }),
+  }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const scope = scopeOf(req);
+    const goal = await service.contributeToLinkedGoal(scope, param(req, 'id'), req.body, auditContext(req));
+    created(res, service.toGoalDto(goal));
+  }),
+);
+
 goalRouter.delete(
   '/:id/contributions/:contributionId',
   writeLimiter,

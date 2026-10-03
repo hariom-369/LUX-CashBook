@@ -50,6 +50,15 @@ pdfRouter.get(
 );
 
 pdfRouter.get(
+  '/invoices/:id',
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const buffer = await service.generateInvoicePdf(scopeOf(req), param(req, 'id'));
+    sendPdf(res, buffer, `invoice-${Date.now()}.pdf`);
+  }),
+);
+
+pdfRouter.get(
   '/cash-book',
   validate({ query: rangeQuery.extend({ view: z.enum(['single', 'double', 'triple']).default('double') }) }),
   asyncHandler(async (req: Request, res: Response) => {

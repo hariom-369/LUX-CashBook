@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { Button } from './Button';
 import { ApiRequestError } from '../../lib/api';
+import { useT } from '../../i18n';
 
 /**
  * Loading, empty and error states.
@@ -17,10 +18,11 @@ export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden className={cn('skeleton h-4 w-full', className)} />;
 }
 
-export function LoadingState({ label = 'Loading', rows = 3 }: { label?: string; rows?: number }) {
+export function LoadingState({ label, rows = 3 }: { label?: string; rows?: number }) {
+  const t = useT();
   return (
     <div role="status" aria-live="polite" aria-busy className="flex flex-col gap-3 py-2">
-      <span className="sr-only">{label}…</span>
+      <span className="sr-only">{label ? `${label}…` : t('common.loading')}</span>
       {Array.from({ length: rows }).map((_, index) => (
         <div key={index} className="flex items-center gap-3">
           <Skeleton className="size-10 shrink-0 rounded-md" />
@@ -44,6 +46,8 @@ export interface EmptyStateProps {
   secondaryAction?: ReactNode;
   className?: string;
   compact?: boolean;
+  /** Heading level for the title. `h2` suits a section; a page that is only this state (404) uses `h1`. */
+  titleAs?: 'h1' | 'h2';
 }
 
 export function EmptyState({
@@ -54,6 +58,7 @@ export function EmptyState({
   secondaryAction,
   className,
   compact = false,
+  titleAs: Title = 'h2',
 }: EmptyStateProps) {
   return (
     <div
@@ -71,7 +76,7 @@ export function EmptyState({
           {icon}
         </div>
       )}
-      <h3 className="text-balance text-[15px] font-semibold text-ink">{title}</h3>
+      <Title className="text-balance text-[15px] font-semibold text-ink">{title}</Title>
       {description && (
         <p className="text-balance mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">
           {description}
@@ -93,16 +98,19 @@ export interface ErrorStateProps {
   onRetry?: () => void;
   className?: string;
   compact?: boolean;
+  /** `h1` when this state replaces the whole page (a detail page that failed to load). */
+  titleAs?: 'h1' | 'h2';
 }
 
-export function ErrorState({ error, title, onRetry, className, compact }: ErrorStateProps) {
+export function ErrorState({ error, title, onRetry, className, compact, titleAs: Title = 'h2' }: ErrorStateProps) {
+  const t = useT();
   const offline = error instanceof ApiRequestError && error.isOffline;
   const message =
     error instanceof ApiRequestError
       ? error.message
       : error instanceof Error && error.message
         ? error.message
-        : 'Something went wrong while loading this.';
+        : t('ui.somethingWentWrongWhileLoadingThis');
 
   return (
     <div
@@ -125,13 +133,13 @@ export function ErrorState({ error, title, onRetry, className, compact }: ErrorS
         {offline ? <WifiOff className="size-5" /> : <AlertTriangle className="size-5" />}
       </div>
 
-      <h3 className="text-[15px] font-semibold text-ink">
-        {title ?? (offline ? "You're offline" : 'That did not load')}
-      </h3>
+      <Title className="text-[15px] font-semibold text-ink">
+        {title ?? (offline ? t('app.youReOffline') : t('ui.thatDidNotLoad'))}
+      </Title>
       <p className="text-balance mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">{message}</p>
 
       {error instanceof ApiRequestError && error.requestId && !offline && (
-        <p className="mt-3 font-mono text-[11px] text-ink-faint">Reference: {error.requestId}</p>
+        <p className="mt-3 font-mono text-[11px] text-ink-faint">{t('ui.reference')} {error.requestId}</p>
       )}
 
       {onRetry && (
@@ -142,7 +150,7 @@ export function ErrorState({ error, title, onRetry, className, compact }: ErrorS
           leftIcon={<RefreshCw className="size-3.5" />}
           onClick={onRetry}
         >
-          Try again
+          {t('common.retry')}
         </Button>
       )}
     </div>

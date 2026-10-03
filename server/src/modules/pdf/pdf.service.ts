@@ -1,10 +1,11 @@
 import PDFDocument from 'pdfkit';
 import { formatDate, formatMoney } from '@khata/shared';
-import { User, Workspace } from '../../models/index.js';
+import { Person, User, Workspace } from '../../models/index.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { getAccountLedger } from '../accounts/account.service.js';
 import { getPersonLedger } from '../people/person.service.js';
 import { getCashBook, type CashBookView } from '../cashbook/cashbook.service.js';
+import { getInvoice } from '../invoices/invoice.service.js';
 
 /**
  * PDF statements (§35).
@@ -64,15 +65,27 @@ function drawTableHeader(doc: PDFKit.PDFDocument, columns: Array<{ label: string
   doc.moveDown(0.4);
 }
 
-async function loadIdentity(scope: RequestScope): Promise<{ userName: string; workspaceName: string; currency: string }> {
+async function loadIdentity(scope: RequestScope): Promise<{
+  userName: string;
+  workspaceName: string;
+  currency: string;
+  businessName?: string;
+  businessAddress?: string;
+  gstin?: string;
+  state?: string;
+}> {
   const [user, workspace] = await Promise.all([
     User.findById(scope.userId).select('name').lean(),
-    Workspace.findById(scope.workspaceId).select('name currency').lean(),
+    Workspace.findById(scope.workspaceId).select('name currency businessName businessAddress gstin state').lean(),
   ]);
   return {
     userName: user?.name ?? 'Khata User',
     workspaceName: workspace?.name ?? 'Workspace',
     currency: workspace?.currency ?? scope.currency,
+    businessName: workspace?.businessName,
+    businessAddress: workspace?.businessAddress,
+    gstin: workspace?.gstin,
+    state: workspace?.state,
   };
 }
 
@@ -232,6 +245,83 @@ export async function generateCashBookPdf(
     doc.moveDown(0.5);
     doc.fontSize(10).font('Helvetica-Bold').fillColor(INK).text('Closing Balance', columns[0]!.x, doc.y, { continued: true, width: 300 });
     doc.text(formatMoney(book.closing.totalMinor, { currency: identity.currency }), columns[4]!.x, doc.y, { width: columns[4]!.width, align: 'right' });
+
+    drawFooter(doc);
+  });
+}
+
+/** An invoice (§Phase 11), formatted to hand to a customer. */
+export async function generateInvoicePdf(scope: RequestScope, invoiceId: string): Promise<Buffer> {
+  const invoice = await getInvoice(scope, invoiceId);
+  const [identity, person] = await Promise.all([loadIdentity(scope), Person.findById(invoice.personId).select('name email phone gstin').lean()]);
+  const currency = identity.currency;
+
+  return renderPdf((doc) => {
+    drawMasthead(doc, {
+      title: `Invoice ${invoice.number}`,
+      subtitle: `Issued ${formatDate(invoice.issueDate)}  ·  Due ${formatDate(invoice.dueDate)}`,
+      userName: identity.userName,
+      workspaceName: identity.workspaceName,
+    });
+
+    if (identity.businessName || identity.gstin) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(INK).text(identity.businessName ?? identity.workspaceName);
+      if (identity.businessAddress) doc.fontSize(8.5).font('Helvetica').fillColor(MUTED).text(identity.businessAddress);
+      if (identity.gstin) doc.fontSize(8.5).font('Helvetica').fillColor(MUTED).text(`GSTIN: ${identity.gstin}`);
+      doc.moveDown(0.6);
+    }
+
+    doc.fontSize(9).fillColor(MUTED).text('Billed to', { continued: false });
+    doc.fontSize(11).font('Helvetica-Bold').fillColor(INK).text(person?.name ?? 'Customer');
+    if (person?.email) doc.fontSize(9).font('Helvetica').fillColor(MUTED).text(person.email);
+    if (person?.phone) doc.fontSize(9).font('Helvetica').fillColor(MUTED).text(person.phone);
+    if (person?.gstin) doc.fontSize(9).font('Helvetica').fillColor(MUTED).text(`GSTIN: ${person.gstin}`);
+    if (invoice.placeOfSupplyState) doc.fontSize(8.5).font('Helvetica-Oblique').fillColor(MUTED).text(`Place of supply: ${invoice.placeOfSupplyState}`);
+    doc.moveDown(1);
+
+    const columns = [
+      { label: 'Description', x: doc.page.margins.left, width: 190 },
+      { label: 'HSN/SAC', x: doc.page.margins.left + 195, width: 65 },
+      { label: 'Qty', x: doc.page.margins.left + 265, width: 50, align: 'right' as const },
+      { label: 'Rate', x: doc.page.margins.left + 320, width: 100, align: 'right' as const },
+      { label: 'Amount', x: doc.page.margins.left + 425, width: 110, align: 'right' as const },
+    ];
+    drawTableHeader(doc, columns);
+
+    for (const item of invoice.items) {
+      ensureSpace(doc, () => drawTableHeader(doc, columns));
+      const y = doc.y;
+      doc.fontSize(9).font('Helvetica').fillColor(INK);
+      doc.text(truncate(item.description, 36), columns[0]!.x, y, { width: columns[0]!.width });
+      doc.text(item.hsnCode ?? '—', columns[1]!.x, y, { width: columns[1]!.width });
+      doc.text(String(item.quantity), columns[2]!.x, y, { width: columns[2]!.width, align: 'right' });
+      doc.text(formatMoney(item.rateMinor, { currency, symbol: false }), columns[3]!.x, y, { width: columns[3]!.width, align: 'right' });
+      doc.text(formatMoney(item.amountMinor, { currency, symbol: false }), columns[4]!.x, y, { width: columns[4]!.width, align: 'right' });
+      doc.moveDown(0.6);
+    }
+
+    doc.moveDown(0.4);
+    doc.moveTo(doc.page.margins.left, doc.y).lineTo(doc.page.width - doc.page.margins.right, doc.y).strokeColor(LINE).stroke();
+    doc.moveDown(0.5);
+
+    const totalsRow = (label: string, amountMinor: number, bold = false) => {
+      doc.fontSize(9.5).font(bold ? 'Helvetica-Bold' : 'Helvetica').fillColor(bold ? INK : MUTED);
+      doc.text(label, columns[3]!.x - 80, doc.y, { width: 180, align: 'right' });
+      doc.text(formatMoney(amountMinor, { currency }), columns[4]!.x, doc.y - 12, { width: columns[4]!.width, align: 'right' });
+    };
+    totalsRow('Subtotal', invoice.subtotalMinor);
+    if (invoice.discountMinor > 0) totalsRow('Discount', -invoice.discountMinor);
+    if (invoice.gst && invoice.gst.igstMinor > 0) totalsRow(`IGST (${invoice.taxPercent}%)`, invoice.gst.igstMinor);
+    if (invoice.gst && invoice.gst.cgstMinor > 0) totalsRow(`CGST (${invoice.taxPercent / 2}%)`, invoice.gst.cgstMinor);
+    if (invoice.gst && invoice.gst.sgstMinor > 0) totalsRow(`SGST (${invoice.taxPercent / 2}%)`, invoice.gst.sgstMinor);
+    if (!invoice.gst && invoice.taxPercent > 0) totalsRow(`Tax (${invoice.taxPercent}%)`, invoice.taxMinor);
+    doc.moveDown(0.3);
+    totalsRow('Total', invoice.totalMinor, true);
+
+    if (invoice.notes) {
+      doc.moveDown(1.2);
+      doc.fontSize(9).font('Helvetica-Oblique').fillColor(MUTED).text(invoice.notes, { width: doc.page.width - doc.page.margins.left - doc.page.margins.right });
+    }
 
     drawFooter(doc);
   });

@@ -2,7 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { API_CACHE } from './cacheNames';
 
 /**
- * The offline outbox (§39).
+ * The offline outbox (§39, extended §Phase 15).
  *
  * This is the half of offline support the service worker's HTTP cache cannot
  * provide: a place for a *write* to live between "the user pressed Save while
@@ -12,17 +12,18 @@ import { API_CACHE } from './cacheNames';
  * POST (invariant I9 / §51) — so replaying the outbox after a flaky reconnect can
  * never create the same transaction twice.
  *
- * Scoped to one small, well-defined case rather than a generic "queue any
- * mutation" system: quick-add transactions, which is the action §39 explicitly
- * calls out ("Users should be able to... add transactions... while offline") and
- * the one where losing the user's input is worst. Edits and deletes made offline
- * are out of scope for this build — see docs/PHASE5_NOTES.md.
+ * Originally scoped to one case (quick-add transaction creates — §39's literal
+ * ask, and the one where losing the user's input is worst). §Phase 15 widened
+ * `method` so any mutation can queue — `lib/offlineMutation.ts#submitOrQueue` is
+ * the generic helper a call site adopts; adoption is still partial (see
+ * `docs/ROADMAP_PHASE15_NOTES.md`), but the queue itself no longer refuses a
+ * PATCH/PUT/DELETE the way it did before this phase.
  */
 
 export interface OutboxItem {
   id: string;
   createdAt: string;
-  method: 'POST';
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
   body: Record<string, unknown>;
   workspaceId: string;
@@ -33,9 +34,29 @@ export interface OutboxItem {
    * the current user's, which is what the app always did.
    */
   userId?: string;
+  /**
+   * Sent as the `Idempotency-Key` header on every attempt (§Phase 15 follow-up), so the
+   * server applies a queued create exactly once even if an earlier attempt reached it and
+   * only the response was lost. Generated before the *first* attempt and kept for life.
+   */
+  idempotencyKey?: string;
   /** Set once a sync attempt fails, so the UI can show what went wrong. */
   lastError?: string;
   attempts: number;
+  /**
+   * The revision this edit was based on (§Phase 15) — present only for a
+   * PATCH that carries optimistic concurrency. Lets a replay tell "the server
+   * rejected this because someone else changed it first" (a real conflict,
+   * surfaced to the user) apart from any other 4xx (a genuine validation
+   * failure, discarded).
+   */
+  rev?: number;
+  /**
+   * Set once a replay discovers the item's `rev` is stale — the queued edit is
+   * kept, never silently dropped or silently overwritten; a conflict only
+   * clears once the user explicitly resolves it (`ConflictDialog`).
+   */
+  conflict?: { serverVersion: unknown; detectedAt: string };
 }
 
 interface KhataDb extends DBSchema {
@@ -105,6 +126,11 @@ export async function listOutboxFor(userId: string): Promise<OutboxItem[]> {
 
 export async function outboxCountFor(userId: string): Promise<number> {
   return (await listOutboxFor(userId)).length;
+}
+
+/** Queued items of `userId`'s that a replay has found conflict with the server's current version. */
+export async function listConflictsFor(userId: string): Promise<OutboxItem[]> {
+  return (await listOutboxFor(userId)).filter((item) => item.conflict);
 }
 
 /**

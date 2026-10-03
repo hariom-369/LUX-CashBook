@@ -80,4 +80,48 @@ function isCacheableRead(pathname: string): boolean {
   return readable.some((prefix) => pathname.startsWith(prefix));
 }
 
+/**
+ * Browser push (§41, Phase 3 decision 9).
+ *
+ * The payload is whatever `lib/push.ts#sendPush` sent — always `{ title, body,
+ * link? }`, never anything the server wouldn't also put in the in-app
+ * notification, so there is nothing sensitive to leak through a system
+ * notification tray.
+ */
+self.addEventListener('push', (event) => {
+  let payload: { title?: string; body?: string; link?: string } = {};
+  try {
+    payload = event.data?.json() ?? {};
+  } catch {
+    payload = { body: event.data?.text() };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title ?? 'Khata', {
+      body: payload.body ?? '',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { link: payload.link ?? '/' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = (event.notification.data as { link?: string } | undefined)?.link ?? '/';
+
+  event.waitUntil(
+    (async () => {
+      const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const existing = clientsList.find((c) => 'focus' in c);
+      if (existing) {
+        await (existing as WindowClient).focus();
+        existing.postMessage({ type: 'NAVIGATE', link });
+        return;
+      }
+      await self.clients.openWindow(link);
+    })(),
+  );
+});
+
 export {};

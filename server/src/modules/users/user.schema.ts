@@ -33,6 +33,8 @@ export const updatePreferencesSchema = z
     accountingView: z.boolean().optional(),
     privacyModeDefault: z.boolean().optional(),
     numberFormat: z.enum(['indian', 'western']).optional(),
+    aiAssistantEnabled: z.boolean().optional(),
+    homeScreen: z.enum(['dashboard', 'daily']).optional(),
     notifications: z
       .object({
         inApp: z.boolean().optional(),

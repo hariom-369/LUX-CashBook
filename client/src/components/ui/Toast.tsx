@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, Info, TriangleAlert, Undo2, X, XCircle } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { useT } from '../../i18n';
 
 export type ToastTone = 'success' | 'error' | 'warning' | 'info';
 
@@ -46,6 +47,7 @@ const TONE_STYLES: Record<ToastTone, { icon: ReactNode; accent: string }> = {
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const tr = useT();
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
@@ -104,10 +106,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           description,
           tone: 'info',
           duration: 9000,
-          action: { label: 'Undo', onClick: onUndo },
+          action: { label: tr('settings.undo'), onClick: onUndo },
         }),
     }),
-    [toast, dismiss],
+    [toast, dismiss, tr],
   );
 
   return (
@@ -134,11 +136,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss: () => void }) {
+  const tr = useT();
   const tone = TONE_STYLES[toast.tone];
 
   return (
     <div
-      role="status"
+      // No role of its own: the stack above is the one live region. A `status` inside an `aria-live`
+      // container is read twice by some screen readers.
       className={cn(
         'animate-rise-in pointer-events-auto flex w-full max-w-sm items-start gap-3',
         'rounded-lg border border-line bg-raised p-3.5 shadow-lg',
@@ -164,7 +168,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss: () => 
           }}
           className="flex shrink-0 items-center gap-1 rounded-sm px-2 py-1 text-[12px] font-semibold text-gold transition-colors hover:bg-gold-soft"
         >
-          {toast.action.label === 'Undo' && <Undo2 aria-hidden className="size-3.5" />}
+          {toast.action.label === tr('settings.undo') && <Undo2 aria-hidden className="size-3.5" />}
           {toast.action.label}
         </button>
       )}
@@ -172,7 +176,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastRecord; onDismiss: () => 
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Dismiss"
+        aria-label={tr('common.dismiss')}
         className="shrink-0 rounded-sm p-1 text-ink-faint transition-colors hover:bg-sunken hover:text-ink"
       >
         <X aria-hidden className="size-3.5" />

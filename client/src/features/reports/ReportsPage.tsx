@@ -9,21 +9,34 @@ import { Badge } from '../../components/ui/Badge';
 import { Dot } from '../../components/ui/Badge';
 import { Icon } from '../../components/ui/Icon';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
-import { useBorrowLendReport, useCategoryReport, useMonthlyComparison, useNetWorth } from '../../lib/queries3';
+import { useBorrowLendReport, useCategoryReport, useForecast, useMonthlyComparison, useNetWorth } from '../../lib/queries3';
+import { useProfitAndLoss, useAgeingReport, useGstSummary } from '../../lib/queries4';
 import { useCurrency } from '../../hooks/useCurrency';
+import { useAuthStore } from '../../stores/auth.store';
 import { NetWorthChart } from './NetWorthChart';
 import { MonthlyComparisonChart } from './MonthlyComparisonChart';
+import { ForecastChart } from './ForecastChart';
 import { ShareButton } from '../../components/ShareButton';
+import { useT, msg, type MessageRef } from '../../i18n';
+import { ScrollRegion } from '../../components/ui/ScrollRegion';
+import { ReportBuilderTab } from './ReportBuilderTab';
+import { ReimbursementsTab } from './ReimbursementsTab';
 
-type Tab = 'overview' | 'categories' | 'net-worth' | 'borrow-lend' | 'monthly' | 'annual';
+type Tab = 'overview' | 'categories' | 'net-worth' | 'forecast' | 'borrow-lend' | 'monthly' | 'annual' | 'profit-loss' | 'ageing' | 'gst' | 'builder' | 'reimbursements';
 
-const TABS: Array<{ id: Tab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'categories', label: 'By Category' },
-  { id: 'net-worth', label: 'Net Worth' },
-  { id: 'monthly', label: 'Monthly Comparison' },
-  { id: 'annual', label: 'Annual Summary' },
-  { id: 'borrow-lend', label: 'Borrow & Lend' },
+const TABS: Array<{ id: Tab; label: MessageRef; businessOnly?: boolean }> = [
+  { id: 'overview', label: msg('reports.overview') },
+  { id: 'categories', label: msg('reports.byCategory') },
+  { id: 'net-worth', label: msg('reports.netWorth') },
+  { id: 'forecast', label: msg('reports.tabCashFlowForecast') },
+  { id: 'monthly', label: msg('reports.monthlyComparison') },
+  { id: 'annual', label: msg('reports.annualSummary') },
+  { id: 'borrow-lend', label: msg('reports.borrowLend') },
+  { id: 'reimbursements', label: msg('reports.tabReimbursements') },
+  { id: 'builder', label: msg('reports.tabBuilder') },
+  { id: 'profit-loss', label: msg('reports.profitLoss'), businessOnly: true },
+  { id: 'ageing', label: msg('reports.ageing'), businessOnly: true },
+  { id: 'gst', label: msg('reports.tabGstSummary'), businessOnly: true },
 ];
 
 /**
@@ -36,8 +49,11 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * already have their own dedicated, more detailed pages.
  */
 export function ReportsPage() {
+  const tr = useT();
   const [params, setParams] = useSearchParams();
   const tab = (params.get('tab') as Tab) ?? 'overview';
+  const mode = useAuthStore((s) => s.workspaces.find((w) => w.id === s.activeWorkspaceId)?.mode ?? 'personal');
+  const visibleTabs = TABS.filter((t) => !t.businessOnly || mode === 'business');
 
   function setTab(next: Tab) {
     setParams((current) => {
@@ -51,13 +67,13 @@ export function ReportsPage() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">Reports</h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">Statements built from your actual ledger, always current.</p>
+          <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{tr('nav.reports')}</h1>
+          <p className="mt-0.5 text-[13px] text-ink-muted">{tr('reports.statementsBuiltFromYourActualLedger')}</p>
         </div>
       </header>
 
       <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -68,7 +84,7 @@ export function ReportsPage() {
               tab === t.id ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken hover:text-ink',
             )}
           >
-            {t.label}
+            {tr(t.label.key)}
           </button>
         ))}
       </div>
@@ -76,9 +92,15 @@ export function ReportsPage() {
       {tab === 'overview' && <OverviewTab />}
       {tab === 'categories' && <CategoryTab />}
       {tab === 'net-worth' && <NetWorthTab />}
+      {tab === 'forecast' && <ForecastTab />}
       {tab === 'monthly' && <MonthlyTab />}
       {tab === 'annual' && <AnnualSummaryTab />}
       {tab === 'borrow-lend' && <BorrowLendTab />}
+      {tab === 'reimbursements' && <ReimbursementsTab />}
+      {tab === 'builder' && <ReportBuilderTab />}
+      {tab === 'profit-loss' && mode === 'business' && <ProfitAndLossTab />}
+      {tab === 'ageing' && mode === 'business' && <AgeingTab />}
+      {tab === 'gst' && mode === 'business' && <GstSummaryTab />}
     </div>
   );
 }
@@ -93,6 +115,7 @@ type CategoryRow = {
 };
 
 function AnnualSummaryTab() {
+  const tr = useT();
   const [year, setYear] = useState<'this_year' | 'last_year'>('this_year');
   const currency = useCurrency();
 
@@ -110,13 +133,13 @@ function AnnualSummaryTab() {
   const totalExpenseMinor = expenseRows.reduce((sum, row) => sum + row.amountMinor, 0);
   const netSavingsMinor = totalIncomeMinor - totalExpenseMinor;
   const savingsRate = totalIncomeMinor > 0 ? (netSavingsMinor / totalIncomeMinor) * 100 : 0;
-  const yearLabel = year === 'this_year' ? 'This year' : 'Last year';
+  const yearLabel = year === 'this_year' ? tr('reports.thisYear') : tr('reports.lastYear');
 
   const shareText = [
-    `${yearLabel} summary`,
-    `Income: ${formatMoney(totalIncomeMinor, { currency, compactDecimals: true })}`,
-    `Expenses: ${formatMoney(totalExpenseMinor, { currency, compactDecimals: true })}`,
-    `Net savings: ${formatMoney(netSavingsMinor, { currency, compactDecimals: true })} (${formatPercent(Math.max(savingsRate, 0))} savings rate)`,
+    tr('reports.yearSummary', { year: yearLabel }),
+    tr('reports.incomeLine', { amount: formatMoney(totalIncomeMinor, { currency, compactDecimals: true }) }),
+    tr('reports.expensesLine', { amount: formatMoney(totalExpenseMinor, { currency, compactDecimals: true }) }),
+    tr('reports.netSavingsLine', { amount: formatMoney(netSavingsMinor, { currency, compactDecimals: true }), rate: formatPercent(Math.max(savingsRate, 0)) }),
     ...(expenseRows.length > 0
       ? ['', 'Top expenses:', ...expenseRows.slice(0, 3).map((r) => `- ${r.name}: ${formatMoney(r.amountMinor, { currency, compactDecimals: true })}`)]
       : []),
@@ -137,12 +160,12 @@ function AnnualSummaryTab() {
                 year === option ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken',
               )}
             >
-              {option === 'this_year' ? 'This Year' : 'Last Year'}
+              {option === 'this_year' ? tr('reports.thisYear2') : tr('reports.lastYear2')}
             </button>
           ))}
         </div>
         {!isLoading && !isError && (
-          <ShareButton content={{ title: 'Khata — Annual Summary', text: shareText }} label="Share summary" />
+          <ShareButton content={{ title: tr('reports.khataAnnualSummary'), text: shareText }} label={tr('reports.shareSummary')} />
         )}
       </div>
 
@@ -157,11 +180,11 @@ function AnnualSummaryTab() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label={`${yearLabel} income`} amountMinor={totalIncomeMinor} tone="positive" />
-            <StatCard label={`${yearLabel} expenses`} amountMinor={totalExpenseMinor} tone="negative" />
-            <StatCard label="Net savings" amountMinor={netSavingsMinor} tone={netSavingsMinor >= 0 ? 'positive' : 'negative'} />
+            <StatCard label={tr('reports.income', { yearLabel })} amountMinor={totalIncomeMinor} tone="positive" />
+            <StatCard label={tr('reports.expenses', { yearLabel })} amountMinor={totalExpenseMinor} tone="negative" />
+            <StatCard label={tr('common.netSavings')} amountMinor={netSavingsMinor} tone={netSavingsMinor >= 0 ? 'positive' : 'negative'} />
             <div className="rounded-lg border border-line bg-surface px-4 py-3.5 shadow-xs">
-              <p className="label-eyebrow">Savings rate</p>
+              <p className="label-eyebrow">{tr('common.savingsRate')}</p>
               <div className="mt-1.5 text-[18px] font-semibold tabular text-ink">
                 {formatPercent(Math.max(savingsRate, 0))}
               </div>
@@ -172,14 +195,14 @@ function AnnualSummaryTab() {
             <Card>
               <EmptyState
                 icon={<FileBarChart className="size-5" />}
-                title={`No activity ${year === 'this_year' ? 'this year' : 'last year'}`}
-                description="Once income or expenses are recorded, the annual summary appears here."
+                title={tr(year === 'this_year' ? 'reports.noActivityThisYear' : 'reports.noActivityLastYear')}
+                description={tr('reports.onceIncomeOrExpensesAreRecorded')}
               />
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-              <AnnualCategoryList title="Top income sources" rows={incomeRows} />
-              <AnnualCategoryList title="Top expense categories" rows={expenseRows} />
+              <AnnualCategoryList title={tr('reports.topIncomeSources')} rows={incomeRows} />
+              <AnnualCategoryList title={tr('reports.topExpenseCategories')} rows={expenseRows} />
             </div>
           )}
         </>
@@ -189,15 +212,16 @@ function AnnualSummaryTab() {
 }
 
 function AnnualCategoryList({ title, rows }: { title: string; rows: CategoryRow[] }) {
+  const tr = useT();
   const top = [...rows].sort((a, b) => b.amountMinor - a.amountMinor).slice(0, 8);
 
   return (
     <Card bare>
       <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-        <CardHeader eyebrow="Annual" title={title} />
+        <CardHeader eyebrow={tr('reports.annual')} title={title} />
       </div>
       {top.length === 0 ? (
-        <p className="border-t border-line-faint px-5 py-4 text-[12.5px] text-ink-muted sm:px-6">Nothing recorded.</p>
+        <p className="border-t border-line-faint px-5 py-4 text-[12.5px] text-ink-muted sm:px-6">{tr('reports.nothingRecorded')}</p>
       ) : (
         <ul className="divide-y divide-line-faint border-t border-line-faint">
           {top.map((row) => (
@@ -219,6 +243,7 @@ function AnnualCategoryList({ title, rows }: { title: string; rows: CategoryRow[
 }
 
 function OverviewTab() {
+  const tr = useT();
   const { data: netWorth, isLoading: nwLoading } = useNetWorth(6);
   const { data: comparison, isLoading: cmpLoading } = useMonthlyComparison(6);
   const currency = useCurrency();
@@ -229,14 +254,14 @@ function OverviewTab() {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label="Net worth" amountMinor={netWorth?.netWorthMinor ?? 0} loading={nwLoading} />
-        <StatCard label="This month's income" amountMinor={latestMonth?.incomeMinor ?? 0} tone="positive" loading={cmpLoading} />
-        <StatCard label="This month's expenses" amountMinor={latestMonth?.expenseMinor ?? 0} tone="negative" loading={cmpLoading} />
+        <StatCard label={tr('common.netWorth')} amountMinor={netWorth?.netWorthMinor ?? 0} loading={nwLoading} />
+        <StatCard label={tr('reports.thisMonthSIncome')} amountMinor={latestMonth?.incomeMinor ?? 0} tone="positive" loading={cmpLoading} />
+        <StatCard label={tr('reports.thisMonthSExpenses')} amountMinor={latestMonth?.expenseMinor ?? 0} tone="negative" loading={cmpLoading} />
       </div>
 
       <Card bare>
         <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-          <CardHeader eyebrow="Trend" title="Net worth, last 6 months" />
+          <CardHeader eyebrow={tr('reports.trend')} title={tr('reports.netWorthLast6Months')} />
         </div>
         {nwLoading ? (
           <div className="p-5">
@@ -249,10 +274,10 @@ function OverviewTab() {
 
       {latestMonth && previousMonth && (
         <Card>
-          <CardHeader eyebrow="Comparison" title={`${latestMonth.label} vs ${previousMonth.label}`} />
+          <CardHeader eyebrow={tr('reports.comparison')} title={tr('reports.vs', { label: latestMonth.label, label2: previousMonth.label })} />
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <ComparisonRow label="Income" current={latestMonth.incomeMinor} previous={previousMonth.incomeMinor} currency={currency} goodIsUp />
-            <ComparisonRow label="Expenses" current={latestMonth.expenseMinor} previous={previousMonth.expenseMinor} currency={currency} goodIsUp={false} />
+            <ComparisonRow label={tr('common.income')} current={latestMonth.incomeMinor} previous={previousMonth.incomeMinor} currency={currency} goodIsUp />
+            <ComparisonRow label={tr('common.expenses')} current={latestMonth.expenseMinor} previous={previousMonth.expenseMinor} currency={currency} goodIsUp={false} />
           </div>
         </Card>
       )}
@@ -321,6 +346,7 @@ function StatCard({
 }
 
 function CategoryTab() {
+  const tr = useT();
   const [kind, setKind] = useState<'income' | 'expense'>('expense');
   const { data, isLoading, isError, error, refetch } = useCategoryReport(kind, 'this_month');
   const rows = (data as Array<{ categoryId: string | null; name: string; icon: string; color: string; amountMinor: number; percentOfTotal: number; changePercent: number }>) ?? [];
@@ -328,7 +354,7 @@ function CategoryTab() {
   return (
     <Card bare>
       <div className="flex flex-wrap items-center justify-between gap-3 p-5 pb-3 sm:p-6 sm:pb-3">
-        <CardHeader eyebrow="This month" title="Spending by category" />
+        <CardHeader eyebrow={tr('common.thisMonth')} title={tr('reports.spendingByCategory')} />
         <div className="flex rounded-md border border-line bg-surface p-0.5">
           {(['expense', 'income'] as const).map((option) => (
             <button
@@ -351,7 +377,7 @@ function CategoryTab() {
       ) : isError ? (
         <ErrorState error={error} onRetry={() => void refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<FileBarChart className="size-5" />} title="Nothing this month" description={`No ${kind} recorded yet this month.`} />
+        <EmptyState icon={<FileBarChart className="size-5" />} title={tr('reports.nothingThisMonth')} description={tr('reports.noRecordedYetThisMonth', { kind })} />
       ) : (
         <ul className="divide-y divide-line-faint border-t border-line-faint">
           {rows.map((row) => (
@@ -377,7 +403,58 @@ function CategoryTab() {
   );
 }
 
+function ForecastTab() {
+  const tr = useT();
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const { data, isLoading, isError, error, refetch } = useForecast(days);
+
+  if (isLoading) return <Card><LoadingState rows={4} /></Card>;
+  if (isError) return <Card><ErrorState error={error} onRetry={() => void refetch()} /></Card>;
+  if (!data) return null;
+
+  const lowest = data.points.reduce((min, p) => Math.min(min, p.projectedBalanceMinor), data.startingBalanceMinor);
+  const ending = data.points[data.points.length - 1]?.projectedBalanceMinor ?? data.startingBalanceMinor;
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center gap-1">
+        {([7, 30, 90] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setDays(option)}
+            aria-pressed={days === option}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors',
+              days === option ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken hover:text-ink',
+            )}
+          >
+            {option} {tr('reports.days')}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard label={tr('reports.today')} amountMinor={data.startingBalanceMinor} />
+        <StatCard label={tr('reports.inDaysEstimate', { days })} amountMinor={ending} />
+        <StatCard label={tr('reports.lowestPointEstimate')} amountMinor={lowest} tone={lowest < 0 ? 'negative' : undefined} />
+      </div>
+
+      <Card bare>
+        <div className="p-5 pb-3 sm:p-6 sm:pb-3">
+          <CardHeader eyebrow={tr('reports.projectionNotAnActualBalance')} title={tr('reports.cashFlowForecast')} />
+          <p className="mt-1 text-[12px] text-ink-muted">
+            {tr('reports.builtFromYourScheduledRecurringIncome')}
+          </p>
+        </div>
+        <ForecastChart points={data.points} />
+      </Card>
+    </div>
+  );
+}
+
 function NetWorthTab() {
+  const tr = useT();
   const { data, isLoading, isError, error, refetch } = useNetWorth(12);
 
   if (isLoading) return <Card><LoadingState rows={4} /></Card>;
@@ -385,32 +462,32 @@ function NetWorthTab() {
   if (!data) return null;
 
   const rows: Array<[string, number, string]> = [
-    ['Cash', data.breakdown.cashMinor, 'positive'],
-    ['Bank / UPI / Wallet', data.breakdown.bankMinor, 'positive'],
-    ['Savings', data.breakdown.savingsMinor, 'positive'],
-    ['Investments', data.breakdown.investmentMinor, 'positive'],
-    ['Receivables', data.breakdown.receivablesMinor, 'positive'],
-    ['Credit card debt', data.breakdown.creditCardMinor, 'negative'],
-    ['Payables', data.breakdown.payablesMinor, 'negative'],
+    [tr('reports.cash'), data.breakdown.cashMinor, 'positive'],
+    [tr('reports.bankUpiWallet'), data.breakdown.bankMinor, 'positive'],
+    [tr('reports.savings'), data.breakdown.savingsMinor, 'positive'],
+    [tr('reports.investments'), data.breakdown.investmentMinor, 'positive'],
+    [tr('dashboard.receivables'), data.breakdown.receivablesMinor, 'positive'],
+    [tr('reports.creditCardDebt'), data.breakdown.creditCardMinor, 'negative'],
+    [tr('dashboard.payables'), data.breakdown.payablesMinor, 'negative'],
   ];
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label="Assets" amountMinor={data.assetsMinor} tone="positive" />
-        <StatCard label="Liabilities" amountMinor={data.liabilitiesMinor} tone="negative" />
-        <StatCard label="Net worth" amountMinor={data.netWorthMinor} />
+        <StatCard label={tr('common.assets')} amountMinor={data.assetsMinor} tone="positive" />
+        <StatCard label={tr('common.liabilities')} amountMinor={data.liabilitiesMinor} tone="negative" />
+        <StatCard label={tr('common.netWorth')} amountMinor={data.netWorthMinor} />
       </div>
 
       <Card bare>
         <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-          <CardHeader eyebrow="12 months" title="Net worth trend" />
+          <CardHeader eyebrow={tr('reports.12Months')} title={tr('reports.netWorthTrend')} />
         </div>
         <NetWorthChart history={data.history} />
       </Card>
 
       <Card>
-        <CardHeader eyebrow="Breakdown" title="Assets and liabilities" />
+        <CardHeader eyebrow={tr('reports.breakdown')} title={tr('reports.assetsAndLiabilities')} />
         <ul className="mt-4 flex flex-col divide-y divide-line-faint">
           {rows.filter(([, amount]) => amount !== 0).map(([label, amount, tone]) => (
             <li key={label} className="flex items-center justify-between gap-3 py-2.5">
@@ -428,6 +505,7 @@ function NetWorthTab() {
 }
 
 function MonthlyTab() {
+  const tr = useT();
   const { data, isLoading, isError, error, refetch } = useMonthlyComparison(12);
 
   if (isLoading) return <Card><LoadingState rows={4} /></Card>;
@@ -437,17 +515,17 @@ function MonthlyTab() {
   return (
     <Card bare>
       <div className="p-5 pb-3 sm:p-6 sm:pb-3">
-        <CardHeader eyebrow="Last 12 months" title="Income vs expenses" />
+        <CardHeader eyebrow={tr('reports.last12Months')} title={tr('common.incomeVsExpenses')} />
       </div>
       <MonthlyComparisonChart rows={data} />
-      <div className="overflow-x-auto border-t border-line-faint">
+      <ScrollRegion label={tr('scroll.incomeVsExpenses')} className="border-t border-line-faint">
         <table className="w-full min-w-[560px] text-left">
           <thead>
             <tr className="border-b border-line bg-sunken/60">
-              <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">Month</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Income</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Expenses</th>
-              <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">Net</th>
+              <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">{tr('common.month')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('common.income')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('common.expenses')}</th>
+              <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">{tr('common.net')}</th>
             </tr>
           </thead>
           <tbody>
@@ -461,12 +539,13 @@ function MonthlyTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </Card>
   );
 }
 
 function BorrowLendTab() {
+  const tr = useT();
   const { data = [], isLoading, isError, error, refetch } = useBorrowLendReport();
 
   if (isLoading) return <Card><LoadingState rows={4} /></Card>;
@@ -474,23 +553,23 @@ function BorrowLendTab() {
   if (data.length === 0) {
     return (
       <Card>
-        <EmptyState icon={<FileBarChart className="size-5" />} title="No lending activity" description="Lend, borrow and repayment history with each person appears here." />
+        <EmptyState icon={<FileBarChart className="size-5" />} title={tr('reports.noLendingActivity')} description={tr('reports.lendBorrowAndRepaymentHistoryWith')} />
       </Card>
     );
   }
 
   return (
     <Card bare>
-      <div className="overflow-x-auto">
+<ScrollRegion label={tr('scroll.lendBorrow')}>
         <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="border-b border-line bg-sunken/60">
-              <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">Person</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Lent</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Borrowed</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Repaid to you</th>
-              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">Repaid by you</th>
-              <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">Outstanding</th>
+              <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">{tr('common.person')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('quickAdd.type.lend.label')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('quickAdd.type.borrow.label')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('reports.repaidToYou')}</th>
+              <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('reports.repaidByYou')}</th>
+              <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">{tr('common.outstanding')}</th>
             </tr>
           </thead>
           <tbody>
@@ -515,7 +594,200 @@ function BorrowLendTab() {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </Card>
+  );
+}
+
+/** Revenue, expense and net profit (§Phase 12) — composed from the same category statement every other report reads, never a parallel aggregation. */
+function ProfitAndLossTab() {
+  const tr = useT();
+  const [range, setRange] = useState<'this_month' | 'last_month' | 'this_year'>('this_month');
+  const { data, isLoading, isError, error, refetch } = useProfitAndLoss(range);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex rounded-md border border-line bg-surface p-0.5">
+        {(['this_month', 'last_month', 'this_year'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setRange(option)}
+            aria-pressed={range === option}
+            className={cn(
+              'rounded-sm px-3.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors',
+              range === option ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken',
+            )}
+          >
+            {option.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <Card><LoadingState rows={5} /></Card>
+      ) : isError ? (
+        <Card><ErrorState error={error} onRetry={() => void refetch()} /></Card>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard label={tr('reports.revenue')} amountMinor={data.income.totalMinor} tone="positive" />
+            <StatCard label={tr('common.expenses')} amountMinor={data.expense.totalMinor} tone="negative" />
+            <StatCard label={tr('reports.netProfit')} amountMinor={data.netProfitMinor} tone={data.netProfitMinor >= 0 ? 'positive' : 'negative'} />
+          </div>
+
+          <AnnualCategoryList title={tr('reports.revenueByCategory')} rows={data.income.rows.map((r) => ({ categoryId: r.categoryId, name: r.categoryName, icon: 'Circle', color: '#A8813C', amountMinor: r.amountMinor, percentOfTotal: data.income.totalMinor ? (r.amountMinor / data.income.totalMinor) * 100 : 0 }))} />
+          <AnnualCategoryList title={tr('reports.expensesByCategory')} rows={data.expense.rows.map((r) => ({ categoryId: r.categoryId, name: r.categoryName, icon: 'Circle', color: '#A8813C', amountMinor: r.amountMinor, percentOfTotal: data.expense.totalMinor ? (r.amountMinor / data.expense.totalMinor) * 100 : 0 }))} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** Receivables/payables aged by days past due (§Phase 12) — unpaid invoices and outstanding loans, side by side. */
+function AgeingTab() {
+  const tr = useT();
+  const [direction, setDirection] = useState<'receivable' | 'payable'>('receivable');
+  const { data, isLoading, isError, error, refetch } = useAgeingReport(direction);
+
+  const bucketLabels: Record<string, string> = { not_due: tr('reports.notYetDue'), '0_30': tr('reports.days0to30'), '31_60': tr('reports.days31to60'), '61_90': tr('reports.days61to90'), over_90: tr('reports.daysOver90') };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex rounded-md border border-line bg-surface p-0.5">
+        {(['receivable', 'payable'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setDirection(option)}
+            aria-pressed={direction === option}
+            className={cn(
+              'rounded-sm px-3.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors',
+              direction === option ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken',
+            )}
+          >
+            {option === 'receivable' ? tr('dashboard.receivables') : tr('dashboard.payables')}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <Card><LoadingState rows={5} /></Card>
+      ) : isError ? (
+        <Card><ErrorState error={error} onRetry={() => void refetch()} /></Card>
+      ) : !data || data.rows.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<FileBarChart className="size-5" />}
+            title={direction === 'receivable' ? tr('reports.nothingOutstanding') : tr('reports.nothingOwed')}
+            description={tr('reports.unpaidInvoicesAndOutstandingLoansPast')}
+          />
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {(['not_due', '0_30', '31_60', '61_90', 'over_90'] as const).map((bucket) => (
+              <div key={bucket} className="rounded-lg border border-line bg-surface px-3 py-3 shadow-xs">
+                <p className="label-eyebrow">{bucketLabels[bucket]}</p>
+                <div className="mt-1.5">
+                  <Money amountMinor={data.totalsByBucket[bucket]} size="md" tone={bucket === 'over_90' || bucket === '61_90' ? 'negative' : 'neutral'} compactDecimals />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Card bare>
+            <ul className="divide-y divide-line-faint">
+              {data.rows.map((row) => (
+                <li key={`${row.source}-${row.referenceId}`} className="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-medium text-ink">{row.personName}</span>
+                    <span className="mt-0.5 block text-[11.5px] text-ink-muted">
+                      {row.referenceLabel} · {bucketLabels[row.bucket]}
+                    </span>
+                  </span>
+                  <Money amountMinor={row.amountMinor} size="sm" tone={row.daysPastDue > 60 ? 'negative' : 'neutral'} />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** GST collected, by rate — a summary to hand to an accountant, never a filing. */
+function GstSummaryTab() {
+  const tr = useT();
+  const [range, setRange] = useState<'this_month' | 'last_month' | 'this_year'>('this_month');
+  const { data, isLoading, isError, error, refetch } = useGstSummary(range);
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex rounded-md border border-line bg-surface p-0.5">
+          {(['this_month', 'last_month', 'this_year'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setRange(option)}
+              aria-pressed={range === option}
+              className={cn(
+                'rounded-sm px-3.5 py-1.5 text-[12.5px] font-medium capitalize transition-colors',
+                range === option ? 'bg-ink text-ink-inverse' : 'text-ink-muted hover:bg-sunken',
+              )}
+            >
+              {option.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <Card><LoadingState rows={5} /></Card>
+      ) : isError ? (
+        <Card><ErrorState error={error} onRetry={() => void refetch()} /></Card>
+      ) : !data || data.rows.length === 0 ? (
+        <Card>
+          <EmptyState icon={<FileBarChart className="size-5" />} title={tr('reports.noGstCollected')} description={tr('reports.issuedInvoicesSentOverdueOrPaid')} />
+        </Card>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard label="CGST" amountMinor={data.totalCgstMinor} tone="neutral" />
+            <StatCard label="SGST" amountMinor={data.totalSgstMinor} tone="neutral" />
+            <StatCard label="IGST" amountMinor={data.totalIgstMinor} tone="neutral" />
+          </div>
+
+          <Card bare>
+<ScrollRegion label={tr('reports.tabGstSummary')}>
+              <table className="w-full min-w-[560px] text-left">
+                <thead>
+                  <tr className="border-b border-line bg-sunken/60">
+                    <th scope="col" className="label-eyebrow px-5 py-2.5 sm:px-6">{tr('reports.rate')}</th>
+                    <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">{tr('reports.taxableValue')}</th>
+                    <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">CGST</th>
+                    <th scope="col" className="label-eyebrow px-3 py-2.5 text-right">SGST</th>
+                    <th scope="col" className="label-eyebrow px-5 py-2.5 text-right sm:px-6">IGST</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((row) => (
+                    <tr key={row.taxPercent} className="border-b border-line-faint last:border-0 hover:bg-sunken/40">
+                      <td className="px-5 py-3 text-[13px] font-medium text-ink sm:px-6">{row.taxPercent}%</td>
+                      <td className="px-3 py-3 text-right"><Money amountMinor={row.taxableMinor} size="sm" compactDecimals /></td>
+                      <td className="px-3 py-3 text-right"><Money amountMinor={row.cgstMinor} size="sm" compactDecimals /></td>
+                      <td className="px-3 py-3 text-right"><Money amountMinor={row.sgstMinor} size="sm" compactDecimals /></td>
+                      <td className="px-5 py-3 text-right sm:px-6"><Money amountMinor={row.igstMinor} size="sm" compactDecimals /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollRegion>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }

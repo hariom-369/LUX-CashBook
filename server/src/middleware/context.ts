@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import crypto from 'node:crypto';
 import type { Types } from 'mongoose';
+import type { WorkspaceRole } from '@khata/shared';
 import type { IUser, IWorkspace } from '../models/index.js';
 
 /**
@@ -15,6 +16,15 @@ export interface RequestScope {
   workspaceId: Types.ObjectId;
   currency: string;
   mode: IWorkspace['mode'];
+  /** The caller's role in this workspace (§Phase 9). `owner` for every workspace that predates household sharing. */
+  role: WorkspaceRole;
+  /**
+   * Other members' `private` accounts (§Phase 9) — resolved once per request. Every query
+   * that totals, lists or exports transactions must exclude any transaction that touches
+   * one of these (`services/accountVisibility.ts`), or a private account's money would
+   * leak into another member's totals, reports, exports and search.
+   */
+  hiddenAccountIds: Types.ObjectId[];
 }
 
 declare global {
