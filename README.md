@@ -234,6 +234,9 @@ optional), `localhost` or non-https `APP_URL`/`API_URL`, or insecure cookies. Be
 frontend, run `npm run check:deploy --workspace client` (it fails if
 `client/vercel.json` names the placeholder API origin or loosens the CSP; the CSP
 currently allows the app, `https://lux-cashbook-api.onrender.com` and Google Fonts).
+`npm run build` fails on a wrong CSP in `dist/` too, and
+`npm run check:live --workspace client -- https://YOUR-SITE` compares the live
+site's real headers with `vercel.json`.
 
 ## Deployment
 

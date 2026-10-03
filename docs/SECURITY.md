@@ -284,7 +284,12 @@ layer.
   `'unsafe-inline'` because React renders inline `style` attributes — the one
   relaxation. `npm run check:deploy --workspace client` fails on the placeholder
   API origin, a missing API origin, and any wildcard, bare-scheme, plain-http or
-  unsafe script source; `src/config/csp.test.ts` pins the exact origins.
+  unsafe script source; `src/config/csp.test.ts` pins the exact origins and fails on a second CSP
+  definition anywhere in the client. `npm run build` also checks `dist/`, and
+  the build fingerprints the headers into `index.html` so a header-only
+  change cannot be hidden from installed browsers by the service worker's
+  precache; `npm run check:live -- <url>` compares a deployed site's real
+  headers with `vercel.json`.
 
 ## Reporting a vulnerability
 

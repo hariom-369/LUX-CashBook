@@ -245,6 +245,45 @@ cache them for offline use. Verified in Chromium under the production headers:
 without the `connect-src` entries the worker silently caches no fonts; with them it
 caches both the stylesheet and the font files and the app renders offline.
 
+**If the live site still sends an old CSP** (for example `connect-src 'self'
+https://api.example.com`). The repository has exactly one CSP definition —
+`client/vercel.json`; there is no CSP `<meta>`, no second `vercel.json`, no
+`_headers`, and nothing in the Vite config or the service worker that sets one
+(`client/src/config/csp.test.ts` fails if that ever changes) — and Vercel's own
+routing transformer turns it into exactly one header route. So an old policy has
+one of two causes:
+
+1. **Vercel is serving an older build.** Check, in the Vercel dashboard: the
+   Production deployment's commit is the latest (or newer than `fc67990`), its
+   status is *Ready*, the project's **Root Directory is `client`** (otherwise
+   `client/vercel.json` is not read at all), and the Production Branch is `main`.
+   Redeploy if not. Then compare what the server really sends:
+   `npm run check:live --workspace client -- https://YOUR-SITE.vercel.app`
+   — it fetches `/` and `/login` with a cache-buster (no service worker involved),
+   compares every header with `vercel.json`, flags a leftover `api.example.com`, a
+   second CSP, a CSP `<meta>`, and reads the build fingerprint to show which build
+   is live. It exits non-zero on any difference.
+2. **A browser is running an old service worker** (the server is right, the
+   browser is not). The service worker precaches `index.html` together with the
+   headers it arrived with, and a document's CSP is the one on the response that
+   produced it. Workbox only refetches a precached file when its content hash
+   changes — so a deployment that changes only headers in `vercel.json` would keep
+   an old CSP in every installed browser *forever*. Reproduced with a real service
+   worker (header-only change: still the old policy after four loads). Fixed: the
+   build writes a fingerprint of `vercel.json`'s headers into `index.html`
+   (`<meta name="khata-deploy-headers">`), so any header change changes
+   `index.html`, hence its precache entry, hence a refetch with the new headers
+   (same experiment: the new policy applies from the second load). A browser that
+   is stuck right now: DevTools → Application → Service Workers → *Unregister*,
+   then *Clear site data*, and reload; it picks up the new worker by itself on its
+   next load once this build is deployed.
+
+**The build now refuses to ship a wrong CSP.** `npm run build` ends with
+`check-deploy-config.cjs --require-dist`, which fails the build (and therefore a
+Vercel deployment) if `vercel.json` has the placeholder, a weak or second CSP, or
+if `dist/` contains the placeholder anywhere, a CSP `<meta>`, a second header file,
+or a fingerprint that does not match `vercel.json`.
+
 **Vercel `vercel.com/sso-api` manifest warning.** If the console shows a refused
 manifest request to `https://vercel.com/sso-api`, the cause is almost certainly
 Vercel's Deployment Protection (preview or password-protected deployments): the

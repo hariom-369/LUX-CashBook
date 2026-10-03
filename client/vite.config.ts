@@ -5,6 +5,12 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const { headersFingerprint, META_NAME } = createRequire(import.meta.url)('./tools/headers-fingerprint.cjs') as {
+  headersFingerprint: (config: unknown) => string;
+  META_NAME: string;
+};
 
 /** The headers `vercel.json` applies to every path, as a plain object. */
 function productionHeaders(): Record<string, string> {
@@ -15,8 +21,24 @@ function productionHeaders(): Record<string, string> {
   return Object.fromEntries((all?.headers ?? []).map((h) => [h.key, h.value]));
 }
 
+/**
+ * Puts a fingerprint of vercel.json's headers into index.html, so a header-only change still changes the precached
+ * shell (see tools/headers-fingerprint.cjs). Without it, installed clients would keep an old Content-Security-Policy.
+ */
+function deployHeadersFingerprint() {
+  return {
+    name: 'khata-deploy-headers-fingerprint',
+    transformIndexHtml(html: string) {
+      const config = JSON.parse(readFileSync(fileURLToPath(new URL('./vercel.json', import.meta.url)), 'utf8'));
+      return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />
+    <meta name="${META_NAME}" content="${headersFingerprint(config)}" />`);
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
+    deployHeadersFingerprint(),
     react(),
     tailwindcss(),
     /**

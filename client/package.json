@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node tools/check-deploy-config.cjs --require-dist",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "i18n:scan": "node tools/i18n-scan.cjs",
-    "check:deploy": "node tools/check-deploy-config.cjs"
+    "check:deploy": "node tools/check-deploy-config.cjs",
+    "check:live": "node tools/check-live-headers.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
