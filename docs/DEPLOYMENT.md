@@ -229,9 +229,32 @@ cookie with `SameSite=Strict` and no third-party-cookie rule applies.
    `API_URL=https://api.example.com`, `COOKIE_CROSS_SITE=false`,
    `COOKIE_SECURE=auto`, leave `COOKIE_DOMAIN` unset.
 3. Vercel environment: `VITE_API_URL=https://api.example.com/api/v1`.
-4. Edit `client/vercel.json`: replace `https://api.example.com` in
-   `connect-src` with your API origin, then run `npm run check:deploy
-   --workspace client` (it fails while the placeholder is still there).
+4. `client/vercel.json` already names the live API origin,
+   `https://lux-cashbook-api.onrender.com`, in `connect-src`. If the API moves
+   (for example to `api.example.com` as above), change that one origin there,
+   then run `npm run check:deploy --workspace client` — it fails on the
+   placeholder `https://api.example.com`, on a CSP with no API origin, and on any
+   wildcard, bare-scheme, plain-http, `unsafe-eval` or inline-script source.
+
+**What the CSP lets the app reach** (`connect-src`, pinned by
+`client/src/config/csp.test.ts`): itself, the API origin, and the two Google Fonts
+hosts (`https://fonts.googleapis.com`, `https://fonts.gstatic.com`) — nothing else.
+The fonts appear twice on purpose: `style-src`/`font-src` for the page, and
+`connect-src` for the **service worker**, which re-fetches fonts with `fetch()` to
+cache them for offline use. Verified in Chromium under the production headers:
+without the `connect-src` entries the worker silently caches no fonts; with them it
+caches both the stylesheet and the font files and the app renders offline.
+
+**Vercel `vercel.com/sso-api` manifest warning.** If the console shows a refused
+manifest request to `https://vercel.com/sso-api`, the cause is almost certainly
+Vercel's Deployment Protection (preview or password-protected deployments): the
+request for `/manifest.webmanifest` carries no login, so Vercel redirects it to its
+SSO page and `manifest-src 'self'` refuses that redirect. The app, service worker
+and API are unaffected. This was **not reproduced here** (no Vercel access) — to
+confirm, open `/manifest.webmanifest` in a private window on the affected URL: a
+redirect to `vercel.com` means protection; JSON means something else is wrong. It is
+deliberately **not** fixed by widening `manifest-src`: turn protection off for that
+deployment, or accept the warning on protected previews.
 
 **Verified locally** (Chromium with fake hostnames mapped to 127.0.0.1, in-memory
 API, `SameSite=Strict`): `app.khata.test` → `api.khata.test` keeps the session

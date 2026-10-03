@@ -275,13 +275,16 @@ layer.
 - Frontend (`client/vercel.json`, the same headers are served by
   `vite preview`): a Content-Security-Policy with `script-src 'self'` (no inline
   script — the theme bootstrap is `public/theme-init.js`), `object-src 'none'`,
-  `frame-ancestors 'none'` and `connect-src` limited to the app and the API
-  origin; `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `frame-ancestors 'none'` and `connect-src` limited to the app, the API
+  origin (`https://lux-cashbook-api.onrender.com`) and the two Google Fonts
+  hosts (the service worker needs those to cache fonts); `manifest-src 'self'`;
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
   `Permissions-Policy` (camera only for the app, everything else off),
   `X-Frame-Options: DENY`, COOP `same-origin` and HSTS. `style-src` keeps
   `'unsafe-inline'` because React renders inline `style` attributes — the one
-  relaxation. `npm run check:deploy --workspace client` fails while the
-  placeholder API origin is still in the policy.
+  relaxation. `npm run check:deploy --workspace client` fails on the placeholder
+  API origin, a missing API origin, and any wildcard, bare-scheme, plain-http or
+  unsafe script source; `src/config/csp.test.ts` pins the exact origins.
 
 ## Reporting a vulnerability
 

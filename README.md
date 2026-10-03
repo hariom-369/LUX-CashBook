@@ -231,8 +231,9 @@ it will not silently fall back to the development in-memory database. It also
 refuses a configuration that would only fail later for real users: local file
 storage (use S3), an incoherent SMTP setup (only if SMTP is configured — it is
 optional), `localhost` or non-https `APP_URL`/`API_URL`, or insecure cookies. Before deploying the
-frontend, run `npm run check:deploy --workspace client` (it fails while
-`client/vercel.json` still names the placeholder API origin in its CSP).
+frontend, run `npm run check:deploy --workspace client` (it fails if
+`client/vercel.json` names the placeholder API origin or loosens the CSP; the CSP
+currently allows the app, `https://lux-cashbook-api.onrender.com` and Google Fonts).
 
 ## Deployment
 
