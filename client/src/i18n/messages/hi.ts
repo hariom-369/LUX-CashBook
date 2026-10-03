@@ -2160,4 +2160,5 @@ export const hi: Partial<Record<MessageKey, string>> = {
   'server.onlyJpegPngWebpImagesAnd': 'केवल JPEG, PNG, WebP इमेज और PDF दस्तावेज़ स्वीकार किए जाते हैं।',
   'server.thatImageCouldNotBeRead': 'वह इमेज पढ़ी नहीं जा सकी। JPEG, PNG या WebP फ़ोटो का उपयोग करें; HEIC और खराब फ़ाइलें समर्थित नहीं हैं।',
   'server.thatFileIsNotAValid': 'वह फ़ाइल मान्य PDF नहीं है।',
+  'server.theEmailServiceIsNotConfigured': 'इस सर्वर पर ईमेल सेवा कॉन्फ़िगर नहीं है, इसलिए अभी यह नहीं किया जा सकता। कृपया एडमिन से संपर्क करें।',
 };

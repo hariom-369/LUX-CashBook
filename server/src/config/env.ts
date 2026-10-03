@@ -2,7 +2,7 @@ import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 import { booleanWord } from '../lib/boolean.js';
-import { checkProduction } from './productionChecks.js';
+import { checkProduction, checkSmtp } from './productionChecks.js';
 import { FEATURE_FLAGS, FEATURE_FLAG_NAMES, type FeatureFlags } from '@khata/shared';
 
 // Tests must only ever see the environment they set up themselves. Under Vitest a
@@ -27,6 +27,11 @@ if (!process.env.VITEST) loadDotenv();
  */
 function envBoolean(fallback: boolean) {
   return z.preprocess((value) => (value === undefined || value === '' ? fallback : booleanWord(value)), z.boolean());
+}
+
+/** `SMTP_PORT=` (empty) in a .env file means "not set", not 0. */
+function blankIsUnset<T extends z.ZodTypeAny>(inner: T) {
+  return z.preprocess((value) => (typeof value === 'string' && value.trim() === '' ? undefined : value), inner);
 }
 
 const schema = z.object({
@@ -71,11 +76,15 @@ const schema = z.object({
    */
   COOKIE_CROSS_SITE: envBoolean(false),
 
-  /** SMTP — when absent, emails are logged to the console instead of sent. */
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.coerce.number().int().positive().optional(),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  /**
+   * SMTP is optional. Without SMTP_HOST the server runs normally: in development emails are logged to the console;
+   * in production the features that need email (password reset, resending the confirmation email, invitations)
+   * answer "email service not configured". An empty value counts as unset.
+   */
+  SMTP_HOST: blankIsUnset(z.string().trim().optional()),
+  SMTP_PORT: blankIsUnset(z.coerce.number().int().min(1).max(65535).optional()),
+  SMTP_USER: blankIsUnset(z.string().optional()),
+  SMTP_PASS: blankIsUnset(z.string().optional()),
   SMTP_SECURE: envBoolean(false),
   MAIL_FROM: z.string().default('Khata <no-reply@khata.app>'),
 
@@ -165,8 +174,20 @@ if (raw.COOKIE_CROSS_SITE && raw.COOKIE_SECURE === 'false') {
   process.exit(1);
 }
 
+const smtpInput = { ...raw, mailFromExplicit: Boolean(process.env.MAIL_FROM?.trim()) };
+
+// SMTP settings are validated whenever SMTP is configured, in every environment - never when it is not.
+if (!isProduction) {
+  const smtpProblems = checkSmtp(smtpInput, false);
+  if (smtpProblems.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error('\nInvalid SMTP configuration:\n' + smtpProblems.map((p) => '  - ' + p).join('\n') + '\n\nSee docs/DEPLOYMENT.md.\n');
+    process.exit(1);
+  }
+}
+
 if (isProduction) {
-  const { problems, warnings } = checkProduction({ ...raw, mailFromExplicit: Boolean(process.env.MAIL_FROM) });
+  const { problems, warnings } = checkProduction(smtpInput);
   for (const warning of warnings) {
     // eslint-disable-next-line no-console
     console.warn('\nWarning: ' + warning + '\n');
@@ -196,6 +217,11 @@ export const env = {
   ],
   maxUploadBytes: raw.MAX_UPLOAD_MB * 1024 * 1024,
   pushConfigured: Boolean(raw.VAPID_PUBLIC_KEY && raw.VAPID_PRIVATE_KEY),
+  /**
+   * How outbound email behaves: `smtp` (configured), `log` (development without SMTP: written to the log), or
+   * `unavailable` (production without SMTP: email-dependent features answer "not configured").
+   */
+  emailMode: (raw.SMTP_HOST ? 'smtp' : isProduction ? 'unavailable' : 'log') as 'smtp' | 'log' | 'unavailable',
   features: Object.fromEntries(
     FEATURE_FLAG_NAMES.map((flag) => [flag, raw[FEATURE_FLAGS[flag]] === true]),
   ) as FeatureFlags,

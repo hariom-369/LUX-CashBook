@@ -37,11 +37,40 @@ describe('production configuration checks (docs/DEPLOYMENT.md)', () => {
     expect(check({ S3_ACCESS_KEY_ID: undefined, S3_SECRET_ACCESS_KEY: undefined }).problems).toEqual([]);
   });
 
-  it('requires SMTP and a real sender address', () => {
-    expect(check({ SMTP_HOST: undefined }).problems.join(' ')).toMatch(/SMTP_HOST/);
-    expect(check({ SMTP_PASS: undefined }).problems.join(' ')).toMatch(/SMTP_PASS/);
-    expect(check({ mailFromExplicit: false }).problems.join(' ')).toMatch(/MAIL_FROM/);
-    expect(check({ SMTP_USER: undefined, SMTP_PASS: undefined }).problems).toEqual([]); // an unauthenticated relay
+  it('does not require SMTP: email is optional, and nothing about it is checked when it is absent', () => {
+    const bare = { SMTP_HOST: undefined, SMTP_PORT: undefined, SMTP_SECURE: undefined, SMTP_USER: undefined, SMTP_PASS: undefined, MAIL_FROM: undefined, mailFromExplicit: false };
+    expect(check(bare)).toEqual({ problems: [], warnings: [] });
+    // Stray SMTP leftovers without a host are ignored too, rather than refused.
+    expect(check({ ...bare, SMTP_USER: 'u', SMTP_PORT: 99999, MAIL_FROM: 'garbage' }).problems).toEqual([]);
+  });
+
+  it('accepts a complete SMTP configuration, with or without a login', () => {
+    expect(check({ SMTP_HOST: 'smtp.example.com', SMTP_PORT: 465, SMTP_SECURE: true, MAIL_FROM: 'Khata <no-reply@example.com>' }).problems).toEqual([]);
+    expect(check({ SMTP_PORT: 587, SMTP_SECURE: false, MAIL_FROM: 'no-reply@example.com' }).problems).toEqual([]);
+    expect(check({ SMTP_USER: undefined, SMTP_PASS: undefined }).problems).toEqual([]);
+  });
+
+  it('validates the host, port, TLS mode, login pair and sender - but only once SMTP is configured', () => {
+    const problems = (over: Partial<ProductionConfig>) => check({ SMTP_PORT: 587, SMTP_SECURE: false, MAIL_FROM: 'no-reply@example.com', ...over }).problems.join(' | ');
+    expect(problems({ SMTP_HOST: 'https://smtp.example.com' })).toMatch(/SMTP_HOST must be a bare host name/);
+    expect(problems({ SMTP_HOST: 'smtp.example.com:587' })).toMatch(/SMTP_HOST/);
+    expect(problems({ SMTP_HOST: 'smtp example.com' })).toMatch(/SMTP_HOST/);
+    expect(problems({ SMTP_PORT: 0 })).toMatch(/SMTP_PORT must be a port number/);
+    expect(problems({ SMTP_PORT: 70000 })).toMatch(/SMTP_PORT must be a port number/);
+    expect(problems({ SMTP_PORT: 465, SMTP_SECURE: false })).toMatch(/SMTP_PORT=465 expects an implicit-TLS/);
+    expect(problems({ SMTP_PORT: 587, SMTP_SECURE: true })).toMatch(/SMTP_PORT=587 upgrades with STARTTLS/);
+    expect(problems({ SMTP_PASS: undefined })).toMatch(/SMTP_USER and SMTP_PASS must be set together/);
+    expect(problems({ SMTP_USER: undefined })).toMatch(/SMTP_USER and SMTP_PASS must be set together/);
+    expect(problems({ mailFromExplicit: false })).toMatch(/MAIL_FROM must be set/);
+    expect(problems({ MAIL_FROM: 'not an address' })).toMatch(/MAIL_FROM must be an address/);
+    expect(problems({ MAIL_FROM: 'a@example.com\r\nBcc: evil@example.com' })).toMatch(/MAIL_FROM must be an address/);
+  });
+
+  it('never repeats a credential in a message', () => {
+    const text = JSON.stringify(check({ SMTP_HOST: 'bad host', SMTP_USER: 'super-secret-user', SMTP_PASS: undefined, MAIL_FROM: 'x' }));
+    expect(text).not.toContain('super-secret-user');
+    const withPass = JSON.stringify(check({ SMTP_HOST: 'bad host', SMTP_USER: undefined, SMTP_PASS: 'hunter2-password' }));
+    expect(withPass).not.toContain('hunter2-password');
   });
 
   it('refuses localhost and plain-http public URLs', () => {
@@ -59,7 +88,7 @@ describe('production configuration checks (docs/DEPLOYMENT.md)', () => {
   });
 
   it('reports every problem at once', () => {
-    const report = check({ STORAGE_DRIVER: 'local', SMTP_HOST: undefined, APP_URL: 'http://localhost:5173' });
+    const report = check({ STORAGE_DRIVER: 'local', COOKIE_SECURE: 'false', APP_URL: 'http://localhost:5173' });
     expect(report.problems.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -13,7 +13,7 @@ import {
 } from '../../lib/tokens.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
-import { passwordChangedEmail, passwordResetEmail, sendMail, verificationEmail } from '../../lib/mailer.js';
+import { assertEmailAvailable, emailAvailable, passwordChangedEmail, passwordResetEmail, sendMail, verificationEmail } from '../../lib/mailer.js';
 import { createWorkspace, listWorkspaces } from '../workspaces/workspace.service.js';
 import { recordAudit } from '../../services/audit.service.js';
 import type { RegisterInput } from './auth.schema.js';
@@ -102,9 +102,12 @@ export async function register(input: RegisterInput, meta: RequestMeta): Promise
   user.activeWorkspaceId = workspace._id;
   await user.save();
 
-  await sendVerificationEmail(user._id).catch((err) =>
-    logger.error({ err }, 'Could not send verification email at sign-up'),
-  );
+  // Sign-up never depends on email: without an email service the account is simply created unconfirmed.
+  if (emailAvailable()) {
+    await sendVerificationEmail(user._id).catch((err) =>
+      logger.error({ err }, 'Could not send verification email at sign-up'),
+    );
+  }
 
   await recordAudit(
     { userId: user._id, workspaceId: workspace._id, ...meta },
@@ -306,6 +309,7 @@ export async function buildSessionForUser(
 // ─────────────────────────────────────────────── Email verification
 
 export async function sendVerificationEmail(userId: Types.ObjectId): Promise<void> {
+  assertEmailAvailable();
   const user = await User.findById(userId);
   if (!user || user.emailVerified) return;
 
@@ -343,6 +347,8 @@ export async function verifyEmail(token: string): Promise<void> {
  * done in the background.
  */
 export async function requestPasswordReset(email: string): Promise<void> {
+  // Before the lookup, so the answer is the same whether or not the address is registered (no membership oracle).
+  assertEmailAvailable();
   const user = await User.findOne({ email });
   if (!user) {
     logger.info({ email }, 'Password reset requested for unknown address (no email sent)');

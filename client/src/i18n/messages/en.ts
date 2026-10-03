@@ -2160,6 +2160,7 @@ export const en = {
   'server.onlyJpegPngWebpImagesAnd': 'Only JPEG, PNG, WebP images and PDF documents are accepted.',
   'server.thatImageCouldNotBeRead': 'That image could not be read. Use a JPEG, PNG or WebP photo; HEIC and damaged files are not supported.',
   'server.thatFileIsNotAValid': 'That file is not a valid PDF.',
+  'server.theEmailServiceIsNotConfigured': 'The email service is not configured on this server, so this cannot be done right now. Please contact the administrator.',
 } as const;
 
 export type MessageKey = keyof typeof en;

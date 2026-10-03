@@ -4,7 +4,7 @@ import { Invitation, User, Workspace, WorkspaceMember } from '../../models/index
 import { badRequest, forbidden, notFound } from '../../lib/errors.js';
 import type { RequestScope } from '../../middleware/context.js';
 import { generateActionToken, hashToken } from '../../lib/tokens.js';
-import { sendMail, workspaceInvitationEmail } from '../../lib/mailer.js';
+import { assertEmailAvailable, sendMail, workspaceInvitationEmail } from '../../lib/mailer.js';
 import { env } from '../../config/env.js';
 import { recordAudit, type AuditContext } from '../../services/audit.service.js';
 
@@ -41,6 +41,8 @@ export async function createInvitation(
   audit: AuditContext,
 ): Promise<InvitationDto> {
   assertCanInvite(scope.role);
+  // An invitation is delivered by email only; without an email service, refuse before creating anything.
+  assertEmailAvailable();
   if (input.role === 'owner') throw badRequest('An invitation cannot grant ownership.');
   // Mirrors member.service.ts#changeMemberRole: only the owner may mint a new
   // admin, whether by promotion or by invitation directly as one — otherwise

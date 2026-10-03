@@ -51,6 +51,18 @@ export const notFound = (what = 'Resource') =>
 export const conflict = (message: string, code = 'CONFLICT') =>
   new AppError(409, code, message);
 
+/**
+ * Email is optional (SMTP is not required to run Khata). Anything that can only be done by sending an email -
+ * a password reset, re-sending the confirmation email, an invitation - answers with this when the server has no
+ * SMTP configured in production, instead of failing later or pretending the message was sent.
+ */
+export const emailNotConfigured = () =>
+  new AppError(
+    503,
+    'EMAIL_NOT_CONFIGURED',
+    'The email service is not configured on this server, so this cannot be done right now. Please contact the administrator.',
+  );
+
 export const tooManyRequests = (message = 'Too many attempts. Please try again in a few minutes.') =>
   new AppError(429, 'RATE_LIMITED', message);
 

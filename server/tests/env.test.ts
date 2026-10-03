@@ -25,11 +25,10 @@ beforeEach(() => {
     STORAGE_DRIVER: 's3',
     S3_BUCKET: 'khata-test',
     S3_REGION: 'ap-south-1',
-    SMTP_HOST: 'smtp.example.com',
-    MAIL_FROM: 'Khata <no-reply@example.com>',
     APP_URL: 'https://app.example.com',
     API_URL: 'https://api.example.com',
   });
+  for (const name of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM']) delete process.env[name];
   delete process.env.S3_ACCESS_KEY_ID;
   delete process.env.S3_SECRET_ACCESS_KEY;
 });
@@ -192,12 +191,60 @@ describe('production boot checks (docs/DEPLOYMENT.md)', () => {
     expect(exit).not.toHaveBeenCalled();
   });
 
-  it('refuses a missing SMTP host and the placeholder sender', async () => {
-    delete process.env.SMTP_HOST;
-    delete process.env.MAIL_FROM;
+  it('boots without SMTP: email is optional, and says so', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { env } = await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+    expect(env.emailMode).toBe('unavailable');
+  });
+
+  it('treats empty SMTP variables as not set', async () => {
+    Object.assign(process.env, { SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '', MAIL_FROM: '' });
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { env } = await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+    expect(env.emailMode).toBe('unavailable');
+    expect(env.SMTP_PORT).toBeUndefined();
+  });
+
+  it('boots with a complete SMTP configuration', async () => {
+    Object.assign(process.env, { SMTP_HOST: 'smtp.example.com', SMTP_PORT: '465', SMTP_SECURE: 'true', SMTP_USER: 'mailer', SMTP_PASS: 'a-long-secret', MAIL_FROM: 'Khata <no-reply@example.com>' });
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const { env } = await freshEnv();
+    expect(exit).not.toHaveBeenCalled();
+    expect(env.emailMode).toBe('smtp');
+    expect(env.SMTP_PORT).toBe(465);
+  });
+
+  it.each<[string, Record<string, string | undefined>, RegExp]>([
+    ['a host with a scheme', { SMTP_HOST: 'https://smtp.example.com' }, /SMTP_HOST/],
+    ['port 465 without implicit TLS', { SMTP_PORT: '465', SMTP_SECURE: 'false' }, /SMTP_PORT=465/],
+    ['a login without a password', { SMTP_USER: 'mailer', SMTP_PASS: undefined }, /SMTP_USER and SMTP_PASS/],
+    ['a password without a login', { SMTP_USER: undefined, SMTP_PASS: 'top-secret-password' }, /SMTP_USER and SMTP_PASS/],
+    ['no explicit sender', { MAIL_FROM: undefined }, /MAIL_FROM must be set/],
+    ['a malformed sender', { MAIL_FROM: 'not-an-address' }, /MAIL_FROM must be an address/],
+  ])('refuses SMTP configured with %s, naming the variable and never a credential', async (_label, over, pattern) => {
+    const values: Record<string, string | undefined> = { SMTP_HOST: 'smtp.example.com', SMTP_PORT: '587', SMTP_SECURE: 'false', MAIL_FROM: 'no-reply@example.com', SMTP_USER: 'mailer', SMTP_PASS: 'top-secret-password', ...over };
+    for (const [name, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
     const message = await refused();
-    expect(message).toMatch(/SMTP_HOST/);
-    expect(message).toMatch(/MAIL_FROM/);
+    expect(message).toMatch(pattern);
+    expect(message).not.toContain('top-secret-password');
+  });
+
+  it('in development: no SMTP logs mail, a half-configured SMTP is still refused', async () => {
+    process.env.NODE_ENV = 'development';
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    expect((await freshEnv()).env.emailMode).toBe('log');
+    expect(exit).not.toHaveBeenCalled();
+    process.env.SMTP_HOST = 'smtp.example.com';
+    process.env.SMTP_USER = 'mailer';
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await freshEnv();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(error.mock.calls.join(' ')).toMatch(/SMTP_USER and SMTP_PASS/);
   });
 
   it('refuses localhost URLs', async () => {

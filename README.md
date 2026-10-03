@@ -229,12 +229,16 @@ other two builds), then `server` → `server/dist/index.js`, then `client` →
 (`NODE_ENV=production`) without a real `MONGODB_URI` and real JWT secrets —
 it will not silently fall back to the development in-memory database. It also
 refuses a configuration that would only fail later for real users: local file
-storage (use S3), no `SMTP_HOST` or a placeholder `MAIL_FROM`, `localhost` or
-non-https `APP_URL`/`API_URL`, or insecure cookies. Before deploying the
+storage (use S3), an incoherent SMTP setup (only if SMTP is configured — it is
+optional), `localhost` or non-https `APP_URL`/`API_URL`, or insecure cookies. Before deploying the
 frontend, run `npm run check:deploy --workspace client` (it fails while
 `client/vercel.json` still names the placeholder API origin in its CSP).
 
 ## Deployment
+
+**SMTP is optional.** It is required only for email verification and password
+reset; without it the server runs normally and those features answer a clear
+"email service not configured" error (see "Running without SMTP" in the guide).
 
 See **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)** for the full guide,
 including every environment variable required on each platform and why. The
@@ -251,7 +255,7 @@ setup (see "Recommended: one parent domain" in the guide). A Vercel-domain +
 Render-domain split needs `COOKIE_CROSS_SITE=true` and depends on third-party
 cookies, which some browsers block; read "Cross-domain authentication" first.
 The guide also lists the manual steps that cannot be done from this repository
-(real S3, SMTP provider, Atlas user/network/backups).
+(real S3, an optional SMTP provider, Atlas user/network/backups).
 
 ## Core invariants
 

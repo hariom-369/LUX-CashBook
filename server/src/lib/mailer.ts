@@ -1,6 +1,7 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { env } from '../config/env.js';
 import { logger } from './logger.js';
+import { emailNotConfigured } from './errors.js';
 
 /**
  * Mail delivery.
@@ -44,13 +45,22 @@ export interface MailMessage {
   text: string;
 }
 
+/** False only in production without SMTP: there is nothing that could deliver a message. */
+export function emailAvailable(): boolean {
+  return env.emailMode !== 'unavailable';
+}
+
+/** Call first in anything that exists only to send an email, so it fails up front, identically for every caller, and changes nothing. */
+export function assertEmailAvailable(): void {
+  if (!emailAvailable()) throw emailNotConfigured();
+}
+
 export async function sendMail(message: MailMessage): Promise<void> {
+  assertEmailAvailable();
   const transport = getTransporter();
 
   if (!transport) {
-    if (env.isProduction) {
-      throw new Error('SMTP is not configured — refusing to drop outbound mail in production.');
-    }
+    // Development without SMTP: the message (with its link) goes to the log, so the whole flow is exercisable.
     logger.info(
       { to: message.to, subject: message.subject, text: message.text },
       '📧 Email (SMTP not configured — logged instead of sent)',

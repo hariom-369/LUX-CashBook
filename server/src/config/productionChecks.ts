@@ -13,9 +13,13 @@ export interface ProductionConfig {
   S3_REGION?: string;
   S3_ACCESS_KEY_ID?: string;
   S3_SECRET_ACCESS_KEY?: string;
+  /** SMTP is optional: all of these matter only when SMTP_HOST is set. */
   SMTP_HOST?: string;
+  SMTP_PORT?: number;
+  SMTP_SECURE?: boolean;
   SMTP_USER?: string;
   SMTP_PASS?: string;
+  MAIL_FROM?: string;
   /** True only when MAIL_FROM was actually set, not left at the placeholder default. */
   mailFromExplicit: boolean;
   APP_URL: string;
@@ -38,6 +42,31 @@ const isLocalHost = (value: string): boolean => {
   }
 };
 
+const HOST = /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$|^\[[0-9A-Fa-f:.]+\]$/;
+/** `a@b.co` or `Name <a@b.co>`: one address, no control characters (a header-injection guard), nothing exotic. */
+const MAIL_FROM = /^(?:[^<>@\r\n]+<)?[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+>?$/;
+
+/**
+ * SMTP is optional - without `SMTP_HOST` there is nothing to check and nothing is required. When it IS set, the
+ * rest has to be coherent, so a typo fails at boot with the variable named rather than at the first email. Messages
+ * name variables only; a credential is never echoed.
+ */
+export function checkSmtp(c: ProductionConfig, production: boolean): string[] {
+  if (!c.SMTP_HOST) return [];
+  const problems: string[] = [];
+  if (!HOST.test(c.SMTP_HOST)) problems.push('SMTP_HOST must be a bare host name such as smtp.example.com (no scheme, path, port or spaces).');
+  const port = c.SMTP_PORT ?? 587;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) problems.push('SMTP_PORT must be a port number between 1 and 65535.');
+  if (port === 465 && c.SMTP_SECURE === false) problems.push('SMTP_PORT=465 expects an implicit-TLS connection: set SMTP_SECURE=true (or use port 587 with SMTP_SECURE=false).');
+  if ((port === 587 || port === 25) && c.SMTP_SECURE === true) problems.push(`SMTP_PORT=${port} upgrades with STARTTLS: set SMTP_SECURE=false (or use port 465 with SMTP_SECURE=true).`);
+  if (Boolean(c.SMTP_USER) !== Boolean(c.SMTP_PASS)) problems.push('SMTP_USER and SMTP_PASS must be set together (or both left out for a relay without a login).');
+  if (c.MAIL_FROM && c.mailFromExplicit && !MAIL_FROM.test(c.MAIL_FROM)) problems.push('MAIL_FROM must be an address such as no-reply@example.com or "Khata <no-reply@example.com>".');
+  if (production && !c.mailFromExplicit) {
+    problems.push('MAIL_FROM must be set to an address on a domain you have verified with your mail provider (the default is a placeholder).');
+  }
+  return problems;
+}
+
 export function checkProduction(c: ProductionConfig): ProductionReport {
   const problems: string[] = [];
   const warnings: string[] = [];
@@ -57,13 +86,8 @@ export function checkProduction(c: ProductionConfig): ProductionReport {
     }
   }
 
-  if (!c.SMTP_HOST) {
-    problems.push('SMTP_HOST must be set: without it password-reset and verification emails cannot be sent (see docs/DEPLOYMENT.md).');
-  }
-  if (c.SMTP_USER && !c.SMTP_PASS) problems.push('SMTP_USER is set without SMTP_PASS.');
-  if (!c.mailFromExplicit) {
-    problems.push('MAIL_FROM must be set to an address on a domain you have verified with your mail provider (the default is a placeholder).');
-  }
+  // SMTP is optional: only email verification and password reset need it. When it is configured, it must be coherent.
+  problems.push(...checkSmtp(c, true));
 
   for (const [name, value] of [['APP_URL', c.APP_URL], ['API_URL', c.API_URL]] as const) {
     if (isLocalHost(value)) problems.push(`${name} still points at localhost; set it to the public https URL (it is used in CORS and in email links).`);

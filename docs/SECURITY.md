@@ -262,9 +262,13 @@ layer.
 ## Production boot checks, headers and mail
 
 - The server refuses to start in production with local storage (unless a
-  persistent disk is declared), without SMTP or a real `MAIL_FROM`, with
-  `localhost`/http public URLs, or with `COOKIE_SECURE=false`
-  (`config/productionChecks.ts`).
+  persistent disk is declared), with an incoherent SMTP setup (only when SMTP is
+  configured — SMTP itself is optional), with `localhost`/http public URLs, or
+  with `COOKIE_SECURE=false` (`config/productionChecks.ts`). Without SMTP the
+  features that need email answer `503 EMAIL_NOT_CONFIGURED` identically for
+  registered and unknown addresses (no membership oracle) and create no token
+  they could not deliver. Check messages name variables only; a credential is
+  never printed.
 - SMTP: certificates are validated, and in production a connection that is not
   already TLS must upgrade with STARTTLS (`requireTLS`) — otherwise credentials
   and mail could be read by anyone who strips the offer.

@@ -48,8 +48,8 @@ so read those two sections even if you skim the rest.
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | **Yes, if `STORAGE_DRIVER=s3`** | See the AWS section below. The bucket and region are checked **at boot**; the two keys must be set together (or both omitted to use an IAM role). It never falls back to local storage. |
 | `S3_ENDPOINT` | No | Only set this if using an S3-compatible service other than real AWS (R2, Spaces, MinIO). Leave unset for AWS S3 itself. |
 | `MAX_UPLOAD_MB` | No | Defaults to 10. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | **Yes** | A production boot refuses to start without `SMTP_HOST`. Use port 465 with `SMTP_SECURE=true`, or port 587 with `SMTP_SECURE=false` — in production a non-`secure` connection **must** upgrade with STARTTLS (`requireTLS`) or the send fails; certificates are always validated. |
-| `MAIL_FROM` | **Yes** | An address on a domain verified with your mail provider (SPF/DKIM). The placeholder default is refused at boot. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | **No — SMTP is optional** | Leave `SMTP_HOST` unset and the server starts and runs normally; only email verification and password reset need it (see "Running without SMTP" below). When `SMTP_HOST` is set, the rest is validated at boot: a bare host name, a valid port, `SMTP_USER`/`SMTP_PASS` together, port 465 with `SMTP_SECURE=true` or port 587 with `SMTP_SECURE=false`. In production a non-`secure` connection **must** upgrade with STARTTLS (`requireTLS`) or the send fails; certificates are always validated. Empty values count as unset. |
+| `MAIL_FROM` | Only with SMTP | When `SMTP_HOST` is set in production: an address on a domain verified with your mail provider (SPF/DKIM), e.g. `Khata <no-reply@example.com>`. The placeholder default is refused. Ignored without SMTP. |
 | `APP_URL`, `API_URL` | **Yes** | Public `https://` URLs (used for CORS and links in emails). `localhost` or `http://` is refused at boot. |
 | `RATE_LIMIT_*`, `LOG_LEVEL`, `ENABLE_SCHEDULER` | No | Sensible defaults already in place; see `server/.env.example` for what each controls. |
 
@@ -243,13 +243,34 @@ additionally needs `Secure` and third-party cookies to be allowed; that part
 cannot be verified without HTTPS on two real sites, so treat the single-parent
 setup as the supported one.
 
+### Running without SMTP
+
+SMTP is optional. With `SMTP_HOST` unset (or empty) in production the server
+starts and everything works except what exists only to send an email:
+
+| Feature | Without SMTP |
+|---|---|
+| Password reset (`POST /auth/forgot-password`) | `503 EMAIL_NOT_CONFIGURED`: "The email service is not configured on this server, so this cannot be done right now. Please contact the administrator." The answer is the same for a registered and an unknown address, and no reset token is created. |
+| Re-sending the confirmation email (`POST /auth/resend-verification`) | the same `503`; nothing is changed |
+| Inviting a member to a workspace | the same `503`, before anything is created (the permission check still comes first) |
+| Sign-up, sign-in, change password, everything else | unchanged. Accounts are simply created unconfirmed (nothing in the app is gated on a confirmed email). |
+| Emailing a customer when an invoice is sent | skipped; the invoice is still marked sent |
+| "Password changed" notices | skipped |
+
+The people-facing consequence: **a user who forgets their password cannot reset
+it by themselves** — the administrator has to deal with it directly. Turn SMTP
+on whenever that matters. In development with no SMTP the emails (including the
+links) are written to the server log instead, so the flows can still be tried.
+
 ### Production readiness (2026-10-03)
 
 **What the server now refuses at boot in production**
 (`config/productionChecks.ts`, tested): local storage without an explicit
-persistent-disk opt-in; S3 without bucket/region or with half a key pair; no
-`SMTP_HOST`; the placeholder `MAIL_FROM`; `localhost` or non-https
-`APP_URL`/`API_URL`; `COOKIE_SECURE=false`. It warns when
+persistent-disk opt-in; S3 without bucket/region or with half a key pair; an
+incoherent SMTP setup *when `SMTP_HOST` is set* (bad host or port, wrong TLS mode
+for the port, half a login, a missing or malformed `MAIL_FROM`); `localhost` or
+non-https `APP_URL`/`API_URL`; `COOKIE_SECURE=false`. **A missing `SMTP_HOST` is
+not refused.** It warns when
 `COOKIE_CROSS_SITE=true`. Secrets (`JWT_*` ≥ 32 characters) and `MONGODB_URI`
 were already required.
 
@@ -278,9 +299,11 @@ available)**
    `s3:PutObject`, `GetObject`, `DeleteObject` and `HeadObject` on
    `arn:aws:s3:::BUCKET/*`; set the four variables; upload a receipt, redeploy,
    and confirm it still downloads.
-2. **Real SMTP** (a provider such as SES, Postmark or Resend): verify the
-   sender domain (SPF + DKIM), set the variables, then register and reset a
-   password with a real mailbox and check the message does not land in spam.
+2. **Real SMTP — only if you want password reset and email confirmation** (a
+   provider such as SES, Postmark or Resend): verify the sender domain (SPF +
+   DKIM), set the variables, then register and reset a password with a real
+   mailbox and check the message does not land in spam. Skip this step to run
+   without email (below).
 3. **A real deployment** on Render + Vercel + Atlas + S3: sign up → verify email
    → upload → backup/restore, in a real browser, at least once on a phone.
 4. **Atlas hardening.** What this repository's connection actually has:

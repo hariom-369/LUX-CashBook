@@ -10,7 +10,7 @@ import { withTransaction } from '../../lib/transaction.js';
 import { nextDocumentNumber } from '../../services/numberSeries.service.js';
 import { computeInvoiceTotals, splitGst, type LineItemInput } from '../../lib/invoiceMath.js';
 import { createTransaction } from '../transactions/transaction.service.js';
-import { sendMail, invoiceSentEmail } from '../../lib/mailer.js';
+import { emailAvailable, sendMail, invoiceSentEmail } from '../../lib/mailer.js';
 import { logger } from '../../lib/logger.js';
 
 export type InvoiceDoc = HydratedDocument<IInvoice>;
@@ -237,7 +237,8 @@ export async function sendInvoice(scope: RequestScope, invoiceId: string, audit:
     Workspace.findById(scope.workspaceId).select('name currency').lean(),
   ]);
 
-  if (person?.email) {
+  // Emailing the customer is a courtesy: without an email service the invoice is still sent (marked sent) and nothing is logged as a failure.
+  if (person?.email && emailAvailable()) {
     try {
       await sendMail({
         to: person.email,
