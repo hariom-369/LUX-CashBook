@@ -51,9 +51,14 @@ export function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }
   async function select(id: string) {
     setOpen(false);
     if (id === activeId) return;
+    const previous = activeId;
     await switchWorkspace(id);
-    // Drop everything: no query result from the old workspace is valid here.
-    queryClient.clear();
+    // No result from the old workspace is valid here, so drop those — and only those. Clearing
+    // the whole cache would also throw away the new workspace's requests, which its screens start
+    // the moment the switch happens, leaving them on loading skeletons until a reload.
+    queryClient.removeQueries({ predicate: (query) => query.queryKey[0] === previous });
+    // Anything not keyed by workspace (notifications, say) is fetched again for the new one.
+    void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== id });
   }
 
   const ModeIcon = active.mode === 'business' ? Briefcase : User;
