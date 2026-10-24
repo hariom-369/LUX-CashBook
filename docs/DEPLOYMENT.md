@@ -253,11 +253,11 @@ Users on iPhone (every iOS browser and the installed app) are signed out on ever
 reload with the split setup, because WebKit never keeps the third-party cookie.
 `client/vercel.json` now forwards `/api/*` on the app's own domain to the Render
 API, so the browser only ever talks to `*.vercel.app` and the refresh cookie is
-first-party — kept by every browser. Three settings make it live:
+first-party — kept by every browser. Builds on Vercel use the same-origin `/api/v1`
+automatically (`client/vite.config.ts` checks `VERCEL=1`), whatever `VITE_API_URL`
+says, so no Vercel setting needs changing. On the Render side:
 
-1. **Vercel → Environment Variables:** set `VITE_API_URL` to `/api/v1` (or delete
-   it — that is the default), then **redeploy** (it is read at build time). While it
-   still points at `https://…onrender.com`, the app keeps calling Render directly.
+1. *(No longer needed — the Vercel build handles it.)*
 2. **Render → Environment:** set `TRUST_PROXY_HOPS=2` (Vercel, then Render's own load
    balancer). Without it every user appears to come from Vercel's address and the
    login rate limit is shared by everyone.

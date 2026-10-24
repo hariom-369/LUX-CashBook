@@ -36,7 +36,17 @@ function deployHeadersFingerprint() {
   };
 }
 
+/**
+ * On Vercel (which sets `VERCEL=1` for builds), client/vercel.json forwards `/api/*` to the API,
+ * so the app always calls its own origin there — whatever `VITE_API_URL` says. Calling the API's
+ * own domain directly makes the sign-in cookie third-party, and phones (iOS, Android Chrome) and
+ * installed apps then drop it, landing users on the login page after every refresh.
+ * Everywhere else `VITE_API_URL` works as before.
+ */
+const sameOriginApi = process.env.VERCEL === '1';
+
 export default defineConfig({
+  ...(sameOriginApi ? { define: { 'import.meta.env.VITE_API_URL': JSON.stringify('/api/v1') } } : {}),
   plugins: [
     deployHeadersFingerprint(),
     react(),
