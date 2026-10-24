@@ -38,6 +38,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('proxy hops (TRUST_PROXY_HOPS)', () => {
+  it('trusts one hop by default — the host\'s own load balancer, as before', async () => {
+    delete process.env.TRUST_PROXY_HOPS;
+    expect((await freshEnv()).env.TRUST_PROXY_HOPS).toBe(1);
+  });
+
+  it('accepts 2 for the Vercel /api rewrite in front of the host, and refuses nonsense', async () => {
+    process.env.TRUST_PROXY_HOPS = '2';
+    expect((await freshEnv()).env.TRUST_PROXY_HOPS).toBe(2);
+
+    process.env.TRUST_PROXY_HOPS = 'lots';
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('exit');
+    }) as never);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(freshEnv()).rejects.toThrow('exit');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+});
+
 describe('cross-site cookie configuration', () => {
   it('defaults to SameSite=Strict when COOKIE_CROSS_SITE is unset, unchanged from before this phase', async () => {
     const { env } = await freshEnv();

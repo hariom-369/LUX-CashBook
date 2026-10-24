@@ -41,6 +41,13 @@ const schema = z.object({
 
   /** Base URL of the API itself, used to build absolute links (attachments, emails). */
   API_URL: z.string().url().default('http://localhost:4000'),
+  /**
+   * How many proxies sit in front of this server in production, for working out each caller's real
+   * IP (rate limiting, the audit log). 1 = the host's own load balancer (Render). Set 2 when the
+   * frontend also proxies `/api` to this server (the Vercel rewrite in client/vercel.json) —
+   * otherwise every caller would appear to come from the proxy and share one rate limit.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   /** Where the browser app lives — used for CORS and for links inside emails. */
   APP_URL: z.string().url().default('http://localhost:5173'),
   /** Extra allowed origins, comma separated. */

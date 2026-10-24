@@ -244,7 +244,29 @@ be redeployed with this change** — until then production still sends the old c
 **Not covered:** Safari and every iOS browser (WebKit blocks third-party cookies
 and may not honour `Partitioned`; not tested here), and any browser that blocks all
 cookies. The only fix that works everywhere is to make the cookie first-party:
-serve the app and the API from one parent domain (next section).
+proxy the API through the app's own domain (below), or serve the app and the API
+from one parent domain (next section).
+
+### Fix for phones and installed apps: proxy `/api` through Vercel
+
+Users on iPhone (every iOS browser and the installed app) are signed out on every
+reload with the split setup, because WebKit never keeps the third-party cookie.
+`client/vercel.json` now forwards `/api/*` on the app's own domain to the Render
+API, so the browser only ever talks to `*.vercel.app` and the refresh cookie is
+first-party — kept by every browser. Three settings make it live:
+
+1. **Vercel → Environment Variables:** set `VITE_API_URL` to `/api/v1` (or delete
+   it — that is the default), then **redeploy** (it is read at build time). While it
+   still points at `https://…onrender.com`, the app keeps calling Render directly.
+2. **Render → Environment:** set `TRUST_PROXY_HOPS=2` (Vercel, then Render's own load
+   balancer). Without it every user appears to come from Vercel's address and the
+   login rate limit is shared by everyone.
+3. **Render → Environment:** `COOKIE_CROSS_SITE` can go back to `false` (a plain
+   `SameSite=Strict` first-party cookie). Leaving it `true` also works.
+
+Users signed in before the switch sign in once more afterwards (their old cookie
+belongs to the Render domain). If the rewrite destination ever changes, update it
+in `client/vercel.json` alongside the CSP `connect-src` in the same file.
 
 ### Recommended: one parent domain (`app.` + `api.`)
 

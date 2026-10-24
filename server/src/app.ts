@@ -17,8 +17,9 @@ export function createApp(): Express {
   const app = express();
 
   // Behind a load balancer, `req.ip` must be the client address or rate limiting
-  // buckets everyone together. Trust exactly one hop, not an arbitrary chain.
-  app.set('trust proxy', env.isProduction ? 1 : false);
+  // buckets everyone together. Trust exactly the known hops (TRUST_PROXY_HOPS: 1 for Render alone,
+  // 2 behind the Vercel /api rewrite), never an arbitrary chain a client could spoof.
+  app.set('trust proxy', env.isProduction ? env.TRUST_PROXY_HOPS : false);
   app.disable('x-powered-by');
 
   app.use(requestId);
