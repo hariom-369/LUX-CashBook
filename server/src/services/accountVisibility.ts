@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { Account, Budget, GroupExpense, RecurringTransaction, SavingsGoal, Transaction } from '../models/index.js';
+import { Account, Budget, GroupExpense, GroupSettlement, RecurringTransaction, SavingsGoal, Transaction } from '../models/index.js';
 import type { RequestScope } from '../middleware/context.js';
 import { notFound } from '../lib/errors.js';
 
@@ -122,12 +122,13 @@ export async function getHiddenTransactionIds(scope: Pick<RequestScope, 'workspa
 export async function getHiddenEntityIds(scope: Pick<RequestScope, 'workspaceId' | 'hiddenAccountIds'>): Promise<string[]> {
   const hidden = scope.hiddenAccountIds;
   if (hidden.length === 0) return [];
-  const [transactions, goals, budgets, recurring, groupExpenses] = await Promise.all([
+  const [transactions, goals, budgets, recurring, groupExpenses, groupSettlements] = await Promise.all([
     getHiddenTransactionIds(scope),
     SavingsGoal.find({ workspaceId: scope.workspaceId, linkedAccountId: { $in: hidden } }).select('_id').lean(),
     Budget.find({ workspaceId: scope.workspaceId, accountId: { $in: hidden } }).select('_id').lean(),
     RecurringTransaction.find({ workspaceId: scope.workspaceId, $or: [{ accountId: { $in: hidden } }, { toAccountId: { $in: hidden } }] }).select('_id').lean(),
     GroupExpense.find({ workspaceId: scope.workspaceId, accountId: { $in: hidden } }).select('_id').lean(),
+    GroupSettlement.find({ workspaceId: scope.workspaceId, accountId: { $in: hidden } }).select('_id').lean(),
   ]);
   return [
     ...hidden,
@@ -136,6 +137,7 @@ export async function getHiddenEntityIds(scope: Pick<RequestScope, 'workspaceId'
     ...budgets.map((b) => b._id),
     ...recurring.map((r) => r._id),
     ...groupExpenses.map((g) => g._id),
+    ...groupSettlements.map((g) => g._id),
   ].map(String);
 }
 

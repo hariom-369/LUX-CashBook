@@ -1,6 +1,6 @@
 import { Schema, type Types } from 'mongoose';
 import { DEFAULT_BUDGET_THRESHOLDS } from '@khata/shared';
-import { defineModel, baseOptions, moneyField, scopeFields } from './shared.js';
+import { defineModel, baseOptions, moneyField, scopeFields, softDeleteFields } from './shared.js';
 
 /**
  * A spending limit for a category (or for everything, when `categoryId` is null).
@@ -30,6 +30,9 @@ export interface IBudget {
   lastAlertedThreshold?: number | null;
   lastAlertedPeriod?: string | null;
   isActive: boolean;
+  /** In Trash since (§Trash): hidden everywhere, restorable for 30 days, then purged. */
+  deletedAt: Date | null;
+  deletedBy: Types.ObjectId | null;
   /** Edit revision, bumped only by user edits — see lib/revision.ts. */
   rev: number;
   createdAt: Date;
@@ -58,6 +61,7 @@ const budgetSchema = new Schema<IBudget>(
     lastAlertedThreshold: { type: Number, default: null },
     lastAlertedPeriod: { type: String, default: null },
     isActive: { type: Boolean, default: true },
+    ...softDeleteFields,
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
     rev: { type: Number, default: 0, min: 0 },
   },

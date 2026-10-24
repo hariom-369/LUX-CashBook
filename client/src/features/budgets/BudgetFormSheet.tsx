@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_BUDGET_THRESHOLDS, type BudgetProgressDto } from '@khata/shared';
+import { BUDGET_THRESHOLD_CHOICES, DEFAULT_BUDGET_THRESHOLDS, type BudgetProgressDto } from '@khata/shared';
 import { cn } from '../../lib/cn';
 import { Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
@@ -40,6 +40,7 @@ export function BudgetFormSheet({
   const [amountMinor, setAmountMinor] = useState<number | null>(null);
   const [period, setPeriod] = useState<'monthly' | 'weekly' | 'yearly'>('monthly');
   const [rollover, setRollover] = useState(false);
+  const [thresholds, setThresholds] = useState<number[]>([...DEFAULT_BUDGET_THRESHOLDS]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +54,7 @@ export function BudgetFormSheet({
       setAmountMinor(budget.amountMinor);
       setPeriod(budget.period);
       setRollover(budget.rollover);
+      setThresholds([...budget.alertThresholds]);
     } else {
       setName('');
       setCategoryId(prefill?.categoryId ?? '');
@@ -60,6 +62,7 @@ export function BudgetFormSheet({
       setAmountMinor(prefill?.amountMinor ?? null);
       setPeriod('monthly');
       setRollover(false);
+      setThresholds([...DEFAULT_BUDGET_THRESHOLDS]);
     }
   }, [open, budget, prefill]);
 
@@ -83,6 +86,7 @@ export function BudgetFormSheet({
         amountMinor,
         period,
         rollover,
+        alertThresholds: [...thresholds].sort((a, b) => a - b),
       };
       if (budget) {
         await patchOrQueue(`/budgets/${budget.id}`, { ...payload, rev: budget.rev });
@@ -211,9 +215,29 @@ export function BudgetFormSheet({
           </span>
         </label>
 
-        <p className="text-[11.5px] leading-relaxed text-ink-faint">
-          {t('budgets.youLlBeAlertedAt')} {DEFAULT_BUDGET_THRESHOLDS.join('%, ')}{t('budgets.ofThisBudget')}
-        </p>
+        <fieldset>
+          <legend className="text-[13px] font-medium text-ink-secondary">{t('budgets.alertMeAt')}</legend>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {/* A budget's own thresholds; any it already had that aren't offered here are kept. */}
+            {[...new Set([...BUDGET_THRESHOLD_CHOICES, ...thresholds])].sort((a, b) => a - b).map((pct) => {
+              const on = thresholds.includes(pct);
+              return (
+                <button
+                  key={pct}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setThresholds((cur) => (on ? cur.filter((x) => x !== pct) : [...cur, pct]))}
+                  className={`h-9 min-w-14 rounded-md border px-3 text-[12.5px] font-medium tabular transition-colors ${on ? 'border-gold bg-gold-soft text-gold-strong' : 'border-line bg-surface text-ink-secondary hover:bg-sunken'}`}
+                >
+                  {pct}%
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-faint">
+            {thresholds.length === 0 ? t('budgets.noAlertsForThisBudget') : t('budgets.alertsOncePerThresholdPerPeriod')}
+          </p>
+        </fieldset>
       </form>
     </Sheet>
   );

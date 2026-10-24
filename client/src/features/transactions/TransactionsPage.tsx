@@ -21,7 +21,7 @@ import { useRelativeDay } from '../../i18n/relativeDay';
 import { Money } from '../../components/ui/Money';
 import { Badge } from '../../components/ui/Badge';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
-import { useAccounts, useCategories, useInvalidateLedger, useTransactions } from '../../lib/queries';
+import { useAccounts, useCategories, useInvalidateLedger, usePeople, useTransactions } from '../../lib/queries';
 import { ConfirmDialog } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
 import { submitOrQueue } from '../../lib/offlineMutation';
@@ -33,6 +33,15 @@ import { TransactionRow } from './TransactionRow';
 import { TransactionDetailSheet } from './TransactionDetailSheet';
 
 const RANGE_OPTIONS = LIST_RANGES;
+
+/** Sort choices the list offers — the API's own `sortBy` / `sortOrder`. */
+const SORTS = {
+  newest: { sortBy: 'date', sortOrder: 'desc' },
+  oldest: { sortBy: 'date', sortOrder: 'asc' },
+  largest: { sortBy: 'amount', sortOrder: 'desc' },
+  smallest: { sortBy: 'amount', sortOrder: 'asc' },
+} as const;
+type SortKey = keyof typeof SORTS;
 
 /**
  * The transaction list (§23, §24).
@@ -58,7 +67,12 @@ export function TransactionsPage() {
   const [searchParams] = useSearchParams();
   const link = useMemo(() => readSearchLink(searchParams), [searchParams]);
   const [search, setSearch] = useState(() => link.q);
-  const [range, setRange] = useState<RangePreset>(() => link.range ?? 'this_month');
+  const [range, setRange] = useState<RangePreset | 'custom'>(() => link.range ?? 'this_month');
+  /** Custom range, as calendar days (YYYY-MM-DD). Either end alone means "since" / "until". */
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [personId, setPersonId] = useState('');
+  const [sort, setSort] = useState<SortKey>('newest');
   const [types, setTypes] = useState<TransactionType[]>(() => link.types ?? []);
   const [accountId, setAccountId] = useState(() => link.accountId ?? '');
   const [payee, setPayee] = useState(() => link.payee ?? null);
@@ -145,8 +159,18 @@ export function TransactionsPage() {
   const debouncedTag = useDebounced(tag.trim().replace(/^#/, ''), 300);
   const { data: accounts = [] } = useAccounts();
   const { data: categories = [] } = useCategories();
+  const { data: people = [] } = usePeople();
 
-  const dateRange = useMemo(() => resolveRange(range), [range]);
+  const dateRange = useMemo(() => resolveRange(range === 'custom' ? 'this_month' : range), [range]);
+  // A custom range's own bounds, from the start of its first day to the end of its last.
+  const customRange = useMemo(
+    () => ({
+      from: customFrom ? new Date(`${customFrom}T00:00:00`) : null,
+      to: customTo ? new Date(`${customTo}T23:59:59.999`) : null,
+    }),
+    [customFrom, customTo],
+  );
+  const customRangeBackwards = Boolean(customRange.from && customRange.to && customRange.from > customRange.to);
 
   const params = useMemo(
     () => ({
@@ -154,7 +178,14 @@ export function TransactionsPage() {
       limit: 50,
       ...(range === 'all_time'
         ? {}
-        : { from: dateRange.from.toISOString(), to: dateRange.to.toISOString() }),
+        : range === 'custom'
+          ? {
+              ...(customRange.from ? { from: customRange.from.toISOString() } : {}),
+              ...(customRange.to ? { to: customRange.to.toISOString() } : {}),
+            }
+          : { from: dateRange.from.toISOString(), to: dateRange.to.toISOString() }),
+      ...SORTS[sort],
+      ...(personId ? { personIds: [personId] } : {}),
       ...(types.length ? { types } : {}),
       ...(accountId ? { accountIds: [accountId] } : {}),
       ...(payee ? { payeeIds: [payee.id] } : {}),
@@ -168,13 +199,13 @@ export function TransactionsPage() {
       ...(outstandingOnly ? { outstandingOnly: true } : {}),
       ...(claims ? { reimbursement: [...CLAIM_STAGES[claims]] } : {}),
     }),
-    [page, range, dateRange, types, accountId, payee, categoryId, debouncedSearch, showDeleted, debouncedTag, minAmountMinor, maxAmountMinor, withReceipts, outstandingOnly, claims],
+    [page, range, dateRange, customRange, sort, personId, types, accountId, payee, categoryId, debouncedSearch, showDeleted, debouncedTag, minAmountMinor, maxAmountMinor, withReceipts, outstandingOnly, claims],
   );
 
   const { data, isLoading, isError, error, refetch, isPlaceholderData } = useTransactions(params);
 
   const activeFilterCount =
-    types.length + (accountId ? 1 : 0) + (categoryId ? 1 : 0) + (showDeleted ? 1 : 0) +
+    types.length + (accountId ? 1 : 0) + (categoryId ? 1 : 0) + (personId ? 1 : 0) + (showDeleted ? 1 : 0) +
     (debouncedTag ? 1 : 0) + (minAmountMinor !== null ? 1 : 0) + (maxAmountMinor !== null ? 1 : 0) +
     (withReceipts ? 1 : 0) + (outstandingOnly ? 1 : 0) + (claims ? 1 : 0);
 
@@ -183,6 +214,8 @@ export function TransactionsPage() {
     setAccountId('');
     setPayee(null);
     setCategoryId('');
+    setPersonId('');
+    setSort('newest');
     setShowDeleted(false);
     setTag('');
     setMinAmountMinor(null);
@@ -198,13 +231,14 @@ export function TransactionsPage() {
 
   // Group by day so the list reads as a diary rather than an undifferentiated feed.
   const grouped = useMemo(() => {
+    if (SORTS[sort].sortBy !== 'date') return items.length ? ([['', items]] as Array<[string, TransactionDto[]]>) : [];
     const groups = new Map<string, TransactionDto[]>();
     for (const transaction of items) {
       const key = toDateKey(new Date(transaction.date));
       groups.set(key, [...(groups.get(key) ?? []), transaction]);
     }
     return [...groups.entries()];
-  }, [items]);
+  }, [items, sort]);
 
   const flatCategories = useMemo(
     () =>
@@ -223,7 +257,15 @@ export function TransactionsPage() {
           <p className="mt-0.5 text-[13px] text-ink-muted">
             {range === 'all_time'
               ? tr('transactions.everyEntryYouHaveRecorded')
-              : `${formatDate(dateRange.from)} – ${formatDate(dateRange.to)}`}
+              : range === 'custom'
+                ? customRange.from && customRange.to
+                  ? `${formatDate(customRange.from)} – ${formatDate(customRange.to)}`
+                  : customRange.from
+                    ? tr('transactions.since', { date: formatDate(customRange.from) })
+                    : customRange.to
+                      ? tr('transactions.until', { date: formatDate(customRange.to) })
+                      : tr('transactions.everyEntryYouHaveRecorded')
+                : `${formatDate(dateRange.from)} – ${formatDate(dateRange.to)}`}
           </p>
         </div>
 
@@ -280,7 +322,7 @@ export function TransactionsPage() {
           <Select
             value={range}
             onChange={(event) => {
-              setRange(event.target.value as RangePreset);
+              setRange(event.target.value as RangePreset | 'custom');
               setPage(1);
             }}
             aria-label={tr('common.dateRange')}
@@ -291,6 +333,57 @@ export function TransactionsPage() {
                 {tr.label('range', option, RANGE_PRESET_LABELS[option])}
               </option>
             ))}
+            <option value="custom">{tr('transactions.customDates')}</option>
+          </Select>
+
+          {range === 'custom' && (
+            <div className="flex basis-full flex-wrap items-center gap-2 sm:basis-auto">
+              <Input
+                type="date"
+                value={customFrom}
+                max={customTo || undefined}
+                onChange={(event) => {
+                  setCustomFrom(event.target.value);
+                  setPage(1);
+                }}
+                aria-label={tr('transactions.fromDate')}
+                className="w-auto"
+                invalid={customRangeBackwards}
+              />
+              <span aria-hidden className="text-[12px] text-ink-faint">–</span>
+              <Input
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(event) => {
+                  setCustomTo(event.target.value);
+                  setPage(1);
+                }}
+                aria-label={tr('transactions.toDate')}
+                className="w-auto"
+                invalid={customRangeBackwards}
+              />
+              {customRangeBackwards && (
+                <span role="alert" className="text-[12px] text-negative">
+                  {tr('transactions.rangeEndsBeforeItStarts')}
+                </span>
+              )}
+            </div>
+          )}
+
+          <Select
+            value={sort}
+            onChange={(event) => {
+              setSort(event.target.value as SortKey);
+              setPage(1);
+            }}
+            aria-label={tr('transactions.sortBy')}
+            className="w-auto min-w-[150px]"
+          >
+            <option value="newest">{tr('transactions.sort.newest')}</option>
+            <option value="oldest">{tr('transactions.sort.oldest')}</option>
+            <option value="largest">{tr('transactions.sort.largest')}</option>
+            <option value="smallest">{tr('transactions.sort.smallest')}</option>
           </Select>
 
           <Button
@@ -391,6 +484,24 @@ export function TransactionsPage() {
                   {flatCategories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.depth ? `\u00A0\u00A0\u00A0${category.name}` : category.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="label-eyebrow">{tr('transactions.filter.person')}</span>
+                <Select
+                  value={personId}
+                  onChange={(event) => {
+                    setPersonId(event.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">{tr('transactions.filter.everyone')}</option>
+                  {people.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name}
                     </option>
                   ))}
                 </Select>
@@ -568,14 +679,16 @@ export function TransactionsPage() {
           <>
             {grouped.map(([dateKey, dayTransactions]) => (
               <section key={dateKey}>
-                <h2 className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-10 flex items-center justify-between gap-3 border-y border-line-faint bg-sunken/90 px-5 py-2 backdrop-blur-sm sm:px-6">
-                  <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-muted">
-                    {relativeDay(dateKey)}
-                  </span>
-                  <span className="text-[11px] text-ink-faint">
-                    {tr.plural('transactions.entryCount', dayTransactions.length)}
-                  </span>
-                </h2>
+                {dateKey && (
+                  <h2 className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-10 flex items-center justify-between gap-3 border-y border-line-faint bg-sunken/90 px-5 py-2 backdrop-blur-sm sm:px-6">
+                    <span className="text-[11.5px] font-semibold uppercase tracking-[0.07em] text-ink-muted">
+                      {relativeDay(dateKey)}
+                    </span>
+                    <span className="text-[11px] text-ink-faint">
+                      {tr.plural('transactions.entryCount', dayTransactions.length)}
+                    </span>
+                  </h2>
+                )}
                 <ul className="divide-y divide-line-faint">
                   {dayTransactions.map((transaction) => (
                     <TransactionRow

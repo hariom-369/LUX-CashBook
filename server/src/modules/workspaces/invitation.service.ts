@@ -54,7 +54,7 @@ export async function createInvitation(
   const email = input.email.trim().toLowerCase();
   const invitedUser = await User.findOne({ email }).select('_id name').lean();
   if (!invitedUser) {
-    throw badRequest('No Khata account uses that email address yet. They need to sign up first.');
+    throw badRequest('No VELORA account uses that email address yet. They need to sign up first.');
   }
 
   const alreadyMember = await WorkspaceMember.findOne({ workspaceId: scope.workspaceId, userId: invitedUser._id }).lean();

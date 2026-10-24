@@ -41,7 +41,7 @@ export async function listReminders(
   scope: RequestScope,
   options: { includeDone?: boolean } = {},
 ): Promise<ReminderDto[]> {
-  const filter: Record<string, unknown> = { workspaceId: scope.workspaceId };
+  const filter: Record<string, unknown> = { workspaceId: scope.workspaceId, deletedAt: null };
   if (!options.includeDone) filter.isDone = false;
 
   let reminders = await Reminder.find(filter).sort({ dueDate: 1 }).lean();
@@ -93,7 +93,7 @@ export async function createReminder(
 
 async function getReminderDoc(scope: RequestScope, id: string): Promise<ReminderDoc> {
   if (!Types.ObjectId.isValid(id)) throw notFound('Reminder');
-  const reminder = await Reminder.findOne({ _id: id, workspaceId: scope.workspaceId });
+  const reminder = await Reminder.findOne({ _id: id, workspaceId: scope.workspaceId, deletedAt: null });
   if (!reminder) throw notFound('Reminder');
   return reminder;
 }
@@ -138,7 +138,16 @@ export async function completeReminder(scope: RequestScope, id: string, audit: A
 
 export async function deleteReminder(scope: RequestScope, id: string, audit: AuditContext): Promise<void> {
   const reminder = await getReminderDoc(scope, id);
-  await reminder.deleteOne();
+  if (reminder.sourceKey) {
+    // Generated from a loan, document or card: the generator owns it, so it's removed as before
+    // rather than going to Trash (it would only be generated again while its source exists).
+    await reminder.deleteOne();
+  } else {
+    // A reminder you wrote yourself goes to Trash (§Trash), restorable for 30 days.
+    reminder.deletedAt = new Date();
+    reminder.deletedBy = scope.userId;
+    await reminder.save();
+  }
 
   await recordAudit(audit, {
     action: 'deleted',
@@ -364,6 +373,7 @@ export async function raiseDueReminderNotifications(now: Date = new Date()): Pro
   const due = await Reminder.find({
     isDone: false,
     isDismissed: false,
+    deletedAt: null,
     dueDate: { $lte: horizon },
     $or: [{ lastNotifiedAt: null }, { lastNotifiedAt: { $lt: addDays(now, -1) } }],
   }).limit(500);

@@ -15,6 +15,8 @@ export interface MoneyInputProps {
   id?: string;
   name?: string;
   'aria-describedby'?: string;
+  /** For an input with no visible label of its own, e.g. one per row of a split. */
+  'aria-label'?: string;
   onBlur?: () => void;
   className?: string;
   /** The oversized variant used by the quick-add sheet (§45). */

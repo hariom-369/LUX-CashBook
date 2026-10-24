@@ -123,10 +123,16 @@ export function csvArray<T extends readonly [string, ...string[]]>(values: T) {
 export const csvObjectIds = z
   .union([z.string(), z.array(objectIdSchema)])
   .optional()
-  .transform((v) => {
+  .transform((v, ctx) => {
     if (!v) return undefined;
     const list = Array.isArray(v) ? v : v.split(',').map((s) => s.trim()).filter(Boolean);
-    return list.filter((s) => /^[a-f\d]{24}$/i.test(s));
+    // Refuse rather than drop a bad id: dropping it would quietly widen a filter (or an export)
+    // to everything, the opposite of what was asked for.
+    if (list.some((s) => !/^[a-f\d]{24}$/i.test(s))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'That reference is not valid.' });
+      return z.NEVER;
+    }
+    return list;
   });
 
 /** Trimmed, length-capped free text. Empty string becomes `undefined`. */

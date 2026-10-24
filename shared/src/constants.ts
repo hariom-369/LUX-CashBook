@@ -317,7 +317,10 @@ export const GOAL_ICONS = [
 ] as const;
 
 /** Budget alert thresholds offered by default; users may set their own (§29). */
-export const DEFAULT_BUDGET_THRESHOLDS = [50, 75, 90, 100] as const;
+/** Where a new budget warns, as percentages of its limit. Each budget can choose its own, or none. */
+export const DEFAULT_BUDGET_THRESHOLDS = [75, 90, 100] as const;
+/** The thresholds the budget form offers. */
+export const BUDGET_THRESHOLD_CHOICES = [50, 75, 80, 90, 100, 110] as const;
 
 // ─────────────────────────────────────────────── Invoicing (Phase 11)
 

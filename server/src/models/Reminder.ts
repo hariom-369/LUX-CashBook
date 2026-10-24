@@ -1,6 +1,6 @@
 import { Schema, type Types } from 'mongoose';
 import { REMINDER_TYPES, type ReminderType } from '@khata/shared';
-import { defineModel, baseOptions, moneyField, scopeFields } from './shared.js';
+import { defineModel, baseOptions, moneyField, scopeFields, softDeleteFields } from './shared.js';
 
 /**
  * A dated prompt (§18): a loan coming due, a bill, a subscription renewal.
@@ -27,6 +27,9 @@ export interface IReminder {
   /** Stable identity for generated reminders, e.g. `loan:<txnId>`. */
   sourceKey?: string | null;
   isDone: boolean;
+  /** In Trash since (§Trash): hidden everywhere, restorable for 30 days, then purged. */
+  deletedAt: Date | null;
+  deletedBy: Types.ObjectId | null;
   completedAt?: Date | null;
   lastNotifiedAt?: Date | null;
   isDismissed: boolean;
@@ -48,6 +51,7 @@ const reminderSchema = new Schema<IReminder>(
     notifyDaysBefore: { type: Number, min: 0, max: 60, default: 1 },
     sourceKey: { type: String, default: null, maxlength: 120 },
     isDone: { type: Boolean, default: false },
+    ...softDeleteFields,
     completedAt: { type: Date, default: null },
     lastNotifiedAt: { type: Date, default: null },
     isDismissed: { type: Boolean, default: false },

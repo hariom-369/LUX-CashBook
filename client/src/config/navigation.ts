@@ -35,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/budgets', label: 'Budgets', icon: 'Target', group: 'plan', description: 'Monthly limits by category' },
   { to: '/goals', label: 'Goals', icon: 'Flag', group: 'plan', description: 'What you are saving towards' },
   { to: '/recurring', label: 'Recurring', icon: 'Repeat', group: 'plan', description: 'Salary, rent, EMIs and subscriptions' },
+  { to: '/upcoming', label: 'Upcoming', icon: 'Clock', group: 'plan', description: 'Every bill, EMI, loan and reminder that is coming up, in one timeline' },
   { to: '/bills', label: 'Bills', icon: 'CalendarClock', group: 'plan', description: "What's due - overdue, this week, this month" },
   { to: '/calendar', label: 'Calendar', icon: 'CalendarDays', group: 'plan', description: 'Bills, loans and reminders by date' },
   { to: '/documents', label: 'Documents', icon: 'FolderOpen', group: 'plan', description: 'Receipts, warranties, agreements and more' },
@@ -52,6 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/reports', label: 'Reports', icon: 'FileBarChart', group: 'system', mobile: true, description: 'Statements, exports and PDFs' },
   { to: '/insights', label: 'Insights', icon: 'Sparkles', group: 'system', description: 'What changed and where the money went' },
   { to: '/assistant', label: 'Assistant', icon: 'Bot', group: 'system', description: 'Ask about your finances, or turn a note or receipt into a draft' },
+  { to: '/trash', label: 'Trash', icon: 'Trash2', group: 'system', description: 'Deleted items you can restore for 30 days' },
   { to: '/settings', label: 'Settings', icon: 'Settings', group: 'system', description: 'Profile, security, data and preferences' },
 ];
 

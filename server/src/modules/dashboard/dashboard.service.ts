@@ -329,6 +329,7 @@ export async function getUpcoming(scope: RequestScope, now: Date = new Date()): 
       workspaceId: scope.workspaceId,
       isDone: false,
       isDismissed: false,
+      deletedAt: null,
       dueDate: { $lte: horizon },
     })
       .sort({ dueDate: 1 })

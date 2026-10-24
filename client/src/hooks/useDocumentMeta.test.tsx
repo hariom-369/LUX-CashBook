@@ -11,8 +11,8 @@ afterEach(() => {
 
 describe('document metadata (§Phase 16)', () => {
   it('puts the most specific part of the title first', () => {
-    expect(composeTitle(['Settings', 'Security'])).toBe('Security · Settings · Khata');
-    expect(composeTitle(['Welcome back'])).toBe('Welcome back · Khata');
+    expect(composeTitle(['Settings', 'Security'])).toBe('Security · Settings · VELORA');
+    expect(composeTitle(['Welcome back'])).toBe('Welcome back · VELORA');
   });
 
   it('keeps <html lang> in step with the interface language', () => {
@@ -28,6 +28,6 @@ describe('document metadata (§Phase 16)', () => {
 
   it('sets the title for a screen outside the app shell', () => {
     renderHook(() => useDocumentTitle('Create your account'));
-    expect(document.title).toBe('Create your account · Khata');
+    expect(document.title).toBe('Create your account · VELORA');
   });
 });

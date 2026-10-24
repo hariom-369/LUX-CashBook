@@ -8,6 +8,11 @@ import type {
   ReportResultDto,
   SavedReportDto,
   TagSummaryDto,
+  TrashItemDto,
+  TrashItemType,
+  Paginated,
+  MonthlyInsightsDto,
+  UpcomingPaymentsDto,
 } from '@khata/shared';
 import { api } from './api';
 import { useAuthStore } from '../stores/auth.store';
@@ -102,4 +107,59 @@ export function useInvalidateOrganise() {
       void queryClient.invalidateQueries({ queryKey: [ws, key] });
     }
   };
+}
+
+// ─────────────────────────────────────────────── Trash (§Trash)
+
+export interface TrashQuery {
+  type?: TrashItemType;
+  q?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** What's in Trash: newest deletion first, with each item's 30-day countdown. */
+export function useTrash(params: TrashQuery) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: [ws, 'trash', params],
+    queryFn: () => api.get<Paginated<TrashItemDto>>('/trash', { query: { ...params } }),
+    enabled: ws !== 'none',
+    placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * After a restore or permanent delete: a restored record can reappear on almost any screen
+ * (a transaction moves balances, reports, budgets and a person's ledger), so everything this
+ * workspace has loaded is refreshed rather than guessing which lists it touched.
+ */
+export function useInvalidateAfterTrash() {
+  const queryClient = useQueryClient();
+  const ws = useAuthStore.getState().activeWorkspaceId ?? 'none';
+  return () => void queryClient.invalidateQueries({ queryKey: [ws] });
+}
+
+// ─────────────────────────────────────────────── Monthly insights & upcoming payments
+
+/** One month's facts vs the month before. `month` is YYYY-MM; omitted = this month. */
+export function useMonthlyInsights(month: string) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: [ws, 'monthly-insights', month],
+    queryFn: () => api.get<MonthlyInsightsDto>('/reports/monthly-insights', { query: { month } }),
+    enabled: ws !== 'none',
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** Everything scheduled in the next `days` days, plus what was paid recently. Read-only. */
+export function useUpcomingPayments(days: number) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: [ws, 'upcoming-payments', days],
+    queryFn: () => api.get<UpcomingPaymentsDto>('/upcoming', { query: { days } }),
+    enabled: ws !== 'none',
+    placeholderData: (previous) => previous,
+  });
 }

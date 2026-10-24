@@ -21,6 +21,8 @@ export interface SheetProps {
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
+  /** The dialog's accessible name when `title` is not plain text (e.g. it includes an icon). */
+  ariaLabel?: string;
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -45,6 +47,7 @@ export function Sheet({
   open,
   onClose,
   title,
+  ariaLabel,
   description,
   children,
   footer,
@@ -141,7 +144,7 @@ export function Sheet({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
-          aria-label={typeof title === 'string' ? title : undefined}
+          aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
           tabIndex={-1}
           className={cn(
             'relative flex max-h-[92dvh] w-full flex-col border-line bg-raised shadow-lg outline-none',

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Plus, Users } from 'lucide-react';
+import { ChevronRight, Plus, Trash2, Users } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States';
 import { useGroups } from '../../lib/queries3';
 import { GroupFormSheet } from './GroupFormSheet';
+import { DeleteGroupDialog } from './DeleteGroupDialog';
 import { useT } from '../../i18n';
 
 /**
@@ -18,6 +19,7 @@ export function GroupsPage() {
   const t = useT();
   const { data: groups = [], isLoading, isError, error, refetch } = useGroups();
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
 
   return (
     <div className="flex flex-col gap-5">
@@ -52,8 +54,8 @@ export function GroupsPage() {
         ) : (
           <ul className="divide-y divide-line-faint">
             {groups.map((group) => (
-              <li key={group.id}>
-                <Link to={`/groups/${group.id}`} className="flex items-center gap-3.5 px-5 py-4 transition-colors hover:bg-sunken sm:px-6">
+              <li key={group.id} className="flex items-center transition-colors hover:bg-sunken">
+                <Link to={`/groups/${group.id}`} className="flex min-w-0 flex-1 items-center gap-3.5 py-4 pl-5 sm:pl-6">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-gold-soft text-gold-strong">
                     <Users className="size-[18px]" />
                   </span>
@@ -63,6 +65,14 @@ export function GroupsPage() {
                   </div>
                   <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-faint" />
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => setDeleting({ id: group.id, name: group.name })}
+                  aria-label={t('groups.deleteGroupNamed', { name: group.name })}
+                  className="mx-2 flex size-10 shrink-0 items-center justify-center rounded-sm text-ink-faint transition-colors hover:text-negative sm:mx-3"
+                >
+                  <Trash2 aria-hidden className="size-4" />
+                </button>
               </li>
             ))}
           </ul>
@@ -70,6 +80,7 @@ export function GroupsPage() {
       </Card>
 
       <GroupFormSheet open={creating} onClose={() => setCreating(false)} />
+      <DeleteGroupDialog group={deleting} onClose={() => setDeleting(null)} />
     </div>
   );
 }

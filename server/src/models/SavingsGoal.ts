@@ -1,5 +1,5 @@
 import { Schema, type HydratedDocument, type Types } from 'mongoose';
-import { defineModel, baseOptions, colorField, moneyField, scopeFields } from './shared.js';
+import { defineModel, baseOptions, colorField, moneyField, scopeFields, softDeleteFields } from './shared.js';
 
 /**
  * A savings target (§30).
@@ -34,6 +34,9 @@ export interface ISavingsGoal {
   isAchieved: boolean;
   achievedAt?: Date | null;
   isArchived: boolean;
+  /** In Trash since (§Trash): hidden everywhere, restorable for 30 days, then purged. */
+  deletedAt: Date | null;
+  deletedBy: Types.ObjectId | null;
   sortOrder: number;
   /** Edit revision, bumped only by user edits — see lib/revision.ts. */
   rev: number;
@@ -62,6 +65,7 @@ const savingsGoalSchema = new Schema<ISavingsGoal>(
     isAchieved: { type: Boolean, default: false },
     achievedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
+    ...softDeleteFields,
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
     rev: { type: Number, default: 0, min: 0 },
     sortOrder: { type: Number, default: 0 },

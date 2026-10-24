@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bell, Download, Eye, EyeOff, LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react';
+import { Bell, Calculator, Download, Eye, EyeOff, LogOut, Menu, Moon, Search, Settings, Sun, User } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { useUiStore, resolveTheme } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
@@ -9,6 +9,7 @@ import { useT } from '../i18n';
 import { useNavLabels } from '../i18n/nav';
 import { navItemsFor } from '../config/navigation';
 import { Logo } from '../components/brand/Logo';
+import { QuickCalculator } from '../components/QuickCalculator';
 import { useNotifications } from '../lib/queries3';
 
 /**
@@ -39,6 +40,7 @@ export function TopBar() {
   );
 
   const isDark = resolveTheme(theme) === 'dark';
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
 
   return (
     // The height includes the status-bar inset so an installed PWA keeps a full 4rem bar.
@@ -56,7 +58,7 @@ export function TopBar() {
 
       {/* A visual page label only — every page renders its own <h1>, so this is not a second one. */}
       <p className="hidden min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-ink lg:block">
-        {current ? navLabels.item(current) : 'Khata'}
+        {current ? navLabels.item(current) : 'VELORA'}
       </p>
 
       <div className="flex-1" />
@@ -83,6 +85,17 @@ export function TopBar() {
         <Search aria-hidden className="size-[18px]" />
       </button>
 
+      {/* Hidden on the narrowest phones, where the header is already full: the account menu offers it there instead. */}
+      <button
+        type="button"
+        onClick={() => setCalculatorOpen(true)}
+        aria-label={t('calculator.open')}
+        title={t('calculator.open')}
+        className="hidden size-10 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-sunken min-[420px]:flex"
+      >
+        <Calculator aria-hidden className="size-[18px]" />
+      </button>
+
       <button
         type="button"
         onClick={togglePrivacy}
@@ -107,7 +120,10 @@ export function TopBar() {
 
       <NotificationBell />
 
-      <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} avatarUrl={user?.avatarUrl} />
+      <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} avatarUrl={user?.avatarUrl} onOpenCalculator={() => setCalculatorOpen(true)} />
+
+      {/* Mounted only while open, so each calculation starts fresh and nothing lingers. */}
+      {calculatorOpen && <QuickCalculator open onClose={() => setCalculatorOpen(false)} />}
     </header>
   );
 }
@@ -136,7 +152,7 @@ function NotificationBell() {
   );
 }
 
-function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; avatarUrl?: string }) {
+function AccountMenu({ name, email, avatarUrl, onOpenCalculator }: { name: string; email: string; avatarUrl?: string; onOpenCalculator: () => void }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const signOut = useAuthStore((s) => s.signOut);
@@ -213,6 +229,20 @@ function AccountMenu({ name, email, avatarUrl }: { name: string; email: string; 
             <Settings aria-hidden className="size-4" />
             {t('nav.settings')}
           </Link>
+
+          {/* The header shows the calculator button from 420px up; below that it lives here. */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenCalculator();
+            }}
+            className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-left text-[13px] text-ink-secondary transition-colors hover:bg-sunken hover:text-ink min-[420px]:hidden"
+          >
+            <Calculator aria-hidden className="size-4" />
+            {t('calculator.title')}
+          </button>
 
           {/* Only while the browser can actually install Khata (never a dead item). */}
           {installPrompt && (

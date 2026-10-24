@@ -11,6 +11,7 @@ import type {
   GoalProgressDto,
   GroupExpenseDto,
   GroupMemberBalanceDto,
+  GroupSummaryDto,
   InvitationDto,
   NetWorthDto,
   NotificationDto,
@@ -20,6 +21,7 @@ import type {
   WorkspaceMemberDto,
 } from '@khata/shared';
 import { api } from './api';
+import { useInvalidateLedger } from './queries';
 import { useAuthStore } from '../stores/auth.store';
 import type { BorrowLendRow, MonthSummaryRow } from './reportTypes';
 
@@ -130,14 +132,28 @@ export function useGroupBalances(groupId: string | undefined) {
   });
 }
 
+/** Everyone's paid / share / net, what is still to settle, and the payments already recorded. */
+export function useGroupSummary(groupId: string | undefined) {
+  const ws = useWorkspaceId();
+  return useQuery({
+    queryKey: [ws, 'group-summary', groupId],
+    queryFn: () => api.get<GroupSummaryDto>(`/groups/${groupId}/summary`),
+    enabled: ws !== 'none' && Boolean(groupId),
+  });
+}
+
+/** A group change can post or remove your share, loans and repayments — so the ledger is refreshed with it. */
 export function useInvalidateGroup(groupId: string | undefined) {
   const queryClient = useQueryClient();
+  const invalidateLedger = useInvalidateLedger();
   const ws = useAuthStore.getState().activeWorkspaceId ?? 'none';
   return () => {
     void queryClient.invalidateQueries({ queryKey: [ws, 'groups'] });
     void queryClient.invalidateQueries({ queryKey: [ws, 'group', groupId] });
     void queryClient.invalidateQueries({ queryKey: [ws, 'group-expenses', groupId] });
     void queryClient.invalidateQueries({ queryKey: [ws, 'group-balances', groupId] });
+    void queryClient.invalidateQueries({ queryKey: [ws, 'group-summary', groupId] });
+    invalidateLedger();
   };
 }
 

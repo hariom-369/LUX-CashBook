@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import { useT } from '../i18n';
 
-const APP_NAME = 'Khata';
+const APP_NAME = 'VELORA';
 
-/** `document.title` for the current page: "<page> · Khata". Pass `null` to leave it alone. */
+/** `document.title` for the current page: "<page> · VELORA". Pass `null` to leave it alone. */
 export function composeTitle(parts: string[]): string {
   return [...parts.slice().reverse(), APP_NAME].join(' · ');
 }

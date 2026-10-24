@@ -1,9 +1,9 @@
-# Khata
+# VELORA
 
-**खाता — a premium cash book, personal ledger, and personal-finance system, built
-for daily real-world use.**
+**Personal Finance — Take Control of Your Money.** A premium cash book, personal
+ledger, and personal-finance system, built for daily real-world use.
 
-Khata combines a cash book, a personal lending/borrowing ledger, an
+VELORA combines a cash book, a personal lending/borrowing ledger, an
 income/expense tracker, a multi-wallet manager, and a small-business petty
 cash book into one accurate, offline-capable application — for students,
 salaried individuals, families, freelancers, shopkeepers, and small
@@ -46,8 +46,27 @@ businesses.
   incapable of being counted as income or expense
 - **Unlimited accounts/wallets** — cash, bank, UPI, credit card, savings,
   investments — each with its own running balance
-- **Budgets & savings goals** with live progress and threshold alerts
+- **Budgets & savings goals** with live progress and smart alerts — each
+  budget warns at its own thresholds (75 / 90 / 100% by default, or none),
+  once per threshold per budget period
 - **Recurring transactions & reminders** for bills and due dates
+- **Upcoming payments** — one read-only timeline of bills, recurring
+  payments, EMIs, loan due dates, card dues and reminders: overdue, today,
+  this week and later, with recently paid kept separate
+- **Group expenses** — any member can pay; split equally, by exact amounts,
+  percentages or shares; balances, settle-up suggestions and full or partial
+  payments, with your own share kept exact in your books
+- **Monthly insights** — income, spending, savings and category spend for any
+  month vs the month before, from recorded transactions only (transfers and
+  loans excluded, refunds shown, estimates labelled)
+- **Advanced transaction search** — text, date range (including custom
+  dates), amount range, category, account, person, payee, type and tags
+  together, with sorting, pagination and one-click reset
+- **Trash** — deleted transactions, accounts, people, groups, budgets, goals,
+  recurring entries, reminders and documents can be restored for 30 days,
+  then are permanently deleted automatically by the server
+- **Quick Calculator** — exact decimal arithmetic with memory, history and
+  percentage / GST tools, from the header
 - **Reports** — category breakdowns, monthly comparison, net worth trend,
   borrow/lend summary, an annual summary, and more
 - **Natural-language quick entry** — type "Paid 250 for lunch from HDFC" or
@@ -277,8 +296,10 @@ enforced in the schema and service layer, not just the UI:
   cannot be double-counted, orphaned, or half-deleted.
 - Transfers and lending/borrowing are structurally excluded from every
   income/expense/savings calculation.
-- Nothing is ever hard-deleted — soft deletes keep every history recoverable
-  and make undo possible.
+- Deleting is a soft delete first — undo is instant and Trash can restore
+  anything for 30 days. Only then is it permanently removed, and never while
+  other records still depend on it (such a record is kept hidden instead).
+  Records deleted before Trash existed are never purged automatically.
 - Every query is scoped to `(userId, workspaceId)`, re-verified against the
   database on every request — a client-supplied ID is a request, never a
   grant.

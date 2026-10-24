@@ -94,7 +94,7 @@ function layout(heading: string, bodyHtml: string, cta?: { label: string; url: s
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border:1px solid ${BRAND.line};border-radius:16px;overflow:hidden">
         <tr><td style="padding:32px 32px 0">
-          <div style="font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:${BRAND.gold};font-weight:600">Khata</div>
+          <div style="font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:${BRAND.gold};font-weight:600">VELORA</div>
           <h1 style="margin:16px 0 0;font-size:24px;line-height:1.3;font-weight:600">${heading}</h1>
         </td></tr>
         <tr><td style="padding:16px 32px 0;font-size:15px;line-height:1.65;color:${BRAND.muted}">${bodyHtml}</td></tr>
@@ -108,7 +108,7 @@ function layout(heading: string, bodyHtml: string, cta?: { label: string; url: s
         }
         <tr><td style="padding:32px">
           <hr style="border:none;border-top:1px solid ${BRAND.line};margin:0 0 16px">
-          <p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND.muted}">You received this because someone used this address to sign in to Khata. If it wasn't you, you can safely ignore this email.</p>
+          <p style="margin:0;font-size:12px;line-height:1.6;color:${BRAND.muted}">You received this because someone used this address to sign in to VELORA. If it wasn't you, you can safely ignore this email.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -124,7 +124,7 @@ export function verificationEmail(name: string, url: string): Omit<MailMessage, 
       '<p style="margin:0">Confirm your email address to finish setting up your account and secure password recovery.</p>',
       { label: 'Confirm email', url },
     ),
-    text: `Welcome, ${name}.\n\nConfirm your email address to finish setting up your Khata account:\n${url}\n\nThis link expires in 1 hour.`,
+    text: `Welcome, ${name}.\n\nConfirm your email address to finish setting up your VELORA account:\n${url}\n\nThis link expires in 1 hour.`,
   };
 }
 
@@ -145,22 +145,22 @@ export function passwordChangedEmail(name: string): Omit<MailMessage, 'to'> {
     subject: 'Your password was changed',
     html: layout(
       'Your password was changed',
-      `<p style="margin:0">Hello ${escapeHtml(name)}, the password for your Khata account was just changed and all other sessions were signed out.</p>
+      `<p style="margin:0">Hello ${escapeHtml(name)}, the password for your VELORA account was just changed and all other sessions were signed out.</p>
        <p style="margin:12px 0 0">If this wasn't you, reset your password immediately.</p>`,
     ),
-    text: `Hello ${name},\n\nThe password for your Khata account was just changed and all other sessions were signed out.\n\nIf this wasn't you, reset your password immediately.`,
+    text: `Hello ${name},\n\nThe password for your VELORA account was just changed and all other sessions were signed out.\n\nIf this wasn't you, reset your password immediately.`,
   };
 }
 
 export function workspaceInvitationEmail(workspaceName: string, role: string, url: string): Omit<MailMessage, 'to'> {
   return {
-    subject: `You're invited to "${workspaceName}" on Khata`,
+    subject: `You're invited to "${workspaceName}" on VELORA`,
     html: layout(
       `Join "${escapeHtml(workspaceName)}"`,
       `<p style="margin:0">You've been invited to join <strong>${escapeHtml(workspaceName)}</strong> as ${escapeHtml(role)}. Sign in with this email address and open the link below to accept.</p>`,
       { label: 'View invitation', url },
     ),
-    text: `You've been invited to join "${workspaceName}" on Khata as ${role}.\n\nSign in with this email address and open this link to accept:\n${url}\n\nThis invitation expires in 7 days.`,
+    text: `You've been invited to join "${workspaceName}" on VELORA as ${role}.\n\nSign in with this email address and open this link to accept:\n${url}\n\nThis invitation expires in 7 days.`,
   };
 }
 

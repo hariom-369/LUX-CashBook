@@ -83,6 +83,7 @@ export async function listGoals(scope: RequestScope, now: Date = new Date()): Pr
   const goals = await SavingsGoal.find({
     workspaceId: scope.workspaceId,
     isArchived: false,
+    deletedAt: null,
     // A goal tracking another member's private account would show that balance.
     ...(scope.hiddenAccountIds.length > 0 ? { linkedAccountId: { $nin: scope.hiddenAccountIds } } : {}),
   })
@@ -111,7 +112,7 @@ async function getGoalDoc(scope: RequestScope, goalId: string): Promise<GoalDoc>
 
 async function getGoalDocUnchecked(scope: RequestScope, goalId: string): Promise<GoalDoc> {
   if (!Types.ObjectId.isValid(goalId)) throw notFound('Goal');
-  const goal = await SavingsGoal.findOne({ _id: goalId, workspaceId: scope.workspaceId });
+  const goal = await SavingsGoal.findOne({ _id: goalId, workspaceId: scope.workspaceId, deletedAt: null });
   if (!goal) throw notFound('Goal');
   return goal;
 }
@@ -177,7 +178,10 @@ export async function updateGoal(
 
 export async function deleteGoal(scope: RequestScope, goalId: string, audit: AuditContext): Promise<void> {
   const goal = await getGoalDoc(scope, goalId);
-  await goal.deleteOne();
+  // To Trash (§Trash): restorable for 30 days, contributions and all.
+  goal.deletedAt = new Date();
+  goal.deletedBy = scope.userId;
+  await goal.save();
 
   await recordAudit(audit, {
     action: 'deleted',

@@ -60,7 +60,7 @@ export function checkSmtp(c: ProductionConfig, production: boolean): string[] {
   if (port === 465 && c.SMTP_SECURE === false) problems.push('SMTP_PORT=465 expects an implicit-TLS connection: set SMTP_SECURE=true (or use port 587 with SMTP_SECURE=false).');
   if ((port === 587 || port === 25) && c.SMTP_SECURE === true) problems.push(`SMTP_PORT=${port} upgrades with STARTTLS: set SMTP_SECURE=false (or use port 465 with SMTP_SECURE=true).`);
   if (Boolean(c.SMTP_USER) !== Boolean(c.SMTP_PASS)) problems.push('SMTP_USER and SMTP_PASS must be set together (or both left out for a relay without a login).');
-  if (c.MAIL_FROM && c.mailFromExplicit && !MAIL_FROM.test(c.MAIL_FROM)) problems.push('MAIL_FROM must be an address such as no-reply@example.com or "Khata <no-reply@example.com>".');
+  if (c.MAIL_FROM && c.mailFromExplicit && !MAIL_FROM.test(c.MAIL_FROM)) problems.push('MAIL_FROM must be an address such as no-reply@example.com or "VELORA <no-reply@example.com>".');
   if (production && !c.mailFromExplicit) {
     problems.push('MAIL_FROM must be set to an address on a domain you have verified with your mail provider (the default is a placeholder).');
   }

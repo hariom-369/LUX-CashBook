@@ -41,7 +41,7 @@ These are the rules the whole system is built around. Everything else is negotia
 | I4 | **A transfer is one transaction with two postings** (−A, +B), never two transactions. It can never be double-counted, orphaned or half-deleted. | Single-document atomicity |
 | I5 | **Transfers never touch income, expense or savings rate.** | `TxnType.TRANSFER` excluded from all income/expense aggregates |
 | I6 | **Lending/borrowing is not income or expense.** It moves cash *and* creates a receivable/payable. | `TxnType.LEND/BORROW/...` excluded from income/expense aggregates; feeds net worth instead |
-| I7 | **Nothing is hard-deleted.** Soft delete (`deletedAt`) keeps history recoverable and makes UNDO trivial. | `deletedAt` + global query filter |
+| I7 | **Soft delete first; permanent deletion only after 30 days in Trash.** Soft delete (`deletedAt`) keeps history recoverable and makes UNDO trivial. The scheduler purges Trash after 30 days, never erasing a record other records still depend on (it is kept hidden, `trashRetainedAt`), and never records deleted before Trash launched. See `server/src/modules/trash/trash.service.ts`. | `deletedAt` + global query filter |
 | I8 | **Data is scoped to `(userId, workspaceId)` on every single query.** | `requireWorkspace` middleware + compound indexes; no query is ever written without both |
 | I9 | **Multi-step financial writes are atomic.** Settlements and repayments that touch several documents run in a DB session/transaction when the server supports it, with a documented single-document fallback. | `withTransaction()` helper |
 

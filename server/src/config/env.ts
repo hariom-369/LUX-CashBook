@@ -86,7 +86,7 @@ const schema = z.object({
   SMTP_USER: blankIsUnset(z.string().optional()),
   SMTP_PASS: blankIsUnset(z.string().optional()),
   SMTP_SECURE: envBoolean(false),
-  MAIL_FROM: z.string().default('Khata <no-reply@khata.app>'),
+  MAIL_FROM: z.string().default('VELORA <no-reply@khata.app>'),
 
   /** File storage: `local` writes under STORAGE_DIR; `s3` uses the S3 adapter. */
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),

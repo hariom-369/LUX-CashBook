@@ -3,7 +3,7 @@ import { logger } from '../lib/logger.js';
 import { processDueRecurring, raiseRecurringNotifications } from '../modules/recurring/recurring.service.js';
 import { syncLoanReminders, syncDocumentReminders, syncCardDueReminders, raiseDueReminderNotifications } from '../modules/reminders/reminder.service.js';
 import { checkBudgetAlerts } from '../modules/budgets/budget.service.js';
-import { purgeDeletedAttachments } from '../modules/attachments/attachment.service.js';
+import { purgeExpiredTrash } from '../modules/trash/trash.service.js';
 import type { RequestScope } from '../middleware/context.js';
 import { getHiddenAccountIds } from './accountVisibility.js';
 
@@ -36,7 +36,9 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<void> {
     // Recurring transactions are global — they post regardless of which
     // workspace's dashboard happens to be open right now.
     await processDueRecurring(now).catch((err) => logger.error({ err }, 'Recurring sweep failed'));
-    await purgeDeletedAttachments(now).catch((err) => logger.error({ err }, 'Attachment purge failed'));
+    // Trash (§Trash): anything deleted 30+ days ago is permanently removed — documents included.
+    // Server-side and on every tick, so it happens whether or not anyone opens the app.
+    await purgeExpiredTrash(now).catch((err) => logger.error({ err }, 'Trash purge failed'));
 
     // Loan reminders and budget alerts are per-workspace, so walk every
     // workspace and isolate failures to the one that caused them.

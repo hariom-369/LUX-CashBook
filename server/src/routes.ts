@@ -46,6 +46,8 @@ import { productRouter } from './modules/inventory/product.routes.js';
 import { tagRouter } from './modules/tags/tag.routes.js';
 import { savedReportRouter } from './modules/reports/savedReport.routes.js';
 import { categoryRuleRouter } from './modules/categories/categoryRule.routes.js';
+import { trashRouter } from './modules/trash/trash.routes.js';
+import { upcomingRouter } from './modules/upcoming/upcoming.routes.js';
 
 /**
  * API surface, versioned at `/api/v1`.
@@ -131,3 +133,5 @@ apiRouter.use('/products', productRouter);
 apiRouter.use('/tags', tagRouter);
 apiRouter.use('/saved-reports', savedReportRouter);
 apiRouter.use('/category-rules', categoryRuleRouter);
+apiRouter.use('/trash', trashRouter);
+apiRouter.use('/upcoming', upcomingRouter);

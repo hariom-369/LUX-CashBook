@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States
 import { useDashboard } from '../../lib/queries';
 import { cn } from '../../lib/cn';
 import { useT } from '../../i18n';
+import { MonthlySummary } from './MonthlySummary';
 
 /**
  * Insights (§49).
@@ -26,6 +27,8 @@ export function InsightsPage() {
         <h1 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t('nav.insights')}</h1>
         <p className="mt-0.5 text-[13px] text-ink-muted">{t('insights.whatChangedAndWhereTheMoney')}</p>
       </header>
+
+      <MonthlySummary />
 
       <Card bare>
         {isLoading ? (

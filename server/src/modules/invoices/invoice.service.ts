@@ -244,7 +244,7 @@ export async function sendInvoice(scope: RequestScope, invoiceId: string, audit:
         to: person.email,
         ...invoiceSentEmail({
           customerName: person.name,
-          businessName: workspace?.name ?? 'Khata',
+          businessName: workspace?.name ?? 'VELORA',
           invoiceNumber: invoice.number,
           totalFormatted: formatMoney(invoice.totalMinor, { currency: workspace?.currency ?? scope.currency }),
           dueDateFormatted: formatDate(invoice.dueDate),

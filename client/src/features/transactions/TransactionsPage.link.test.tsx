@@ -7,6 +7,7 @@ let listItems: unknown[] = [];
 vi.mock('../../lib/queries', () => ({
   useAccounts: () => ({ data: [{ id: 'a1', name: 'GPay', type: 'upi' }] }),
   useCategories: () => ({ data: [] }),
+  usePeople: () => ({ data: [] }),
   useInvalidateLedger: () => () => {},
   useTransactions: (params: unknown) => {
     useTransactions(params);

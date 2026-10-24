@@ -43,6 +43,18 @@ export function toBudgetDto(budget: IBudget, categoryName?: string, accountName?
   };
 }
 
+/**
+ * Identifies one budget period, for "alert once per threshold per period": a weekly budget can
+ * warn again next week, a yearly one only next year. Monthly keys keep the exact format alerts
+ * were always stored under, so alerts already sent this month are never sent a second time.
+ */
+export function budgetPeriodKey(budget: { id: string; period: IBudget['period'] }, now: Date): string {
+  const { from } = currentPeriod(budget, now);
+  if (budget.period === 'weekly') return `${budget.id}:w${from.getFullYear()}-${from.getMonth() + 1}-${from.getDate()}`;
+  if (budget.period === 'yearly') return `${budget.id}:y${from.getFullYear()}`;
+  return `${budget.id}:${now.getFullYear()}-${now.getMonth() + 1}`;
+}
+
 /** The current period's [start, end] for a budget, anchored to `now`. */
 function currentPeriod(budget: Pick<IBudget, 'period'>, now: Date): { from: Date; to: Date } {
   switch (budget.period) {
@@ -88,7 +100,8 @@ export async function createBudget(
     period: input.period,
     startDate: input.startDate ?? new Date(),
     rollover: input.rollover ?? false,
-    alertThresholds: input.alertThresholds?.length ? input.alertThresholds : [...DEFAULT_BUDGET_THRESHOLDS],
+    // Omitted: the defaults. An empty list is a choice too — no alerts for this budget.
+    alertThresholds: input.alertThresholds ? [...new Set(input.alertThresholds)].sort((a, b) => a - b) : [...DEFAULT_BUDGET_THRESHOLDS],
   }).catch((err) => {
     // The unique index on {workspaceId, categoryId, accountId, period} while
     // active is what stops two competing limits on the same category (and
@@ -118,7 +131,7 @@ export async function updateBudget(
   expectedRev?: number,
 ): Promise<BudgetDoc> {
   if (!Types.ObjectId.isValid(budgetId)) throw notFound('Budget');
-  const budget = await Budget.findOne({ _id: budgetId, workspaceId: scope.workspaceId });
+  const budget = await Budget.findOne({ _id: budgetId, workspaceId: scope.workspaceId, deletedAt: null });
   if (!budget || (budget.accountId && scope.hiddenAccountIds.some((h) => h.equals(budget.accountId!)))) throw notFound('Budget');
   if (input.accountId) await assertAccountUsable(scope, input.accountId);
 
@@ -142,7 +155,12 @@ export async function updateBudget(
 
 export async function deleteBudget(scope: RequestScope, budgetId: string, audit: AuditContext): Promise<void> {
   if (!Types.ObjectId.isValid(budgetId)) throw notFound('Budget');
-  const budget = await Budget.findOneAndDelete({ _id: budgetId, workspaceId: scope.workspaceId });
+  // To Trash (§Trash): restorable for 30 days. Inactive while there, so the category is free
+  // for a new budget (the one-active-budget-per-category index only counts active ones).
+  const budget = await Budget.findOneAndUpdate(
+    { _id: budgetId, workspaceId: scope.workspaceId, deletedAt: null },
+    { $set: { deletedAt: new Date(), deletedBy: scope.userId, isActive: false } },
+  );
   if (!budget) throw notFound('Budget');
 
   await recordAudit(audit, {
@@ -169,6 +187,7 @@ export async function listBudgetsWithProgress(
   const budgets = await Budget.find({
     workspaceId: scope.workspaceId,
     isActive: true,
+    deletedAt: null,
     ...(scope.hiddenAccountIds.length > 0 ? { accountId: { $nin: scope.hiddenAccountIds } } : {}),
   }).lean();
   if (budgets.length === 0) return [];
@@ -284,7 +303,7 @@ export async function suggestBudgetsFromLastMonth(scope: RequestScope, now: Date
   const lastMonthStart = startOfMonth(addMonths(now, -1));
   const lastMonthEnd = endOfMonth(addMonths(now, -1));
 
-  const budgeted = await Budget.find({ workspaceId: scope.workspaceId, isActive: true, accountId: null })
+  const budgeted = await Budget.find({ workspaceId: scope.workspaceId, isActive: true, deletedAt: null, accountId: null })
     .select('categoryId')
     .lean();
   const alreadyBudgeted = new Set(budgeted.map((b) => String(b.categoryId)));
@@ -333,8 +352,7 @@ export async function checkBudgetAlerts(scope: RequestScope, now: Date = new Dat
       .find((threshold) => budget.percentUsed >= threshold);
     if (!crossed) continue;
 
-    const periodKey = `${budget.id}:${now.getFullYear()}-${now.getMonth() + 1}`;
-    const dedupeKey = `budget:${periodKey}:${crossed}`;
+    const dedupeKey = `budget:${budgetPeriodKey(budget, now)}:${crossed}`;
     const title = crossed >= 100 ? `${budget.name} budget exceeded` : `${budget.name} budget at ${Math.round(crossed)}%`;
     const body = `You've spent ${formatMoney(budget.spentMinor, { currency: scope.currency, compactDecimals: true })} of ${formatMoney(budget.amountMinor, { currency: scope.currency, compactDecimals: true })}.`;
 

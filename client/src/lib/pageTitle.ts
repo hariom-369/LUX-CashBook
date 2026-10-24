@@ -28,6 +28,8 @@ const SEGMENT_TITLES: Record<string, MessageKey> = {
   assistant: 'nav.assistant',
   notifications: 'settings.tab.notifications',
   settings: 'nav.settings',
+  trash: 'nav.trash',
+  upcoming: 'nav.upcoming',
 };
 
 const SETTINGS_TABS: Record<string, MessageKey> = {

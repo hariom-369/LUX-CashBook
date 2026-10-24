@@ -9,7 +9,7 @@ import {
   type RecurrenceFrequency,
   type TransactionType,
 } from '@khata/shared';
-import { defineModel, baseOptions, moneyField, scopeFields, tagsField } from './shared.js';
+import { defineModel, baseOptions, moneyField, scopeFields, softDeleteFields, tagsField } from './shared.js';
 
 /**
  * A template that posts transactions on a schedule (§21).
@@ -62,6 +62,9 @@ export interface IRecurringTransaction {
   billKind?: BillKind | null;
 
   isActive: boolean;
+  /** In Trash since (§Trash): hidden everywhere, restorable for 30 days, then purged. */
+  deletedAt: Date | null;
+  deletedBy: Types.ObjectId | null;
   isPaused: boolean;
   occurrencesCreated: number;
   maxOccurrences?: number | null;
@@ -106,6 +109,7 @@ const recurringSchema = new Schema<IRecurringTransaction>(
     billKind: { type: String, enum: BILL_KINDS, default: null },
 
     isActive: { type: Boolean, default: true },
+    ...softDeleteFields,
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
     rev: { type: Number, default: 0, min: 0 },
     isPaused: { type: Boolean, default: false },

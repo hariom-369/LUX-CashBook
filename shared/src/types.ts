@@ -889,15 +889,77 @@ export interface GroupExpenseDto {
   description: string;
   date: string;
   totalAmountMinor: number;
-  accountId: string;
+  /** The account it was paid from (you paid), or that your share was recorded against (a member paid). Absent when it touched none of your accounts. */
+  accountId?: string;
   accountName?: string;
   categoryId?: string;
   categoryName?: string;
   splitMethod: GroupSplitMethod;
   mySplitMinor: number;
   myExpenseTransactionId?: string;
+  /** Another member paid and you had a share: the `borrow` that records what you owe them. */
+  myBorrowTransactionId?: string;
   memberShares: GroupExpenseMemberShareDto[];
+  /** Who paid — `null` is you. */
+  paidByPersonId: string | null;
+  paidByName?: string;
+  /** What was entered for each participant (a percentage, share count or exact amount), so the split can be edited as it was made. */
+  splitInputs: GroupSplitInputDto[];
   createdAt: string;
+}
+
+export interface GroupSplitInputDto {
+  /** `null` is you. */
+  personId: string | null;
+  value?: number;
+}
+
+export interface GroupSettlementDto {
+  id: string;
+  groupId: string;
+  /** `null` is you. */
+  fromPersonId: string | null;
+  toPersonId: string | null;
+  fromName?: string;
+  toName?: string;
+  amountMinor: number;
+  date: string;
+  accountId?: string;
+  accountName?: string;
+  /** The repayment in your own books — only when you paid or were paid. */
+  transactionId?: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface GroupMemberPositionDto {
+  /** `null` is you. */
+  personId: string | null;
+  personName?: string;
+  paidMinor: number;
+  shareMinor: number;
+  sentMinor: number;
+  receivedMinor: number;
+  /** Positive: the group owes them. Negative: they owe the group. */
+  netMinor: number;
+}
+
+export interface GroupSettlementSuggestionDto {
+  fromPersonId: string | null;
+  toPersonId: string | null;
+  fromName?: string;
+  toName?: string;
+  amountMinor: number;
+}
+
+export interface GroupSummaryDto {
+  totalSpentMinor: number;
+  expenseCount: number;
+  positions: GroupMemberPositionDto[];
+  /** Still to be paid — shrinks as payments are recorded. Empty when the group is settled up. */
+  suggestions: GroupSettlementSuggestionDto[];
+  /** Payments already recorded, newest first. */
+  settlements: GroupSettlementDto[];
 }
 
 export interface GroupMemberBalanceDto {
@@ -1260,4 +1322,112 @@ export interface SavedReportDto {
   name: string;
   definition: ReportDefinition;
   updatedAt: string;
+}
+
+// ─────────────────────────────────────────────── Upcoming payments
+
+export type UpcomingPaymentStatus = 'overdue' | 'due_today' | 'upcoming' | 'paid';
+
+/** One scheduled obligation (or, with `status: 'paid'`, one completed recently). Never a transaction itself. */
+export interface UpcomingPaymentDto {
+  /** Stable and unique: the source, its id and the date — the same obligation can't appear twice. */
+  key: string;
+  source: 'recurring' | 'installment' | 'loan' | 'reminder' | 'card';
+  sourceId: string;
+  /** The entry's own name or description — may be empty for a loan with no note. */
+  title: string;
+  /** What is due (for a part-paid installment or loan, what is left). `null` when the reminder has no amount. */
+  amountMinor: number | null;
+  /** `neutral` is a transfer between your own accounts. */
+  direction: 'in' | 'out' | 'neutral';
+  dueDate: string;
+  /** The calendar day, in the server's time zone. */
+  dateKey: string;
+  status: UpcomingPaymentStatus;
+  /** Recurring only: posts by itself on the day, rather than waiting for you to confirm. */
+  autoPost?: boolean;
+  billKind?: string;
+  accountName?: string;
+  /** Payee or person. */
+  counterparty?: string;
+  /** Completed payments: the transaction that recorded it. */
+  transactionId?: string;
+  /** Where to manage it. */
+  link: string;
+}
+
+export interface UpcomingPaymentsDto {
+  asOf: string;
+  from: string;
+  to: string;
+  items: UpcomingPaymentDto[];
+  /** More than the response limit were found; the furthest-out were left off. */
+  truncated: boolean;
+  totals: {
+    /** Still to pay / receive in the window (overdue included), counting only items with an amount. */
+    dueOutMinor: number;
+    dueInMinor: number;
+    overdueCount: number;
+    /** Items still due that have no amount, so aren't in the totals. */
+    withoutAmountCount: number;
+  };
+}
+
+// ─────────────────────────────────────────────── Monthly insights
+
+export interface MonthlyCategoryInsightDto {
+  /** `null`: expenses recorded without a category. */
+  categoryId: string | null;
+  name: string;
+  amountMinor: number;
+  /** Share of this month's expenses, 0–100. */
+  sharePercent: number;
+  /** The same category in the comparison period (see `comparisonBasis`). */
+  comparisonMinor: number;
+}
+
+export interface MonthlyChangeDto {
+  kind: 'income' | 'expense' | 'category';
+  categoryId?: string | null;
+  name?: string;
+  currentMinor: number;
+  comparisonMinor: number;
+  changeMinor: number;
+  /** `null` when there was nothing to compare against (new spending). */
+  changePercent: number | null;
+}
+
+/**
+ * One month's facts, computed from recorded transactions only. Income and expenses exclude
+ * transfers and loans (shown separately under `notCounted`). The only estimate is `projection`,
+ * which is labelled as one and never mixed into the facts.
+ */
+export interface MonthlyInsightsDto {
+  month: string; // YYYY-MM
+  from: string;
+  /** For the current month, the end of today: later-dated entries are not counted yet. */
+  to: string;
+  isPartial: boolean;
+  daysElapsed: number;
+  daysInMonth: number;
+  hasData: boolean;
+  transactionCount: number;
+  incomeMinor: number;
+  /** Part of `incomeMinor` recorded under a "Refund" income category. */
+  refundsMinor: number;
+  expenseMinor: number;
+  netSavingsMinor: number;
+  /** `null` when there was no income to measure against. */
+  savingsRatePercent: number | null;
+  notCounted: { transfersMinor: number; loansAndRepaymentsMinor: number };
+  /** What this month is compared with: the whole previous month, or — while this month is still running — the same number of days of it. */
+  comparisonBasis: 'previous_month' | 'previous_month_to_date';
+  comparison: { month: string; from: string; to: string; incomeMinor: number; expenseMinor: number; netSavingsMinor: number; hasData: boolean };
+  categories: MonthlyCategoryInsightDto[];
+  /** Changes of at least 20% and a meaningful amount, largest first. Empty when the comparison period has no records. */
+  significantChanges: MonthlyChangeDto[];
+  /** Current month only, from 7 days in: month-end spending if the pace so far continued. */
+  projection: { expenseMinor: number; isEstimate: true } | null;
+  /** Current month only: what is still scheduled before the month ends. */
+  upcoming: { count: number; outMinor: number; inMinor: number; withoutAmountCount: number } | null;
 }

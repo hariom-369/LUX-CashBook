@@ -2,12 +2,15 @@ import { Types, type HydratedDocument } from 'mongoose';
 import {
   TRANSACTION_META,
   formatMoney,
+  trashCutoff,
   type PaymentMethod,
   type TransactionType,
 } from '@khata/shared';
 import {
   Account,
   Category,
+  GroupExpense,
+  GroupSettlement,
   MonthClosing,
   Payee,
   Person,
@@ -598,8 +601,10 @@ export async function deleteTransaction(
   scope: RequestScope,
   transactionId: string,
   audit: AuditContext,
+  /** Joins the caller's own transaction, as `createTransaction` does — used when a group expense is edited or removed. */
+  externalUow?: UnitOfWork,
 ): Promise<TransactionDoc> {
-  return withTransaction(async (uow) => {
+  const run = async (uow: UnitOfWork) => {
     const transaction = await Transaction.findOne({
       _id: transactionId,
       workspaceId: scope.workspaceId,
@@ -619,9 +624,17 @@ export async function deleteTransaction(
       );
     }
 
-    transaction.deletedAt = new Date();
+    // Claim the delete atomically: if a concurrent request deleted it between our read and
+    // this write, its delete already reversed the money, and doing it again would double it.
+    const deletedAt = new Date();
+    const claimed = await Transaction.updateOne(
+      { _id: transaction._id, workspaceId: scope.workspaceId, deletedAt: null },
+      { $set: { deletedAt, deletedBy: scope.userId } },
+      { session: uow.session },
+    );
+    if (claimed.modifiedCount === 0) throw notFound('Transaction');
+    transaction.deletedAt = deletedAt;
     transaction.deletedBy = scope.userId;
-    await transaction.save({ session: uow.session });
 
     uow.onRollback(async () => {
       await Transaction.updateOne(
@@ -660,7 +673,9 @@ export async function deleteTransaction(
     });
 
     return transaction;
-  });
+  };
+
+  return externalUow ? run(externalUow) : withTransaction(run);
 }
 
 export async function restoreTransaction(
@@ -677,13 +692,30 @@ export async function restoreTransaction(
 
     if (!transaction) throw notFound('Transaction');
     assertNotHidden(scope, transaction);
+    await assertRestorable(scope, transaction, uow);
     await assertPeriodOpen(scope, transaction.date, uow);
 
+    // The balance check first, while this row is still deleted: it recomputes the account's
+    // cached balance from live rows, so after the claim it would count the restored amount twice.
     const deltas = transaction.postings.map((p) => ({
       accountId: p.accountId,
       amountMinor: p.amountMinor,
     }));
     await assertSufficientBalance(scope.workspaceId, deltas, uow);
+
+    // Then claim the restore atomically, before any money moves: a second, concurrent restore
+    // of the same row finds nothing to claim, so its money can only ever be put back once.
+    const deletedAt = transaction.deletedAt;
+    const deletedBy = transaction.deletedBy;
+    const claimed = await Transaction.updateOne(
+      { _id: transaction._id, workspaceId: scope.workspaceId, deletedAt: { $ne: null, $gt: trashCutoff() }, trashRetainedAt: null },
+      { $set: { deletedAt: null, deletedBy: null } },
+      { session: uow.session },
+    );
+    if (claimed.modifiedCount === 0) throw notFound('Transaction');
+    uow.onRollback(async () => {
+      await Transaction.updateOne({ _id: transaction._id }, { $set: { deletedAt, deletedBy } });
+    });
 
     // Restoring a repayment has to re-consume loan capacity, which may no longer be
     // available if the loan was settled some other way in the meantime.
@@ -700,7 +732,6 @@ export async function restoreTransaction(
 
     transaction.deletedAt = null;
     transaction.deletedBy = null;
-    await transaction.save({ session: uow.session });
 
     await applyBalanceDeltas(scope.workspaceId, deltas, uow);
     if (transaction.personId && transaction.personDeltaMinor !== 0) {
@@ -725,6 +756,42 @@ export async function restoreTransaction(
 }
 
 /** Return the outstanding capacity a deleted repayment had consumed. */
+/**
+ * Whether a deleted transaction can come back on its own (§Trash). It can't once its 30 days
+ * in Trash are up; while the account or person it belongs to is itself in Trash (restore that
+ * first, or the money would land on a record nobody can see); or when it was part of a group
+ * expense or group payment that has since been changed or removed — the group no longer
+ * counts it, so restoring it alone would put money in your books the group doesn't know about.
+ */
+async function assertRestorable(scope: RequestScope, transaction: ITransaction, uow: UnitOfWork): Promise<void> {
+  const session = uow.session ?? null;
+  if (transaction.trashRetainedAt || (transaction.deletedAt && transaction.deletedAt <= trashCutoff())) {
+    throw conflict('This item has been in Trash for more than 30 days and can no longer be restored.', 'TRASH_EXPIRED');
+  }
+
+  const accountIds = transaction.postings.map((p) => p.accountId);
+  const liveAccounts = await Account.countDocuments({ _id: { $in: accountIds }, workspaceId: scope.workspaceId, deletedAt: null }).session(session);
+  if (liveAccounts !== new Set(accountIds.map(String)).size) {
+    throw conflict('Restore the account this was recorded on first.', 'ACCOUNT_IN_TRASH');
+  }
+  if (transaction.personId) {
+    const person = await Person.exists({ _id: transaction.personId, workspaceId: scope.workspaceId, deletedAt: null }).session(session);
+    if (!person) throw conflict('Restore the person this was recorded with first.', 'PERSON_IN_TRASH');
+  }
+
+  const groupEntryMessage =
+    'This was part of a group expense or group payment that has since been changed or removed, so it can’t be restored on its own.';
+  if (transaction.groupExpenseId) {
+    const expense = await GroupExpense.findOne({ _id: transaction.groupExpenseId, deletedAt: null }).session(session).lean();
+    const linked = expense
+      ? [expense.myExpenseTransactionId, expense.myBorrowTransactionId, ...expense.memberShares.map((s) => s.transactionId)].some((id) => id?.equals(transaction._id))
+      : false;
+    if (!linked) throw conflict(groupEntryMessage, 'GROUP_ENTRY');
+  }
+  const settlement = await GroupSettlement.findOne({ workspaceId: scope.workspaceId, transactionId: transaction._id }).session(session).lean();
+  if (settlement?.deletedAt) throw conflict(groupEntryMessage, 'GROUP_ENTRY');
+}
+
 async function releaseRepaymentAllocation(
   scope: RequestScope,
   transaction: ITransaction,
@@ -792,8 +859,10 @@ export async function updateTransaction(
   audit: AuditContext,
   /** The `rev` the editor read; see lib/revision.ts. */
   expectedRev?: number,
+  /** Joins the caller's own transaction, as `createTransaction` does — used when a group expense's details are edited. */
+  externalUow?: UnitOfWork,
 ): Promise<TransactionDoc> {
-  return withTransaction(async (uow) => {
+  const run = async (uow: UnitOfWork) => {
     const transaction = await Transaction.findOne({
       _id: transactionId,
       workspaceId: scope.workspaceId,
@@ -927,7 +996,9 @@ export async function updateTransaction(
     });
 
     return transaction;
-  });
+  };
+
+  return externalUow ? run(externalUow) : withTransaction(run);
 }
 
 

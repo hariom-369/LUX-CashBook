@@ -49,7 +49,7 @@ function drawFooter(doc: PDFKit.PDFDocument): void {
     .fontSize(8)
     .fillColor(MUTED)
     .font('Helvetica')
-    .text(`Generated ${formatDate(new Date(), 'dd MMM yyyy')} at ${new Date().toLocaleTimeString('en-IN')} · Khata`, doc.page.margins.left, bottom, {
+    .text(`Generated ${formatDate(new Date(), 'dd MMM yyyy')} at ${new Date().toLocaleTimeString('en-IN')} · VELORA`, doc.page.margins.left, bottom, {
       width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
       align: 'center',
     });
@@ -79,7 +79,7 @@ async function loadIdentity(scope: RequestScope): Promise<{
     Workspace.findById(scope.workspaceId).select('name currency businessName businessAddress gstin state').lean(),
   ]);
   return {
-    userName: user?.name ?? 'Khata User',
+    userName: user?.name ?? 'VELORA User',
     workspaceName: workspace?.name ?? 'Workspace',
     currency: workspace?.currency ?? scope.currency,
     businessName: workspace?.businessName,

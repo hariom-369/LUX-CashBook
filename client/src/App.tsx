@@ -40,6 +40,8 @@ const PersonLedgerPage = lazy(() => import('./features/people/PersonLedgerPage')
 const AccountsPage = lazy(() => import('./features/accounts/AccountsPage').then((m) => ({ default: m.AccountsPage })));
 const AccountLedgerPage = lazy(() => import('./features/accounts/AccountLedgerPage').then((m) => ({ default: m.AccountLedgerPage })));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const TrashPage = lazy(() => import('./features/trash/TrashPage').then((m) => ({ default: m.TrashPage })));
+const UpcomingPage = lazy(() => import('./features/upcoming/UpcomingPage').then((m) => ({ default: m.UpcomingPage })));
 const NotFoundPage = lazy(() => import('./features/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 const BudgetsPage = lazy(() => import('./features/budgets/BudgetsPage').then((m) => ({ default: m.BudgetsPage })));
 const GoalsPage = lazy(() => import('./features/goals/GoalsPage').then((m) => ({ default: m.GoalsPage })));
@@ -125,6 +127,8 @@ export function App() {
           <Route path="groups/:id" element={<GroupDetailPage />} />
           <Route path="accounts" element={<AccountsPage />} />
           <Route path="accounts/:id" element={<AccountLedgerPage />} />
+          <Route path="upcoming" element={<UpcomingPage />} />
+          <Route path="trash" element={<TrashPage />} />
           <Route path="settings/*" element={<SettingsPage />} />
 
           <Route path="budgets" element={<BudgetsPage />} />

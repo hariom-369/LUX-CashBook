@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { defineModel, baseOptions, scopeFields } from './shared.js';
+import { defineModel, baseOptions, scopeFields, softDeleteFields } from './shared.js';
 
 /**
  * A group of people a shared expense gets split among (§Phase 8, decision 1)
@@ -14,6 +14,9 @@ export interface IExpenseGroup {
   name: string;
   memberPersonIds: Types.ObjectId[];
   isActive: boolean;
+  /** In Trash since (§Trash): hidden everywhere, restorable for 30 days, then purged. */
+  deletedAt: Date | null;
+  deletedBy: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +33,7 @@ const expenseGroupSchema = new Schema<IExpenseGroup>(
       },
     },
     isActive: { type: Boolean, default: true },
+    ...softDeleteFields,
   },
   baseOptions,
 );

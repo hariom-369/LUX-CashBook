@@ -4,7 +4,7 @@ const path = require('path');
 const { walk, walkAll, scanFile, scanLiterals, scanTemplates } = require('./i18n-lib.cjs');
 
 // Brand names, key names, and example input values that are intentionally literal.
-const SKIP = new Set(['currentPassword', 'Khata', 'Esc', 'Ctrl K', 'you@example.com', 'rahul@example.com', 'name@example.com', '29ABCDE1234F1Z5', 'My Business', 'Personal']); // the last two are default workspace names (stored data)
+const SKIP = new Set(['currentPassword', 'VELORA', 'Esc', 'Ctrl K', 'you@example.com', 'rahul@example.com', 'name@example.com', '29ABCDE1234F1Z5', 'My Business', 'Personal']); // the last two are default workspace names (stored data)
 const posix = (f) => f.split(path.sep).join('/');
 
 function scanClient(root = 'src') {

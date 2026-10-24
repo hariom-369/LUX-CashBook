@@ -11,6 +11,7 @@ import { TopBar } from './TopBar';
 import { useUiStore } from '../stores/ui.store';
 import { useAuthStore } from '../stores/auth.store';
 import { hi } from '../i18n/messages/hi';
+import { ToastProvider } from '../components/ui/Toast';
 
 const renderBar = (path = '/transactions') =>
   render(
@@ -59,5 +60,17 @@ describe('<TopBar> accessibility (§Phase 16)', () => {
   it('the notification link has a plain name when nothing is unread', () => {
     renderBar();
     expect(screen.getByRole('link', { name: 'Notifications' })).toBeTruthy();
+  });
+  it('opens the Quick Calculator from its header button', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <TopBar />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('group', { name: 'Calculator keys' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open calculator' }));
+    expect(screen.getByRole('group', { name: 'Calculator keys' })).toBeTruthy();
   });
 });

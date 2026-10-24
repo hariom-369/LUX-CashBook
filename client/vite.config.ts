@@ -59,8 +59,8 @@ export default defineConfig({
       injectRegister: false,
       devOptions: { enabled: false },
       manifest: {
-        name: 'Khata — Cash Book & Personal Ledger',
-        short_name: 'Khata',
+        name: 'VELORA — Take Control of Your Money.',
+        short_name: 'VELORA',
         description: 'A premium cash book, personal ledger and personal finance system.',
         theme_color: '#f7f5f0',
         background_color: '#f7f5f0',

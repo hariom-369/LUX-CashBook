@@ -95,7 +95,7 @@ export async function restoreBackup(
   newWorkspaceName?: string,
 ): Promise<{ workspaceId: string; counts: Record<string, number> }> {
   if (!payload || typeof payload !== 'object' || payload.backupVersion !== BACKUP_VERSION) {
-    throw badRequest('That file is not a recognised Khata backup, or was made by an incompatible version.');
+    throw badRequest('That file is not a recognised VELORA backup, or was made by an incompatible version.');
   }
   for (const key of ['accounts', 'categories', 'people', 'transactions'] as const) {
     if (!Array.isArray(payload[key])) {

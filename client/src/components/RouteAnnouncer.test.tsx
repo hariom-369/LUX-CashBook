@@ -27,15 +27,15 @@ afterEach(() => {
 describe('<RouteAnnouncer> (§Phase 16)', () => {
   it('sets the document title on load but does not announce the initial page', () => {
     renderAt('/transactions');
-    expect(document.title).toBe('Transactions · Khata');
+    expect(document.title).toBe('Transactions · VELORA');
     expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('updates the title and announces the new page after a navigation', () => {
     renderAt('/');
-    expect(document.title).toBe('Dashboard · Khata');
+    expect(document.title).toBe('Dashboard · VELORA');
     act(() => go('/settings/security'));
-    expect(document.title).toBe('Security · Settings · Khata');
+    expect(document.title).toBe('Security · Settings · VELORA');
     expect(screen.getByRole('status').textContent).toBe('Settings — Security');
   });
 
@@ -49,7 +49,7 @@ describe('<RouteAnnouncer> (§Phase 16)', () => {
   it('speaks the signed-in language', () => {
     act(() => useAuthStore.setState({ user: { preferences: { language: 'hi' } } } as never));
     renderAt('/');
-    expect(document.title).toBe(`${hi['nav.dashboard']} · Khata`);
+    expect(document.title).toBe(`${hi['nav.dashboard']} · VELORA`);
   });
 
   it('announces a missing page as not found', () => {

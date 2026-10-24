@@ -193,7 +193,7 @@ export async function createRecurring(
 
 async function getRecurringDoc(scope: RequestScope, id: string): Promise<RecurringDoc> {
   if (!Types.ObjectId.isValid(id)) throw notFound('Recurring transaction');
-  const recurring = await RecurringTransaction.findOne({ _id: id, workspaceId: scope.workspaceId });
+  const recurring = await RecurringTransaction.findOne({ _id: id, workspaceId: scope.workspaceId, deletedAt: null });
   const hidden = scope.hiddenAccountIds;
   if (!recurring || hidden.some((h) => h.equals(recurring.accountId) || (recurring.toAccountId && h.equals(recurring.toAccountId)))) {
     throw notFound('Recurring transaction');
@@ -234,7 +234,10 @@ export async function updateRecurring(
 
 export async function deleteRecurring(scope: RequestScope, id: string, audit: AuditContext): Promise<void> {
   const recurring = await getRecurringDoc(scope, id);
+  // Inactive (so nothing posts) and in Trash (§Trash) for 30 days.
   recurring.isActive = false;
+  recurring.deletedAt = new Date();
+  recurring.deletedBy = scope.userId;
   await recurring.save();
 
   await recordAudit(audit, {

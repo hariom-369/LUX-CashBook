@@ -96,6 +96,11 @@ export interface ITransaction {
 
   deletedAt: Date | null;
   deletedBy: Types.ObjectId | null;
+  /**
+   * Set when this record's 30 days in Trash ran out but other records still point to it, so it
+   * was kept (hidden, no longer restorable) instead of being erased (§Trash).
+   */
+  trashRetainedAt?: Date | null;
   /** Edit revision, bumped only by user edits — see lib/revision.ts. */
   rev: number;
   createdAt: Date;
@@ -174,6 +179,7 @@ const transactionSchema = new Schema<ITransaction>(
     },
 
     ...softDeleteFields,
+    trashRetainedAt: { type: Date, default: null },
     /** Edit revision, bumped only by user edits (lib/revision.ts). */
     rev: { type: Number, default: 0, min: 0 },
   },

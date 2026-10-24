@@ -8,6 +8,7 @@ import { dateSchema, idParamSchema, validate } from '../../middleware/validate.j
 import { reportLimiter } from '../../middleware/rateLimit.js';
 import * as service from './report.service.js';
 import * as builder from './reportBuilder.service.js';
+import { getMonthlyInsights } from './monthlyInsights.service.js';
 import { getPersonLedger } from '../people/person.service.js';
 
 export const reportRouter: Router = Router();
@@ -41,6 +42,17 @@ reportRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { months } = req.query as unknown as { months: number };
     ok(res, await service.getNetWorth(scopeOf(req), months));
+  }),
+);
+
+/** One month's income, expenses, savings and category spend vs the month before (Insights page). */
+reportRouter.get(
+  '/monthly-insights',
+  reportLimiter,
+  validate({ query: z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Choose a month as YYYY-MM.').optional() }) }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { month } = req.query as { month?: string };
+    ok(res, await getMonthlyInsights(scopeOf(req), month));
   }),
 );
 
